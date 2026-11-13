@@ -134,3 +134,22 @@ async fn mysql_fake_session_capabilities_and_dialect() -> E2eResult<()> {
     assert!(session.is_shut_down());
     Ok(())
 }
+
+#[tokio::test]
+async fn redis_fake_session_and_keyvalue_capabilities() -> E2eResult<()> {
+    let driver = Arc::new(RedisDriver);
+    assert_eq!(driver.id(), "redis");
+    assert_eq!(driver.category(), EngineCategory::KeyValue);
+    let caps = driver.capabilities();
+    assert_eq!(caps.data_model, DataModel::KeyValue);
+    assert!(!caps.has_schemas);
+
+    let (connector, session) = start_fake_engine_session(driver, "redis", 6379).await?;
+    assert_eq!(connector.calls().len(), 1);
+    assert_eq!(session.metadata().driver_id, "redis");
+    assert!(!session.is_shut_down());
+
+    shutdown_session(&session).await?;
+    assert!(session.is_shut_down());
+    Ok(())
+}
