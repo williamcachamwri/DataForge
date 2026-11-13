@@ -124,6 +124,7 @@ impl AppController {
     pub fn new(settings: AppSettings, system_theme: WindowsTheme, locale: Locale) -> Self {
         let mut connections = ConnectionWindowPhaseMachine::new();
         let active_workspace = WorkspaceId(1);
+        connections.add_workspace(active_workspace);
         connections.select_workspace(active_workspace);
 
         let mut tabs = TabStripModel::new();

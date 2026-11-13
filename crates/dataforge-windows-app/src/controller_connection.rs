@@ -33,7 +33,10 @@ impl AppController {
 
     /// Starts an asynchronous connection for `active_workspace` from `connection_form`,
     /// fencing stale attempts with [`AttemptToken`].
-    pub fn connect_from_draft_async(&mut self, password: Option<SecretString>) -> Result<AttemptToken> {
+    pub fn connect_from_draft_async(
+        &mut self,
+        password: Option<SecretString>,
+    ) -> Result<AttemptToken> {
         let services = self.require_services()?.clone();
         let ws = self.active_workspace;
         let request = build_connect_request(
@@ -48,7 +51,10 @@ impl AppController {
     }
 
     /// Connects synchronously (blocking on `AppRuntime`) from `connection_form` and refreshes schema.
-    pub fn connect_from_draft_blocking(&mut self, password: Option<SecretString>) -> Result<AttemptToken> {
+    pub fn connect_from_draft_blocking(
+        &mut self,
+        password: Option<SecretString>,
+    ) -> Result<AttemptToken> {
         let services = self.require_services()?.clone();
         let ws = self.active_workspace;
         let request = build_connect_request(
@@ -95,6 +101,9 @@ impl AppController {
         label: String,
         engine: EngineKind,
     ) -> Result<AttemptToken> {
+        if self.connections.phase(ws).is_none() {
+            self.connections.add_workspace(ws);
+        }
         self.connections.select_workspace(ws);
         let token = self
             .connections
@@ -109,6 +118,9 @@ impl AppController {
             let creds: Arc<dyn CredentialSource> = Arc::new(NoStoredCredentials);
             let prompter = Arc::new(DialogCredentialPrompter::new(headless));
             let mut guard = svc.sessions.write().await;
+            if guard.phase_machine().phase(ws).is_none() {
+                guard.phase_machine_mut().add_workspace(ws);
+            }
             let res = guard
                 .connect_workspace(ws, request, creds, prompter, cancel)
                 .await;
@@ -139,6 +151,9 @@ impl AppController {
         label: String,
         engine: EngineKind,
     ) -> Result<AttemptToken> {
+        if self.connections.phase(ws).is_none() {
+            self.connections.add_workspace(ws);
+        }
         self.connections.select_workspace(ws);
         let token = self
             .connections
@@ -152,6 +167,9 @@ impl AppController {
             let creds: Arc<dyn CredentialSource> = Arc::new(NoStoredCredentials);
             let prompter = Arc::new(DialogCredentialPrompter::new(headless));
             let mut guard = services.sessions.write().await;
+            if guard.phase_machine().phase(ws).is_none() {
+                guard.phase_machine_mut().add_workspace(ws);
+            }
             guard
                 .connect_workspace(ws, request, creds, prompter, cancel)
                 .await
@@ -248,15 +266,29 @@ impl AppController {
     pub fn refresh_schema_sidebar_blocking(&mut self) -> Result<()> {
         let services = self.require_services()?.clone();
         let ws = self.active_workspace;
-        let (schemas, objects) = services.runtime.block_on(async {
-            let guard = services.sessions.read().await;
-            let schemas = guard.list_schemas(ws).await?;
-            let scope = schemas
-                .first()
-                .map_or(ObjectScope::DefaultSchema, |s| ObjectScope::Schema(s.name.clone()));
-            let objects = guard.list_objects(ws, scope).await?;
-            Ok::<_, dataforge_services::ServiceError>((schemas, objects))
-        })?;
+        let (schemas, objects) =
+            services.runtime.block_on(async {
+                let guard = services.sessions.read().await;
+                if let Some(session) = guard.session(ws) {
+                    let schemas = session.refresh_schemas().await.map_err(|err| {
+                        dataforge_services::ServiceError::Session(err.to_string())
+                    })?;
+                    let scope = schemas.first().map_or(ObjectScope::DefaultSchema, |s| {
+                        ObjectScope::Schema(s.name.clone())
+                    });
+                    let objects = session.refresh_objects(scope).await.map_err(|err| {
+                        dataforge_services::ServiceError::Session(err.to_string())
+                    })?;
+                    Ok::<_, dataforge_services::ServiceError>((schemas, objects))
+                } else {
+                    let schemas = guard.list_schemas(ws).await?;
+                    let scope = schemas.first().map_or(ObjectScope::DefaultSchema, |s| {
+                        ObjectScope::Schema(s.name.clone())
+                    });
+                    let objects = guard.list_objects(ws, scope).await?;
+                    Ok::<_, dataforge_services::ServiceError>((schemas, objects))
+                }
+            })?;
 
         self.cached_schemas = schemas.to_vec();
         self.cached_objects = objects.to_vec();
@@ -282,8 +314,8 @@ impl AppController {
     pub fn rebuild_sidebar_rows(&mut self) {
         let filter_lower = self.sidebar_filter.trim().to_ascii_lowercase();
         let matches = |obj: &&ObjectInfo| -> bool {
-            let name_ok = filter_lower.is_empty()
-                || obj.name.to_ascii_lowercase().contains(&filter_lower);
+            let name_ok =
+                filter_lower.is_empty() || obj.name.to_ascii_lowercase().contains(&filter_lower);
             let fav_ok = !self.sidebar_favorites_only || self.favorite_objects.contains(&obj.name);
             name_ok && fav_ok
         };
@@ -301,15 +333,31 @@ impl AppController {
         let functions: Vec<&ObjectInfo> = self
             .cached_objects
             .iter()
-            .filter(|o| {
-                !matches!(o.kind, ObjectKind::Table | ObjectKind::View) && matches(o)
-            })
+            .filter(|o| !matches!(o.kind, ObjectKind::Table | ObjectKind::View) && matches(o))
             .collect();
 
         let mut rows = Vec::new();
-        push_sidebar_section(&mut rows, SidebarSectionKind::Tables, self.strings.tables, &tables, &self.favorite_objects);
-        push_sidebar_section(&mut rows, SidebarSectionKind::Views, self.strings.views, &views, &self.favorite_objects);
-        push_sidebar_section(&mut rows, SidebarSectionKind::Functions, self.strings.functions, &functions, &self.favorite_objects);
+        push_sidebar_section(
+            &mut rows,
+            SidebarSectionKind::Tables,
+            self.strings.tables,
+            &tables,
+            &self.favorite_objects,
+        );
+        push_sidebar_section(
+            &mut rows,
+            SidebarSectionKind::Views,
+            self.strings.views,
+            &views,
+            &self.favorite_objects,
+        );
+        push_sidebar_section(
+            &mut rows,
+            SidebarSectionKind::Functions,
+            self.strings.functions,
+            &functions,
+            &self.favorite_objects,
+        );
         self.sidebar_rows = rows;
         self.sync_layout_counts();
     }
@@ -320,9 +368,9 @@ impl AppController {
         let ws = self.active_workspace;
         let columns = services.runtime.block_on(async {
             let guard = services.sessions.read().await;
-            let session = guard
-                .session(ws)
-                .ok_or_else(|| dataforge_services::ServiceError::Session("no active session".to_owned()))?;
+            let session = guard.session(ws).ok_or_else(|| {
+                dataforge_services::ServiceError::Session("no active session".to_owned())
+            })?;
             session
                 .columns(table.clone())
                 .await
@@ -415,10 +463,12 @@ impl AppController {
                 }
                 ServiceEvent::AiFinished { error } => {
                     if let Some(err) = error {
-                        self.ai_drawer.messages.push(crate::views::ai_drawer::AiMessage {
-                            is_user: false,
-                            text: format!("Error: {err}"),
-                        });
+                        self.ai_drawer
+                            .messages
+                            .push(crate::views::ai_drawer::AiMessage {
+                                is_user: false,
+                                text: format!("Error: {err}"),
+                            });
                     }
                 }
             }
