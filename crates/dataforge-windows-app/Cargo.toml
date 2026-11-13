@@ -1,0 +1,18 @@
+[package]
+name = "dataforge-windows-app"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "dataforge"
+path = "src/main.rs"
+
+[dependencies]
+dataforge-state.workspace = true
+dataforge-windows-platform.workspace = true
+
+[lints]
+workspace = true
