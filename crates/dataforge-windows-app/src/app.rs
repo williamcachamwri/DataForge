@@ -24,6 +24,7 @@ use dataforge_state::theme::{ThemeDefinition, ThemeSlot};
 use dataforge_windows_platform::{
     AppSettings, ThemePreference, WindowsTheme, detect_theme_or_default,
 };
+use tablepro_core::column::ResultColumn;
 use tablepro_core::meta::{ObjectInfo, PagePosition, SchemaInfo, TableRef};
 use tablepro_core::value::Value;
 
@@ -95,6 +96,8 @@ pub struct AppController {
     pub active_attempt: Option<AttemptToken>,
     pub active_table: Option<TableRef>,
     pub grid_model: DataGridModel,
+    pub grid_raw_columns: Vec<ResultColumn>,
+    pub grid_raw_rows: Vec<Vec<Value>>,
     pub grid_row_keys: BTreeMap<RowID, Vec<Value>>,
     pub grid_page_prev: Option<PagePosition>,
     pub grid_page_next: Option<PagePosition>,
@@ -189,6 +192,8 @@ impl AppController {
             active_attempt: None,
             active_table: None,
             grid_model: DataGridModel::new(DataGridLayoutScope::Ephemeral, 100),
+            grid_raw_columns: Vec::new(),
+            grid_raw_rows: Vec::new(),
             grid_row_keys: BTreeMap::new(),
             grid_page_prev: None,
             grid_page_next: None,
@@ -340,8 +345,9 @@ impl AppController {
     #[must_use]
     pub fn needs_close_guard(&self) -> bool {
         let has_open_tx = self.open_transactions.values().any(|open| *open);
-        has_open_tx
-            || (self.safe_mode_enabled && self.tabs.tabs().iter().any(|t| t.has_unsaved_edits))
+        let has_unsaved = self.grid_model.edits.has_pending_edits()
+            || self.tabs.tabs().iter().any(|t| t.has_unsaved_edits);
+        has_open_tx || (self.safe_mode_enabled && has_unsaved)
     }
 
     /// Executes `Ctrl+W` (`CloseTabOrWindow`): closes the active tab first, or requests window close.
@@ -525,7 +531,8 @@ impl AppController {
             self.sidebar_favorites_only,
             &self.sidebar_rows,
         )?;
-        let has_pending_edits = self.tabs.tabs().iter().any(|t| t.has_unsaved_edits);
+        let has_pending_edits = self.grid_model.edits.has_pending_edits()
+            || self.tabs.tabs().iter().any(|t| t.has_unsaved_edits);
         render_toolbar(
             surface,
             &layout,
@@ -681,7 +688,7 @@ impl AppController {
         }
     }
 
-    fn sync_layout_counts(&mut self) {
+    pub(crate) fn sync_layout_counts(&mut self) {
         self.layout_config.open_connection_count = self.rail_items.len();
         self.layout_config.tab_count = self.tabs.tabs().len();
         self.layout_config.sidebar_item_count = self.sidebar_rows.len();
