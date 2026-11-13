@@ -37,3 +37,24 @@ DataForge is a pure-Rust Win32 desktop application without WebView or Electron o
 - **Application (`dataforge-windows-app`)**: Per-Monitor DPI v2 Win32 window shell, UI Automation (`WM_GETOBJECT`) baseline, modal/prompt flows, and multi-pane workbench views.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) and [`docs/`](docs/) for detailed technical documentation.
+
+## Build, Test, and Release
+
+Requires Rust `1.97`+ (edition `2024`) on Windows (`x86_64-pc-windows-msvc`).
+
+```powershell
+# Format check
+cargo fmt --all -- --check
+
+# Workspace lint check (zero warnings; no unwrap/expect/panic/todo/too_many_lines)
+cargo clippy -j 2 -p dataforge-windows-platform -p dataforge-state -p dataforge-gfx -p dataforge-services -p dataforge-windows-app -p dataforge-e2e --all-targets --no-deps -- -D warnings
+
+# Run all DataForge unit & E2E tests (use -j 2 on Windows to avoid paging file pressure)
+cargo test -j 2 -p dataforge-windows-platform -p dataforge-state -p dataforge-gfx -p dataforge-services -p dataforge-windows-app -p dataforge-e2e
+
+# Run E2E suite specifically
+cargo test -j 2 -p dataforge-e2e
+
+# Build optimized release binary (LTO = "fat", codegen-units = 1, stripped)
+cargo build --release -p dataforge-windows-app
+```
