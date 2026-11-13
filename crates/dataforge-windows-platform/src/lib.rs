@@ -1,6 +1,7 @@
 //! Windows platform integration for DataForge.
 
 pub mod browser;
+pub(crate) mod credential_parts;
 pub mod error;
 pub mod foreign;
 pub mod machine_id;
