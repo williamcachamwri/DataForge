@@ -35,3 +35,12 @@ Implements a 3-layer grid model separating stable data identity, display layout,
 - **Sorting & Paging**: `HeaderSortCycle` cycles `None -> Ascending -> Descending -> None`; `TableQueryPage` tracks paged `table_query` windows and total row counts.
 - **Batched Edits (`TableEdits`)**: Tracks cell edits (`DataGridCellEdit`), inserts, and deletes with undo batches (`EditUndoBatch`) until committed or rolled back.
 - **Filter Bar & Exports**: `FilterBarState` manages active filter predicates; `GridExportFormat` supports CSV, JSON, and SQL output.
+
+## 3. SQL Editor State (`editor.rs`)
+
+- **Height-Balanced `Rope`**: Persistent balanced tree with `MAX_LEAF_CHARS = 2048`, tracking `chars`, `utf16`, and `newlines` per node for O(log N) line/column and UTF-16 offset mapping (matching DirectWrite `IDWriteTextLayout` UTF-16 indices).
+- **Undo/Redo (`UndoHistory`)**: Groups `TextEdit` operations into `UndoGroup` batches with bottom-up multi-caret offset adjustment.
+- **Incremental Highlighting (`IncrementalLineHighlighter`)**: Produces `Utf16SyntaxSpan` tokens per line so only dirty lines are re-tokenized.
+- **Schema Autocomplete (`AutocompleteState`)**: Ranks `SchemaCompletionItem` candidates (`SchemaCompletionKind`) against the current identifier prefix.
+- **Vim Mode (`VimState`)**: Modal state machine (`VimMode`, `VimOperator`, `VimMotion`, `VimAction`) for Normal/Insert/Visual editing.
+- **Split Panes & Results**: `SplitPaneLayoutPolicy` and `EditorSplitNode` manage horizontal/vertical editor splits; `RunEventAccumulator` collects streaming `ResultEvent`s into `AccumulatedResultSet`s alongside `QueryHistoryModel`.
