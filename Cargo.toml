@@ -24,6 +24,7 @@ members = [
     "core/crates/drivers/sqlite",
     "crates/dataforge-windows-platform",
     "crates/dataforge-state",
+    "crates/dataforge-gfx",
     "crates/dataforge-windows-app",
 ]
 
@@ -36,6 +37,7 @@ publish = false
 [workspace.dependencies]
 dataforge-windows-platform = { path = "crates/dataforge-windows-platform" }
 dataforge-state = { path = "crates/dataforge-state" }
+dataforge-gfx = { path = "crates/dataforge-gfx" }
 tablepro-account = { path = "core/crates/account" }
 tablepro-ai = { path = "core/crates/ai" }
 tablepro-cli = { path = "core/crates/cli" }

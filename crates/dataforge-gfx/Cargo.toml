@@ -1,0 +1,16 @@
+[package]
+name = "dataforge-gfx"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true
+windows.workspace = true
+windows-numerics = "0.2"
+
+[lints]
+workspace = true
