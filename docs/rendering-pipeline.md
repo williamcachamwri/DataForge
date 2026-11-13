@@ -24,3 +24,8 @@
 - **Visible Line Windowing (`EditorLayout`)**: Only lines in `visible_lines()` are laid out and painted, with gutter line numbers (`text_origin_x`), active-line highlight, selections (`EditorSelection`), and `EditorCursor` (`CursorMode`).
 - **Autocomplete Popup**: `AutocompletePopup` renders ranked `AutocompleteItem`s (`CompletionKind`) anchored to `(line, column)`.
 - **Hit Testing**: `EditorHitTest` resolves pointer clicks to line/column offsets or gutter actions.
+
+## 4. Adaptive Vector Glyphs & Theme Palette (`glyphs.rs`, `palette.rs`)
+
+- **Vector Engine Glyphs (`EngineKind::ALL`)**: All 11 supported engines (`Postgresql`, `Mysql`, `Mariadb`, `Sqlite`, `Duckdb`, `Mssql`, `Clickhouse`, `Cassandra`, `Scylladb`, `Mongodb`, `Redis`) and the DataForge icon are defined in a normalized `16.0 x 16.0` DIP viewbox (`NORMALIZED_VIEWBOX`). A pure-Rust SVG path parser converts path commands into `ID2D1PathGeometry` at any DPI scale.
+- **Theme Palette (`ThemePalette`)**: Maps `ThemeMode` (`Light` / `Dark` / `HighContrast`) and imported VS Code themes into `ChromePalette`, `ContentPalette`, `GridPalette`, and `SyntaxPalette`.
