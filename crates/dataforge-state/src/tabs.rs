@@ -502,3 +502,179 @@ impl CrashSafeTabPersistence {
         Ok(envelope.strips)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::connection_window::{ConnectionUnavailableView, ConnectionWindowPhase};
+
+    #[test]
+    fn open_table_tab_never_replaces_unsaved_or_filtered_tab() {
+        let mut strip = TabStripModel::new();
+        let conn = TabConnectionId("pg-1".to_owned());
+        let first = strip.open_table_tab(conn.clone(), "users");
+        strip.tabs[0].has_unsaved_edits = true;
+
+        let second = strip.open_table_tab(conn.clone(), "orders");
+        assert_ne!(first, second);
+        assert_eq!(strip.tabs().len(), 2);
+
+        // Unmodified active table tab can be replaced in place.
+        let third = strip.open_table_tab(conn, "products");
+        assert_eq!(third, second);
+        assert_eq!(strip.tabs().len(), 2);
+    }
+
+    #[test]
+    fn ctrl_w_closes_frontmost_tab_before_window_and_reopen_restores() {
+        let mut strip = TabStripModel::new();
+        let conn = TabConnectionId("pg-1".to_owned());
+        let t1 = strip.open_query_tab(conn.clone(), Some("Q1"));
+        let t2 = strip.open_query_tab(conn, Some("Q2"));
+
+        assert_eq!(strip.perform_close(), CloseActionResult::ClosedTab(t2));
+        assert_eq!(strip.reopen_closed_tab(), Some(t2));
+        assert_eq!(strip.tabs().len(), 2);
+
+        assert_eq!(strip.perform_close(), CloseActionResult::ClosedTab(t2));
+        assert_eq!(strip.perform_close(), CloseActionResult::ClosedTab(t1));
+        assert_eq!(strip.perform_close(), CloseActionResult::CloseWindow);
+    }
+
+    #[test]
+    fn restored_tab_merge_keeps_pre_restore_tabs_and_respects_observed_guard() {
+        let mut strip = TabStripModel::new();
+        let conn = TabConnectionId("pg-1".to_owned());
+        let pre = strip.open_query_tab(conn.clone(), Some("Reopened"));
+
+        let mut store = SavedTabsStore::new();
+        // Before has_observed_tabs, teardown save is refused.
+        assert_eq!(
+            store.save_aggregated_sync(conn.clone(), &strip, false),
+            SaveTabsOutcome::SkippedUnobserved
+        );
+
+        let restored = vec![TabItem {
+            id: TabId(99),
+            connection_id: conn.clone(),
+            title: "Saved Q1".to_owned(),
+            kind: TabKind::QueryEditor {
+                sql: "SELECT 1".to_owned(),
+            },
+            pinned: false,
+            has_unsaved_edits: false,
+            has_active_filters: false,
+            has_active_sort: false,
+        }];
+        RestoredTabMerge::merge(&mut strip, restored);
+        assert!(strip.has_observed_tabs);
+        assert_eq!(strip.tabs().len(), 2);
+        assert_eq!(strip.tabs()[0].title, "Saved Q1");
+        assert_eq!(strip.tabs()[1].id, pre);
+
+        assert_eq!(
+            store.save_aggregated_sync(conn.clone(), &strip, false),
+            SaveTabsOutcome::Saved
+        );
+
+        // Simulate lost session clearing the strip: must NOT wipe saved tabs.
+        strip.tabs.clear();
+        assert_eq!(
+            store.save_aggregated_sync(conn.clone(), &strip, true),
+            SaveTabsOutcome::SkippedEmptyOnSessionLoss
+        );
+        assert_eq!(store.get(&conn).map(<[TabItem]>::len), Some(2));
+    }
+
+    #[test]
+    fn session_restore_connects_only_frontmost_connection_on_launch() {
+        let c1 = TabConnectionId("c1".to_owned());
+        let c2 = TabConnectionId("c2".to_owned());
+        let c3 = TabConnectionId("c3".to_owned());
+        let plan = SessionRestorePlanner::plan(
+            &[
+                (c1, ConnectionWindowPhase::Connected),
+                (c2, ConnectionWindowPhase::Disconnected),
+                (
+                    c3,
+                    ConnectionWindowPhase::Unavailable(ConnectionUnavailableView {
+                        summary: "timeout".to_owned(),
+                        detail: None,
+                        can_retry: true,
+                        is_auth_failure: false,
+                    }),
+                ),
+            ],
+            2,
+        );
+        assert!(plan[0].should_dial);
+        assert!(!plan[0].connect_immediately_on_launch);
+        assert!(!plan[1].should_dial);
+        assert!(!plan[1].connect_immediately_on_launch);
+        assert!(plan[2].should_dial);
+        assert!(plan[2].connect_immediately_on_launch);
+    }
+
+    #[test]
+    fn crash_during_save_recovers_from_backup() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let primary = dir.path().join("tabs.json");
+        let backup = dir.path().join("tabs.bak.json");
+        let conn = TabConnectionId("pg-1".to_owned());
+
+        let mut strips = BTreeMap::new();
+        strips.insert(
+            conn.clone(),
+            vec![TabItem {
+                id: TabId(1),
+                connection_id: conn.clone(),
+                title: "Q1".to_owned(),
+                kind: TabKind::QueryEditor {
+                    sql: "SELECT 1".to_owned(),
+                },
+                pinned: false,
+                has_unsaved_edits: false,
+                has_active_filters: false,
+                has_active_sort: false,
+            }],
+        );
+        CrashSafeTabPersistence::save_atomic(&primary, &backup, &strips)?;
+        // Second save creates backup of first save.
+        CrashSafeTabPersistence::save_atomic(&primary, &backup, &strips)?;
+        // Simulate crash corrupting primary file.
+        std::fs::write(&primary, b"{truncated")?;
+
+        let recovered = CrashSafeTabPersistence::load_with_recovery(&primary, &backup)?;
+        assert_eq!(recovered.get(&conn).map(Vec::len), Some(1));
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn prop_drag_reorder_preserves_tab_multiset(
+            count in 1usize..12,
+            moves in prop::collection::vec((0usize..12, 0usize..12), 0..20),
+        ) {
+            let mut strip = TabStripModel::new();
+            let conn = TabConnectionId("prop".to_owned());
+            for i in 0..count {
+                strip.open_query_tab(conn.clone(), Some(&format!("Tab {i}")));
+            }
+            let mut expected_ids: Vec<TabId> = strip.tabs().iter().map(|t| t.id).collect();
+            expected_ids.sort();
+
+            for (from, to) in moves {
+                let from = from % count;
+                let to = to % count;
+                prop_assert!(strip.drag_reorder(from, to));
+            }
+            let mut actual_ids: Vec<TabId> = strip.tabs().iter().map(|t| t.id).collect();
+            actual_ids.sort();
+            prop_assert_eq!(actual_ids, expected_ids);
+        }
+    }
+}
