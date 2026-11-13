@@ -257,7 +257,7 @@ impl Rgba {
 
     /// Creates an RGBA color with explicit alpha.
     #[must_use]
-    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+    pub const fn with_alpha(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
 
@@ -277,7 +277,7 @@ impl Rgba {
                 let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
                 let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
                 let a = u8::from_str_radix(&hex[3..4], 16).ok()? * 17;
-                Some(Self::rgba(r, g, b, a))
+                Some(Self::with_alpha(r, g, b, a))
             }
             6 => {
                 let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
@@ -290,7 +290,7 @@ impl Rgba {
                 let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
                 let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
                 let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
-                Some(Self::rgba(r, g, b, a))
+                Some(Self::with_alpha(r, g, b, a))
             }
             _ => None,
         }
@@ -317,7 +317,9 @@ pub enum ThemeAppearance {
 }
 
 /// Stable identifier for a theme.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct ThemeId(pub String);
 
 impl ThemeId {
@@ -363,29 +365,62 @@ impl ThemeDefinition {
         let mut colors = BTreeMap::new();
         colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0xFF, 0xFF, 0xFF));
         colors.insert(ThemeSlot::EditorText, Rgba::rgb(0x1E, 0x1E, 0x1E));
-        colors.insert(ThemeSlot::EditorSelection, Rgba::rgba(0xAD, 0xD6, 0xFF, 0xC0));
+        colors.insert(
+            ThemeSlot::EditorSelection,
+            Rgba::with_alpha(0xAD, 0xD6, 0xFF, 0xC0),
+        );
         colors.insert(ThemeSlot::EditorCaret, Rgba::rgb(0x00, 0x00, 0x00));
         colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0xF5, 0xF7, 0xFA));
-        colors.insert(ThemeSlot::EditorGutterBackground, Rgba::rgb(0xF8, 0xF8, 0xF8));
+        colors.insert(
+            ThemeSlot::EditorGutterBackground,
+            Rgba::rgb(0xF8, 0xF8, 0xF8),
+        );
         colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0x6E, 0x76, 0x81));
         colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x00, 0x33, 0xB3));
         colors.insert(ThemeSlot::EditorSyntaxString, Rgba::rgb(0x06, 0x7D, 0x17));
         colors.insert(ThemeSlot::EditorSyntaxComment, Rgba::rgb(0x6A, 0x73, 0x7D));
         colors.insert(ThemeSlot::EditorSyntaxNumber, Rgba::rgb(0x17, 0x50, 0xEB));
         colors.insert(ThemeSlot::EditorSyntaxOperator, Rgba::rgb(0x24, 0x29, 0x2E));
-        colors.insert(ThemeSlot::EditorSyntaxPunctuation, Rgba::rgb(0x4E, 0x56, 0x60));
-        colors.insert(ThemeSlot::EditorSyntaxIdentifier, Rgba::rgb(0x1E, 0x1E, 0x1E));
-        colors.insert(ThemeSlot::EditorSyntaxQuotedIdentifier, Rgba::rgb(0x04, 0x51, 0xA5));
+        colors.insert(
+            ThemeSlot::EditorSyntaxPunctuation,
+            Rgba::rgb(0x4E, 0x56, 0x60),
+        );
+        colors.insert(
+            ThemeSlot::EditorSyntaxIdentifier,
+            Rgba::rgb(0x1E, 0x1E, 0x1E),
+        );
+        colors.insert(
+            ThemeSlot::EditorSyntaxQuotedIdentifier,
+            Rgba::rgb(0x04, 0x51, 0xA5),
+        );
         colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0x80, 0x80, 0x80));
-        colors.insert(ThemeSlot::DataGridHeaderBackground, Rgba::rgb(0xF3, 0xF4, 0xF6));
+        colors.insert(
+            ThemeSlot::DataGridHeaderBackground,
+            Rgba::rgb(0xF3, 0xF4, 0xF6),
+        );
         colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0x1F, 0x23, 0x28));
         colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x09, 0x69, 0xDA));
-        colors.insert(ThemeSlot::DataGridInactiveSelection, Rgba::rgb(0xD0, 0xD7, 0xDE));
-        colors.insert(ThemeSlot::DataGridSelectionText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(
+            ThemeSlot::DataGridInactiveSelection,
+            Rgba::rgb(0xD0, 0xD7, 0xDE),
+        );
+        colors.insert(
+            ThemeSlot::DataGridSelectionText,
+            Rgba::rgb(0xFF, 0xFF, 0xFF),
+        );
         colors.insert(ThemeSlot::DataGridFocusBorder, Rgba::rgb(0x09, 0x69, 0xDA));
-        colors.insert(ThemeSlot::DataGridInserted, Rgba::rgba(0x2D, 0xA4, 0x4E, 0x38));
-        colors.insert(ThemeSlot::DataGridModified, Rgba::rgba(0xBF, 0x87, 0x00, 0x38));
-        colors.insert(ThemeSlot::DataGridDeleted, Rgba::rgba(0xCF, 0x22, 0x2E, 0x38));
+        colors.insert(
+            ThemeSlot::DataGridInserted,
+            Rgba::with_alpha(0x2D, 0xA4, 0x4E, 0x38),
+        );
+        colors.insert(
+            ThemeSlot::DataGridModified,
+            Rgba::with_alpha(0xBF, 0x87, 0x00, 0x38),
+        );
+        colors.insert(
+            ThemeSlot::DataGridDeleted,
+            Rgba::with_alpha(0xCF, 0x22, 0x2E, 0x38),
+        );
         colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0xFF, 0xFF, 0xFF));
         Self {
             id: ThemeId::builtin_light(),
@@ -402,29 +437,62 @@ impl ThemeDefinition {
         let mut colors = BTreeMap::new();
         colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
         colors.insert(ThemeSlot::EditorText, Rgba::rgb(0xD4, 0xD4, 0xD4));
-        colors.insert(ThemeSlot::EditorSelection, Rgba::rgba(0x26, 0x4F, 0x78, 0xCC));
+        colors.insert(
+            ThemeSlot::EditorSelection,
+            Rgba::with_alpha(0x26, 0x4F, 0x78, 0xCC),
+        );
         colors.insert(ThemeSlot::EditorCaret, Rgba::rgb(0xAE, 0xAF, 0xAD));
         colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0x28, 0x28, 0x28));
-        colors.insert(ThemeSlot::EditorGutterBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        colors.insert(
+            ThemeSlot::EditorGutterBackground,
+            Rgba::rgb(0x1E, 0x1E, 0x1E),
+        );
         colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0x85, 0x85, 0x85));
         colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x56, 0x9C, 0xD6));
         colors.insert(ThemeSlot::EditorSyntaxString, Rgba::rgb(0xCE, 0x91, 0x78));
         colors.insert(ThemeSlot::EditorSyntaxComment, Rgba::rgb(0x6A, 0x99, 0x55));
         colors.insert(ThemeSlot::EditorSyntaxNumber, Rgba::rgb(0xB5, 0xCE, 0xA8));
         colors.insert(ThemeSlot::EditorSyntaxOperator, Rgba::rgb(0xD4, 0xD4, 0xD4));
-        colors.insert(ThemeSlot::EditorSyntaxPunctuation, Rgba::rgb(0xA0, 0xA0, 0xA0));
-        colors.insert(ThemeSlot::EditorSyntaxIdentifier, Rgba::rgb(0xD4, 0xD4, 0xD4));
-        colors.insert(ThemeSlot::EditorSyntaxQuotedIdentifier, Rgba::rgb(0x9C, 0xDC, 0xFE));
+        colors.insert(
+            ThemeSlot::EditorSyntaxPunctuation,
+            Rgba::rgb(0xA0, 0xA0, 0xA0),
+        );
+        colors.insert(
+            ThemeSlot::EditorSyntaxIdentifier,
+            Rgba::rgb(0xD4, 0xD4, 0xD4),
+        );
+        colors.insert(
+            ThemeSlot::EditorSyntaxQuotedIdentifier,
+            Rgba::rgb(0x9C, 0xDC, 0xFE),
+        );
         colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0x80, 0x80, 0x80));
-        colors.insert(ThemeSlot::DataGridHeaderBackground, Rgba::rgb(0x25, 0x25, 0x26));
+        colors.insert(
+            ThemeSlot::DataGridHeaderBackground,
+            Rgba::rgb(0x25, 0x25, 0x26),
+        );
         colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0xCC, 0xCC, 0xCC));
         colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x09, 0x47, 0x71));
-        colors.insert(ThemeSlot::DataGridInactiveSelection, Rgba::rgb(0x3A, 0x3D, 0x41));
-        colors.insert(ThemeSlot::DataGridSelectionText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(
+            ThemeSlot::DataGridInactiveSelection,
+            Rgba::rgb(0x3A, 0x3D, 0x41),
+        );
+        colors.insert(
+            ThemeSlot::DataGridSelectionText,
+            Rgba::rgb(0xFF, 0xFF, 0xFF),
+        );
         colors.insert(ThemeSlot::DataGridFocusBorder, Rgba::rgb(0x00, 0x7F, 0xD4));
-        colors.insert(ThemeSlot::DataGridInserted, Rgba::rgba(0x2E, 0xA0, 0x43, 0x40));
-        colors.insert(ThemeSlot::DataGridModified, Rgba::rgba(0xD2, 0x99, 0x22, 0x40));
-        colors.insert(ThemeSlot::DataGridDeleted, Rgba::rgba(0xF8, 0x51, 0x49, 0x40));
+        colors.insert(
+            ThemeSlot::DataGridInserted,
+            Rgba::with_alpha(0x2E, 0xA0, 0x43, 0x40),
+        );
+        colors.insert(
+            ThemeSlot::DataGridModified,
+            Rgba::with_alpha(0xD2, 0x99, 0x22, 0x40),
+        );
+        colors.insert(
+            ThemeSlot::DataGridDeleted,
+            Rgba::with_alpha(0xF8, 0x51, 0x49, 0x40),
+        );
         colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
         Self {
             id: ThemeId::builtin_dark(),
@@ -444,26 +512,56 @@ impl ThemeDefinition {
         colors.insert(ThemeSlot::EditorSelection, Rgba::rgb(0xFF, 0xFF, 0x00));
         colors.insert(ThemeSlot::EditorCaret, Rgba::rgb(0xFF, 0xFF, 0xFF));
         colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0x14, 0x14, 0x14));
-        colors.insert(ThemeSlot::EditorGutterBackground, Rgba::rgb(0x00, 0x00, 0x00));
+        colors.insert(
+            ThemeSlot::EditorGutterBackground,
+            Rgba::rgb(0x00, 0x00, 0x00),
+        );
         colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0xFF, 0xFF, 0xFF));
         colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x56, 0x9C, 0xD6));
         colors.insert(ThemeSlot::EditorSyntaxString, Rgba::rgb(0xCE, 0x91, 0x78));
         colors.insert(ThemeSlot::EditorSyntaxComment, Rgba::rgb(0x7C, 0xA6, 0x68));
         colors.insert(ThemeSlot::EditorSyntaxNumber, Rgba::rgb(0xB5, 0xCE, 0xA8));
         colors.insert(ThemeSlot::EditorSyntaxOperator, Rgba::rgb(0xFF, 0xFF, 0xFF));
-        colors.insert(ThemeSlot::EditorSyntaxPunctuation, Rgba::rgb(0xFF, 0xFF, 0xFF));
-        colors.insert(ThemeSlot::EditorSyntaxIdentifier, Rgba::rgb(0xFF, 0xFF, 0xFF));
-        colors.insert(ThemeSlot::EditorSyntaxQuotedIdentifier, Rgba::rgb(0x9C, 0xDC, 0xFE));
+        colors.insert(
+            ThemeSlot::EditorSyntaxPunctuation,
+            Rgba::rgb(0xFF, 0xFF, 0xFF),
+        );
+        colors.insert(
+            ThemeSlot::EditorSyntaxIdentifier,
+            Rgba::rgb(0xFF, 0xFF, 0xFF),
+        );
+        colors.insert(
+            ThemeSlot::EditorSyntaxQuotedIdentifier,
+            Rgba::rgb(0x9C, 0xDC, 0xFE),
+        );
         colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0xD4, 0xD4, 0xD4));
-        colors.insert(ThemeSlot::DataGridHeaderBackground, Rgba::rgb(0x00, 0x00, 0x00));
+        colors.insert(
+            ThemeSlot::DataGridHeaderBackground,
+            Rgba::rgb(0x00, 0x00, 0x00),
+        );
         colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0xFF, 0xFF, 0xFF));
         colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x00, 0x78, 0xD7));
-        colors.insert(ThemeSlot::DataGridInactiveSelection, Rgba::rgb(0x3F, 0x3F, 0x46));
-        colors.insert(ThemeSlot::DataGridSelectionText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(
+            ThemeSlot::DataGridInactiveSelection,
+            Rgba::rgb(0x3F, 0x3F, 0x46),
+        );
+        colors.insert(
+            ThemeSlot::DataGridSelectionText,
+            Rgba::rgb(0xFF, 0xFF, 0xFF),
+        );
         colors.insert(ThemeSlot::DataGridFocusBorder, Rgba::rgb(0xF3, 0x85, 0x18));
-        colors.insert(ThemeSlot::DataGridInserted, Rgba::rgba(0x1B, 0x87, 0x3F, 0x60));
-        colors.insert(ThemeSlot::DataGridModified, Rgba::rgba(0xD2, 0x99, 0x22, 0x60));
-        colors.insert(ThemeSlot::DataGridDeleted, Rgba::rgba(0xE5, 0x14, 0x00, 0x60));
+        colors.insert(
+            ThemeSlot::DataGridInserted,
+            Rgba::with_alpha(0x1B, 0x87, 0x3F, 0x60),
+        );
+        colors.insert(
+            ThemeSlot::DataGridModified,
+            Rgba::with_alpha(0xD2, 0x99, 0x22, 0x60),
+        );
+        colors.insert(
+            ThemeSlot::DataGridDeleted,
+            Rgba::with_alpha(0xE5, 0x14, 0x00, 0x60),
+        );
         colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x00, 0x00, 0x00));
         Self {
             id: ThemeId::builtin_high_contrast(),
@@ -509,7 +607,11 @@ impl ThemeBackdropState {
     /// `increase_contrast` is off, and the resolved theme sets `window.background`.
     #[must_use]
     pub fn chrome_reduce_transparency_fill(self, resolved: &ResolvedTheme) -> Option<Rgba> {
-        if !self.is_themed || !self.can_reach_chrome || !self.reduce_transparency || self.increase_contrast {
+        if !self.is_themed
+            || !self.can_reach_chrome
+            || !self.reduce_transparency
+            || self.increase_contrast
+        {
             return None;
         }
         resolved.explicit_color(ThemeSlot::WindowBackground)
@@ -603,7 +705,11 @@ impl ThemeResolver {
         Self::from_definition(Some(req_id.clone()), &default_theme, true)
     }
 
-    fn from_definition(saved_id: Option<ThemeId>, def: &ThemeDefinition, used_fallback: bool) -> ResolvedTheme {
+    fn from_definition(
+        saved_id: Option<ThemeId>,
+        def: &ThemeDefinition,
+        used_fallback: bool,
+    ) -> ResolvedTheme {
         let mut palette = def.colors.clone();
         // Derive `editor.syntax.null` from `editor.text` at ~50% alpha if not explicitly set.
         if !palette.contains_key(&ThemeSlot::EditorSyntaxNull)
@@ -611,7 +717,7 @@ impl ThemeResolver {
         {
             palette.insert(
                 ThemeSlot::EditorSyntaxNull,
-                Rgba::rgba(text.r, text.g, text.b, text.a / 2),
+                Rgba::with_alpha(text.r, text.g, text.b, text.a / 2),
             );
         }
         ResolvedTheme {
@@ -637,7 +743,9 @@ pub enum ThemeError {
     #[error("invalid JSON: {0}")]
     InvalidJson(String),
 
-    #[error("unsupported theme schema version {schema} (supported: {MIN_READABLE_SCHEMA}..={CURRENT_SCHEMA})")]
+    #[error(
+        "unsupported theme schema version {schema} (supported: {MIN_READABLE_SCHEMA}..={CURRENT_SCHEMA})"
+    )]
     UnsupportedSchema { schema: u32 },
 
     #[error("unknown theme slot key '{0}'")]
@@ -731,7 +839,8 @@ impl ThemeFileFormat {
             appearance: theme.appearance,
             colors,
         };
-        let bytes = serde_json::to_vec_pretty(&payload).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
+        let bytes = serde_json::to_vec_pretty(&payload)
+            .map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
         if bytes.len() > MAX_THEME_FILE_BYTES {
             return Err(ThemeError::FileTooLarge { size: bytes.len() });
         }
@@ -754,7 +863,9 @@ impl ThemeFileFormat {
         let payload: ThemeFilePayload =
             serde_json::from_value(raw).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
         if !ThemeSchema::is_readable(payload.schema) {
-            return Err(ThemeError::UnsupportedSchema { schema: payload.schema });
+            return Err(ThemeError::UnsupportedSchema {
+                schema: payload.schema,
+            });
         }
         if payload.id.trim().is_empty() {
             return Err(ThemeError::EmptyId);
@@ -765,7 +876,8 @@ impl ThemeFileFormat {
 
         let mut colors = BTreeMap::new();
         for (key, hex) in payload.colors {
-            let slot = ThemeSlot::from_key(&key).ok_or_else(|| ThemeError::UnknownSlotKey(key.clone()))?;
+            let slot =
+                ThemeSlot::from_key(&key).ok_or_else(|| ThemeError::UnknownSlotKey(key.clone()))?;
             let required = slot.schema_introduced_in();
             if required > payload.schema {
                 return Err(ThemeError::SlotNewerThanSchema {
@@ -854,26 +966,27 @@ impl VsCodeThemeImporter {
             serde_json::from_slice(&bytes).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
         check_json_depth(&raw, 1)?;
 
-        let mut merged = if let Some(include_rel) = raw.get("include").and_then(serde_json::Value::as_str) {
-            let include_path = Self::resolve_safe_include(canonical_base, include_rel)?;
-            Self::import_file_inner(&include_path, canonical_base, depth + 1)?
-        } else {
-            let appearance = Self::detect_appearance(&raw);
-            let name = raw
-                .get("name")
-                .and_then(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .unwrap_or("Imported VS Code Theme")
-                .to_owned();
-            ThemeDefinition {
-                id: ThemeId(uuid::Uuid::new_v4().to_string()),
-                name,
-                appearance,
-                is_builtin: false,
-                colors: BTreeMap::new(),
-            }
-        };
+        let mut merged =
+            if let Some(include_rel) = raw.get("include").and_then(serde_json::Value::as_str) {
+                let include_path = Self::resolve_safe_include(canonical_base, include_rel)?;
+                Self::import_file_inner(&include_path, canonical_base, depth + 1)?
+            } else {
+                let appearance = Self::detect_appearance(&raw);
+                let name = raw
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("Imported VS Code Theme")
+                    .to_owned();
+                ThemeDefinition {
+                    id: ThemeId(uuid::Uuid::new_v4().to_string()),
+                    name,
+                    appearance,
+                    is_builtin: false,
+                    colors: BTreeMap::new(),
+                }
+            };
 
         // Always mint a fresh id for the top-level import.
         merged.id = ThemeId(uuid::Uuid::new_v4().to_string());
@@ -969,7 +1082,7 @@ impl VsCodeThemeImporter {
         raw: &serde_json::Value,
         out: &mut BTreeMap<ThemeSlot, Rgba>,
     ) -> Result<(), ThemeError> {
-        let Some(colors_obj) = raw.get("colors").and_then(serde_json::Value::as_object) else {
+        let Some(serde_json::Value::Object(colors_obj)) = raw.get("colors") else {
             return Ok(());
         };
         for (key, val) in colors_obj {
@@ -1098,7 +1211,10 @@ mod tests {
         };
         let encoded = ThemeFileFormat::encode(&v3_theme)?;
         let raw: serde_json::Value = serde_json::from_slice(&encoded)?;
-        assert_eq!(raw.get("schema").and_then(serde_json::Value::as_u64), Some(3));
+        assert_eq!(
+            raw.get("schema").and_then(serde_json::Value::as_u64),
+            Some(3)
+        );
 
         let decoded = ThemeFileFormat::decode(&encoded)?;
         assert_eq!(decoded, v3_theme);
@@ -1195,7 +1311,12 @@ mod tests {
             colors: BTreeMap::from([(ThemeSlot::WindowBackground, bg)]),
         };
         catalog.insert(custom.id.clone(), custom.clone());
-        let resolved = ThemeResolver::resolve(Some(&custom.id), ThemeAppearance::Dark, &ThemeScope::Live, &catalog);
+        let resolved = ThemeResolver::resolve(
+            Some(&custom.id),
+            ThemeAppearance::Dark,
+            &ThemeScope::Live,
+            &catalog,
+        );
 
         let allowed = ThemeBackdropState {
             is_themed: true,
@@ -1209,14 +1330,21 @@ mod tests {
             increase_contrast: true,
             ..allowed
         };
-        assert_eq!(high_contrast_system.chrome_reduce_transparency_fill(&resolved), None);
+        assert_eq!(
+            high_contrast_system.chrome_reduce_transparency_fill(&resolved),
+            None
+        );
     }
 
     #[test]
-    fn vscode_importer_rejects_parent_escape_and_mints_fresh_uuid() -> Result<(), Box<dyn std::error::Error>> {
+    fn vscode_importer_rejects_parent_escape_and_mints_fresh_uuid()
+    -> Result<(), Box<dyn std::error::Error>> {
         let dir = tempfile::tempdir()?;
         let escape_file = dir.path().join("theme.json");
-        std::fs::write(&escape_file, br#"{"name":"Bad","include":"../secret.json","colors":{}}"#)?;
+        std::fs::write(
+            &escape_file,
+            br#"{"name":"Bad","include":"../secret.json","colors":{}}"#,
+        )?;
         assert!(matches!(
             VsCodeThemeImporter::import_file(&escape_file),
             Err(ThemeError::IncludeEscapesDirectory(_))
@@ -1240,16 +1368,25 @@ mod tests {
         let a = VsCodeThemeImporter::import_bytes(valid)?;
         let b = VsCodeThemeImporter::import_bytes(valid)?;
         assert_ne!(a.id, b.id);
-        assert_eq!(a.colors.get(&ThemeSlot::EditorBackground), Some(&Rgba::rgb(0x11, 0x22, 0x33)));
-        assert_eq!(a.colors.get(&ThemeSlot::EditorSyntaxKeyword), Some(&Rgba::rgb(0xFF, 0x00, 0xAA)));
-        assert_eq!(a.colors.get(&ThemeSlot::DataGridFocusBorder), Some(&Rgba::rgb(0x44, 0x55, 0x66)));
+        assert_eq!(
+            a.colors.get(&ThemeSlot::EditorBackground),
+            Some(&Rgba::rgb(0x11, 0x22, 0x33))
+        );
+        assert_eq!(
+            a.colors.get(&ThemeSlot::EditorSyntaxKeyword),
+            Some(&Rgba::rgb(0xFF, 0x00, 0xAA))
+        );
+        assert_eq!(
+            a.colors.get(&ThemeSlot::DataGridFocusBorder),
+            Some(&Rgba::rgb(0x44, 0x55, 0x66))
+        );
         Ok(())
     }
 
     proptest! {
         #[test]
         fn prop_rgba_hex_roundtrip(r: u8, g: u8, b: u8, a: u8) {
-            let color = Rgba::rgba(r, g, b, a);
+            let color = Rgba::with_alpha(r, g, b, a);
             let hex = color.to_hex();
             prop_assert_eq!(Rgba::from_hex(&hex), Some(color));
         }

@@ -265,7 +265,12 @@ impl ConnectionsLibraryModel {
         };
 
         let mut rows = Vec::new();
-        let mut all_conns: Vec<&LibraryConnection> = self.storage.connections.values().filter(|c| matches(c)).collect();
+        let mut all_conns: Vec<&LibraryConnection> = self
+            .storage
+            .connections
+            .values()
+            .filter(|c| matches(c))
+            .collect();
         all_conns.sort_by(|a, b| a.order.cmp(&b.order).then_with(|| a.name.cmp(&b.name)));
 
         // 1. Favorites section (each favorite gets a Favorites rowId AND stays in its group).
@@ -292,7 +297,10 @@ impl ConnectionsLibraryModel {
                 is_group: true,
             });
             if group.is_expanded {
-                for conn in all_conns.iter().filter(|c| c.group_id.as_ref() == Some(&group.id)) {
+                for conn in all_conns
+                    .iter()
+                    .filter(|c| c.group_id.as_ref() == Some(&group.id))
+                {
                     rows.push(LibraryOutlineRow {
                         row_id: LibraryRowID::Connection {
                             section: LibrarySection::Group(group.id.clone()),
@@ -335,19 +343,16 @@ pub fn parse_connection_url(raw: &str) -> Result<ConnectionUrl, ConnectionUrlErr
 /// Converts a parsed [`ConnectionUrl`] into a [`LibraryConnection`].
 #[must_use]
 pub fn connection_from_url(url: &ConnectionUrl, name: Option<&str>) -> LibraryConnection {
-    let display_name = name
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map_or_else(
-            || {
-                if url.host.is_empty() {
-                    format!("{} ({})", url.driver_id, url.database)
-                } else {
-                    format!("{}@{}", url.driver_id, url.host)
-                }
-            },
-            str::to_owned,
-        );
+    let display_name = name.map(str::trim).filter(|s| !s.is_empty()).map_or_else(
+        || {
+            if url.host.is_empty() {
+                format!("{} ({})", url.driver_id, url.database)
+            } else {
+                format!("{}@{}", url.driver_id, url.host)
+            }
+        },
+        str::to_owned,
+    );
     LibraryConnection {
         id: LibraryConnectionId(uuid::Uuid::new_v4().to_string()),
         name: display_name,

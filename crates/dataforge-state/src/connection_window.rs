@@ -31,7 +31,10 @@ impl ConnectionWindowPhase {
     /// again on restore; canceled or disconnected ones come back Not Connected.
     #[must_use]
     pub const fn retains_restore_intent(&self) -> bool {
-        matches!(self, Self::Connected | Self::Unavailable(_) | Self::Reconnecting { .. })
+        matches!(
+            self,
+            Self::Connected | Self::Unavailable(_) | Self::Reconnecting { .. }
+        )
     }
 }
 
@@ -71,9 +74,8 @@ impl ConnectionWindowPaneResolver {
     pub const fn resolve(phase: &ConnectionWindowPhase) -> WorkspacePaneKind {
         match phase {
             ConnectionWindowPhase::Disconnected => WorkspacePaneKind::NotConnected,
-            ConnectionWindowPhase::Connecting { .. } | ConnectionWindowPhase::Reconnecting { .. } => {
-                WorkspacePaneKind::ConnectingSpinner
-            }
+            ConnectionWindowPhase::Connecting { .. }
+            | ConnectionWindowPhase::Reconnecting { .. } => WorkspacePaneKind::ConnectingSpinner,
             ConnectionWindowPhase::Connected => WorkspacePaneKind::ConnectedContent,
             ConnectionWindowPhase::Unavailable(_) => WorkspacePaneKind::UnavailableInline,
         }
@@ -141,7 +143,9 @@ impl ConnectionWindowPhaseMachine {
 
     /// Registers a workspace in the `Disconnected` phase.
     pub fn add_workspace(&mut self, id: WorkspaceId) {
-        self.workspaces.entry(id).or_insert_with(WorkspaceEntry::new);
+        self.workspaces
+            .entry(id)
+            .or_insert_with(WorkspaceEntry::new);
         if self.selected.is_none() {
             self.selected = Some(id);
         }
@@ -215,7 +219,12 @@ impl ConnectionWindowPhaseMachine {
     /// Fails a connection attempt if `token` matches the workspace's active token.
     ///
     /// Returns `true` if accepted, `false` if fenced out as stale.
-    pub fn fail_connect(&mut self, id: WorkspaceId, token: AttemptToken, view: ConnectionUnavailableView) -> bool {
+    pub fn fail_connect(
+        &mut self,
+        id: WorkspaceId,
+        token: AttemptToken,
+        view: ConnectionUnavailableView,
+    ) -> bool {
         let Some(entry) = self.workspaces.get_mut(&id) else {
             return false;
         };
@@ -261,7 +270,11 @@ pub struct WindowTitleResolver;
 impl WindowTitleResolver {
     /// Resolves a guaranteed non-blank window title.
     #[must_use]
-    pub fn resolve(connection_name: &str, database: Option<&str>, phase: &ConnectionWindowPhase) -> String {
+    pub fn resolve(
+        connection_name: &str,
+        database: Option<&str>,
+        phase: &ConnectionWindowPhase,
+    ) -> String {
         let base = match connection_name.trim() {
             "" => "Untitled Connection",
             name => name,
@@ -291,7 +304,10 @@ impl EditorTabLabelResolver {
         let base = explicit_title
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .map_or_else(|| format!("Query {}", index.saturating_add(1)), str::to_owned);
+            .map_or_else(
+                || format!("Query {}", index.saturating_add(1)),
+                str::to_owned,
+            );
         if is_dirty {
             format!("{base} •")
         } else {
@@ -307,10 +323,7 @@ impl EditorTabLabelResolver {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionLiveness {
     Live,
-    Unreachable {
-        started_with: u64,
-        info: String,
-    },
+    Unreachable { started_with: u64, info: String },
 }
 
 /// UI-facing connection status derived solely from [`SessionLiveness`].
@@ -401,7 +414,10 @@ impl ConnectionSession {
 
     /// Evaluates SafeMode gating for a statement access classification.
     #[must_use]
-    pub fn gate_statement(&self, access: tablepro_core::sql_syntax::StatementAccess) -> tablepro_core::WriteGate {
+    pub fn gate_statement(
+        &self,
+        access: tablepro_core::sql_syntax::StatementAccess,
+    ) -> tablepro_core::WriteGate {
         self.safe_mode.gate(access)
     }
 
@@ -458,7 +474,10 @@ mod tests {
         assert!(token1.is_some());
         if let Some(t1) = token1 {
             machine.cancel_connect(ws);
-            assert_eq!(machine.phase(ws), Some(&ConnectionWindowPhase::Disconnected));
+            assert_eq!(
+                machine.phase(ws),
+                Some(&ConnectionWindowPhase::Disconnected)
+            );
 
             // Late completion or failure with t1 must be ignored.
             assert!(!machine.complete_connect(ws, t1));
@@ -472,7 +491,10 @@ mod tests {
                     is_auth_failure: false,
                 }
             ));
-            assert_eq!(machine.phase(ws), Some(&ConnectionWindowPhase::Disconnected));
+            assert_eq!(
+                machine.phase(ws),
+                Some(&ConnectionWindowPhase::Disconnected)
+            );
         }
     }
 
@@ -488,8 +510,14 @@ mod tests {
         let t2 = machine.begin_connect(w2);
         machine.close_window();
 
-        assert_eq!(machine.phase(w1), Some(&ConnectionWindowPhase::Disconnected));
-        assert_eq!(machine.phase(w2), Some(&ConnectionWindowPhase::Disconnected));
+        assert_eq!(
+            machine.phase(w1),
+            Some(&ConnectionWindowPhase::Disconnected)
+        );
+        assert_eq!(
+            machine.phase(w2),
+            Some(&ConnectionWindowPhase::Disconnected)
+        );
         if let (Some(t1), Some(t2)) = (t1, t2) {
             assert!(!machine.complete_connect(w1, t1));
             assert!(!machine.complete_connect(w2, t2));
@@ -509,13 +537,22 @@ mod tests {
 
         session.mark_session_unreachable(1, "network reset");
         assert_eq!(session.reported_status(), ReportedStatus::Unreachable);
-        assert!(session.driver().is_some(), "driver handle must not be cleared on outage");
+        assert!(
+            session.driver().is_some(),
+            "driver handle must not be cleared on outage"
+        );
 
         session.mark_session_live();
         assert_eq!(session.reported_status(), ReportedStatus::Connected);
 
-        assert_eq!(session.gate_statement(StatementAccess::Read), WriteGate::Run);
-        assert_eq!(session.gate_statement(StatementAccess::Write), WriteGate::Confirm);
+        assert_eq!(
+            session.gate_statement(StatementAccess::Read),
+            WriteGate::Run
+        );
+        assert_eq!(
+            session.gate_statement(StatementAccess::Write),
+            WriteGate::Confirm
+        );
 
         session.transaction_state = TransactionState::InTransaction;
         assert!(session.check_close_guard().requires_confirmation());
@@ -523,7 +560,8 @@ mod tests {
 
     #[test]
     fn title_and_tab_label_resolvers_never_return_blank() {
-        let title = WindowTitleResolver::resolve("   ", Some(""), &ConnectionWindowPhase::Disconnected);
+        let title =
+            WindowTitleResolver::resolve("   ", Some(""), &ConnectionWindowPhase::Disconnected);
         assert!(!title.trim().is_empty());
 
         let label = EditorTabLabelResolver::resolve(Some("   "), 0, true);

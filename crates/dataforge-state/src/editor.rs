@@ -47,7 +47,11 @@ impl LeafMetrics {
                 newlines += 1;
             }
         }
-        Self { chars, utf16, newlines }
+        Self {
+            chars,
+            utf16,
+            newlines,
+        }
     }
 }
 
@@ -119,7 +123,9 @@ impl RopeNode {
     fn balance_factor(&self) -> i32 {
         match self {
             Self::Leaf { .. } => 0,
-            Self::Branch { left, right, .. } => i32::from(left.height()) - i32::from(right.height()),
+            Self::Branch { left, right, .. } => {
+                i32::from(left.height()) - i32::from(right.height())
+            }
         }
     }
 
@@ -207,7 +213,10 @@ impl RopeNode {
         }
         match node.as_ref() {
             Self::Leaf { text, .. } => {
-                let byte_idx = text.char_indices().nth(char_idx).map_or(text.len(), |(b, _)| b);
+                let byte_idx = text
+                    .char_indices()
+                    .nth(char_idx)
+                    .map_or(text.len(), |(b, _)| b);
                 (
                     Self::leaf(text[..byte_idx].to_owned()),
                     Self::leaf(text[byte_idx..].to_owned()),
@@ -236,8 +245,14 @@ impl RopeNode {
             return left;
         }
         if let (
-            Self::Leaf { text: lt, metrics: lm },
-            Self::Leaf { text: rt, metrics: rm },
+            Self::Leaf {
+                text: lt,
+                metrics: lm,
+            },
+            Self::Leaf {
+                text: rt,
+                metrics: rm,
+            },
         ) = (left.as_ref(), right.as_ref())
             && lm.chars + rm.chars <= MAX_LEAF_CHARS
         {
@@ -496,8 +511,14 @@ impl UndoHistory {
         let insert_chars = normalized.chars().count();
 
         // Sort indices descending by range start so bottom-up application never shifts earlier offsets.
-        let mut ordered: Vec<(usize, CursorPosition)> = cursor_positions.iter().copied().enumerate().collect();
-        ordered.sort_by(|a, b| b.1.range().0.cmp(&a.1.range().0).then_with(|| b.0.cmp(&a.0)));
+        let mut ordered: Vec<(usize, CursorPosition)> =
+            cursor_positions.iter().copied().enumerate().collect();
+        ordered.sort_by(|a, b| {
+            b.1.range()
+                .0
+                .cmp(&a.1.range().0)
+                .then_with(|| b.0.cmp(&a.0))
+        });
 
         let mut edits = Vec::with_capacity(ordered.len());
         for (_, cursor) in &ordered {
@@ -514,13 +535,20 @@ impl UndoHistory {
         }
 
         // Recompute resulting cursor positions in ascending order.
-        let mut asc: Vec<(usize, CursorPosition)> = cursor_positions.iter().copied().enumerate().collect();
-        asc.sort_by(|a, b| a.1.range().0.cmp(&b.1.range().0).then_with(|| a.0.cmp(&b.0)));
+        let mut asc: Vec<(usize, CursorPosition)> =
+            cursor_positions.iter().copied().enumerate().collect();
+        asc.sort_by(|a, b| {
+            a.1.range()
+                .0
+                .cmp(&b.1.range().0)
+                .then_with(|| a.0.cmp(&b.0))
+        });
         let mut delta: isize = 0;
         let mut updated = vec![CursorPosition::caret(0); cursor_positions.len()];
         for (orig_idx, cursor) in asc {
             let (start, end) = cursor.range();
-            let new_pos = usize::try_from(isize::try_from(start).unwrap_or(0) + delta).unwrap_or(0) + insert_chars;
+            let new_pos = usize::try_from(isize::try_from(start).unwrap_or(0) + delta).unwrap_or(0)
+                + insert_chars;
             updated[orig_idx] = CursorPosition::caret(new_pos);
             let removed = isize::try_from(end - start).unwrap_or(0);
             let added = isize::try_from(insert_chars).unwrap_or(0);
@@ -640,7 +668,10 @@ impl IncrementalLineHighlighter {
 
 /// Lexes a single line using `tablepro_core::sql_syntax::syntax_tokens` into UTF-16 spans.
 #[must_use]
-pub fn lex_line_utf16(line: &str, grammar: tablepro_core::sql_syntax::SqlGrammar) -> Vec<Utf16SyntaxSpan> {
+pub fn lex_line_utf16(
+    line: &str,
+    grammar: tablepro_core::sql_syntax::SqlGrammar,
+) -> Vec<Utf16SyntaxSpan> {
     let settings = tablepro_core::sql_syntax::script::LexicalSettings::default_for(grammar);
     let tokens = tablepro_core::sql_syntax::syntax_tokens(line, grammar, settings);
     let mut byte_to_utf16 = vec![0usize; line.len() + 1];
@@ -1053,7 +1084,12 @@ impl EditorSplitNode {
     }
 
     /// Splits `target_pane` into `target_pane` and `new_pane` along `axis`.
-    pub fn split_pane(&mut self, target_pane: EditorPaneId, new_pane: EditorPaneId, axis: SplitAxis) -> bool {
+    pub fn split_pane(
+        &mut self,
+        target_pane: EditorPaneId,
+        new_pane: EditorPaneId,
+        axis: SplitAxis,
+    ) -> bool {
         match self {
             Self::Leaf { pane_id, policy } if *pane_id == target_pane => {
                 let first = Box::new(Self::Leaf {
@@ -1071,7 +1107,8 @@ impl EditorSplitNode {
             }
             Self::Leaf { .. } => false,
             Self::Split { first, second, .. } => {
-                first.split_pane(target_pane, new_pane, axis) || second.split_pane(target_pane, new_pane, axis)
+                first.split_pane(target_pane, new_pane, axis)
+                    || second.split_pane(target_pane, new_pane, axis)
             }
         }
     }
@@ -1281,21 +1318,33 @@ mod tests {
     #[test]
     fn multi_caret_bottom_up_edits_and_undo_redo_roundtrip() {
         let mut rope = Rope::from_text("aa\nbb\ncc");
-        let mut cursors = vec![CursorPosition::caret(0), CursorPosition::caret(3), CursorPosition::caret(6)];
+        let mut cursors = vec![
+            CursorPosition::caret(0),
+            CursorPosition::caret(3),
+            CursorPosition::caret(6),
+        ];
         let mut history = UndoHistory::new();
 
         history.apply_multi_caret_insert(&mut rope, &mut cursors, "-- ");
         assert_eq!(rope.text(), "-- aa\n-- bb\n-- cc");
         assert_eq!(
             cursors,
-            vec![CursorPosition::caret(3), CursorPosition::caret(9), CursorPosition::caret(15)]
+            vec![
+                CursorPosition::caret(3),
+                CursorPosition::caret(9),
+                CursorPosition::caret(15)
+            ]
         );
 
         assert!(history.undo(&mut rope, &mut cursors));
         assert_eq!(rope.text(), "aa\nbb\ncc");
         assert_eq!(
             cursors,
-            vec![CursorPosition::caret(0), CursorPosition::caret(3), CursorPosition::caret(6)]
+            vec![
+                CursorPosition::caret(0),
+                CursorPosition::caret(3),
+                CursorPosition::caret(6)
+            ]
         );
 
         assert!(history.redo(&mut rope, &mut cursors));
@@ -1307,9 +1356,17 @@ mod tests {
         let rope = Rope::from_text("SELECT '🚀' FROM users");
         let mut hl = IncrementalLineHighlighter::new(SqlGrammar::PostgreSql);
         let spans = hl.highlight_line(&rope, 0);
-        assert!(spans.iter().any(|s| s.kind == SyntaxKind::Keyword && s.start_utf16 == 0 && s.end_utf16 == 6));
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.kind == SyntaxKind::Keyword && s.start_utf16 == 0 && s.end_utf16 == 6)
+        );
         // '🚀' is 4 UTF-16 units (' + 2 + ')
-        assert!(spans.iter().any(|s| s.kind == SyntaxKind::String && (s.end_utf16 - s.start_utf16) == 4));
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.kind == SyntaxKind::String && (s.end_utf16 - s.start_utf16) == 4)
+        );
     }
 
     #[test]
@@ -1335,13 +1392,22 @@ mod tests {
 
         let mut vim = VimState::new(true);
         assert_eq!(vim.handle_key("2"), VimAction::None);
-        assert_eq!(vim.handle_key("w"), VimAction::Move(VimMotion::WordForward, 2));
+        assert_eq!(
+            vim.handle_key("w"),
+            VimAction::Move(VimMotion::WordForward, 2)
+        );
         assert_eq!(vim.handle_key("d"), VimAction::None);
-        assert_eq!(vim.handle_key("d"), VimAction::LineOperator(VimOperator::Delete, 1));
+        assert_eq!(
+            vim.handle_key("d"),
+            VimAction::LineOperator(VimOperator::Delete, 1)
+        );
         assert_eq!(vim.handle_key(":"), VimAction::None);
         assert_eq!(vim.mode, VimMode::Command);
         vim.handle_key("w");
-        assert_eq!(vim.handle_key("Enter"), VimAction::ExecuteCommand("w".to_owned()));
+        assert_eq!(
+            vim.handle_key("Enter"),
+            VimAction::ExecuteCommand("w".to_owned())
+        );
         assert_eq!(vim.mode, VimMode::Normal);
 
         let mut split = EditorSplitNode::single(EditorPaneId(1));

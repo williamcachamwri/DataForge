@@ -91,7 +91,11 @@ impl DataGridColumnSet {
     /// Total width of currently frozen columns.
     #[must_use]
     pub fn frozen_width(&self) -> f64 {
-        self.ordered.iter().filter(|c| c.is_frozen).map(|c| c.width).sum()
+        self.ordered
+            .iter()
+            .filter(|c| c.is_frozen)
+            .map(|c| c.width)
+            .sum()
     }
 
     /// Resolves a table index in `pane` to its [`PaneColumnSlot`].
@@ -136,7 +140,10 @@ impl DataGridColumnSet {
     /// Returns the data index for `id`.
     #[must_use]
     pub fn data_index(&self, id: DataGridColumnID) -> Option<usize> {
-        self.ordered.iter().find(|c| c.id == id).map(|c| c.data_index)
+        self.ordered
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.data_index)
     }
 
     /// Freezes leading columns up to and including `display_pos` if their combined
@@ -327,26 +334,35 @@ impl GridSelectionReducer {
             }
             GridSelectionAction::SelectRow(row_id) => GridSelection {
                 mode: GridSelectionMode::Rows,
-                anchor: cols.columns().first().map(|c| GridCoord { row: row_id, col: c.id }),
-                focus: cols.columns().first().map(|c| GridCoord { row: row_id, col: c.id }),
+                anchor: cols.columns().first().map(|c| GridCoord {
+                    row: row_id,
+                    col: c.id,
+                }),
+                focus: cols.columns().first().map(|c| GridCoord {
+                    row: row_id,
+                    col: c.id,
+                }),
                 selected_rows: std::collections::BTreeSet::from([row_id]),
                 selected_cols: cols.columns().iter().map(|c| c.id).collect(),
             },
             GridSelectionAction::SelectAll => GridSelection {
                 mode: GridSelectionMode::Rows,
-                anchor: rows
-                    .row_id(0)
-                    .and_then(|r| cols.columns().first().map(|c| GridCoord { row: r, col: c.id })),
-                focus: rows
-                    .as_slice()
-                    .last()
-                    .copied()
-                    .and_then(|r| cols.columns().last().map(|c| GridCoord { row: r, col: c.id })),
+                anchor: rows.row_id(0).and_then(|r| {
+                    cols.columns()
+                        .first()
+                        .map(|c| GridCoord { row: r, col: c.id })
+                }),
+                focus: rows.as_slice().last().copied().and_then(|r| {
+                    cols.columns()
+                        .last()
+                        .map(|c| GridCoord { row: r, col: c.id })
+                }),
                 selected_rows: rows.as_slice().iter().copied().collect(),
                 selected_cols: cols.columns().iter().map(|c| c.id).collect(),
             },
             GridSelectionAction::RowsSelectedNatively(row_ids) => {
-                let selected_rows: std::collections::BTreeSet<RowID> = row_ids.into_iter().collect();
+                let selected_rows: std::collections::BTreeSet<RowID> =
+                    row_ids.into_iter().collect();
                 let focus_col = state
                     .focus
                     .map(|c| c.col)
@@ -533,7 +549,8 @@ pub struct EditUndoBatch {
 /// Commit, and Roll back.
 #[derive(Debug, Default, Clone)]
 pub struct TableEdits {
-    pub modified_cells: std::collections::BTreeMap<(RowID, DataGridColumnID), tablepro_core::value::Value>,
+    pub modified_cells:
+        std::collections::BTreeMap<(RowID, DataGridColumnID), tablepro_core::value::Value>,
     pub inserted_rows: std::collections::BTreeMap<RowID, Vec<tablepro_core::value::Value>>,
     pub deleted_rows: std::collections::BTreeSet<RowID>,
     undo_stack: Vec<EditUndoBatch>,
@@ -558,7 +575,9 @@ impl TableEdits {
     /// Returns whether there are any pending uncommitted edits.
     #[must_use]
     pub fn has_pending_edits(&self) -> bool {
-        !self.modified_cells.is_empty() || !self.inserted_rows.is_empty() || !self.deleted_rows.is_empty()
+        !self.modified_cells.is_empty()
+            || !self.inserted_rows.is_empty()
+            || !self.deleted_rows.is_empty()
     }
 
     /// Records a batch of cell modifications as one undo step.
@@ -747,7 +766,8 @@ impl DataGridModel {
 
     /// Dispatches a selection action through [`GridSelectionReducer`].
     pub fn apply_selection(&mut self, action: GridSelectionAction) {
-        self.selection = GridSelectionReducer::reduce(&self.selection, action, &self.row_order, &self.columns);
+        self.selection =
+            GridSelectionReducer::reduce(&self.selection, action, &self.row_order, &self.columns);
         self.pending_changes.push(DataGridChange::SelectionChanged);
     }
 
@@ -765,7 +785,8 @@ impl DataGridModel {
         }
         self.edits.commit_cells(edits, action_name);
         if !updated_rows.is_empty() {
-            self.pending_changes.push(DataGridChange::RowsUpdated(updated_rows));
+            self.pending_changes
+                .push(DataGridChange::RowsUpdated(updated_rows));
         }
     }
 
@@ -806,9 +827,16 @@ impl DataGridModel {
     ///
     /// # Errors
     /// Returns [`GridExportError`] if encoding fails.
-    pub fn export_csv(&self, opts: &tablepro_core::export::CsvOptions) -> Result<String, GridExportError> {
+    pub fn export_csv(
+        &self,
+        opts: &tablepro_core::export::CsvOptions,
+    ) -> Result<String, GridExportError> {
         let rows = self.display_rows_vec();
-        Ok(tablepro_core::export::render_csv(&self.result_columns, &rows, opts)?)
+        Ok(tablepro_core::export::render_csv(
+            &self.result_columns,
+            &rows,
+            opts,
+        )?)
     }
 
     /// Exports rows in display order as JSON.
@@ -817,7 +845,10 @@ impl DataGridModel {
     /// Returns [`GridExportError`] if encoding fails.
     pub fn export_json(&self) -> Result<String, GridExportError> {
         let rows = self.display_rows_vec();
-        Ok(tablepro_core::export::render_json(&self.result_columns, &rows)?)
+        Ok(tablepro_core::export::render_json(
+            &self.result_columns,
+            &rows,
+        )?)
     }
 
     /// Exports rows in display order as SQL `INSERT` statements.
@@ -833,9 +864,15 @@ impl DataGridModel {
         let rows: Vec<Vec<tablepro_core::edit::CellInput>> = self
             .display_rows_vec()
             .into_iter()
-            .map(|r| r.into_iter().map(tablepro_core::edit::CellInput::Value).collect())
+            .map(|r| {
+                r.into_iter()
+                    .map(tablepro_core::edit::CellInput::Value)
+                    .collect()
+            })
             .collect();
-        Ok(tablepro_core::export::render_inserts(dialect, table, columns, &rows)?)
+        Ok(tablepro_core::export::render_inserts(
+            dialect, table, columns, &rows,
+        )?)
     }
 
     fn display_rows_vec(&self) -> Vec<Vec<tablepro_core::value::Value>> {
@@ -891,7 +928,12 @@ mod tests {
     #[test]
     fn frozen_columns_enforce_two_thirds_width_cap_and_side_moves() {
         let mut set = DataGridColumnSet::from_names(
-            &["a".to_owned(), "b".to_owned(), "c".to_owned(), "d".to_owned()],
+            &[
+                "a".to_owned(),
+                "b".to_owned(),
+                "c".to_owned(),
+                "d".to_owned(),
+            ],
             100.0,
         );
         // Viewport = 300 -> max frozen = 200. Freezing 2 cols (200) succeeds; 3 cols (300) fails.
@@ -901,11 +943,17 @@ mod tests {
         assert_eq!(set.frozen_count(), 2);
 
         // Slot 0 is RowNumbers in both panes; slot 3 is only in Main pane.
-        assert_eq!(set.slot(DataGridPane::Frozen, 0), Some(PaneColumnSlot::RowNumbers));
+        assert_eq!(
+            set.slot(DataGridPane::Frozen, 0),
+            Some(PaneColumnSlot::RowNumbers)
+        );
         assert_eq!(set.slot(DataGridPane::Frozen, 3), None);
         assert!(matches!(
             set.slot(DataGridPane::Main, 3),
-            Some(PaneColumnSlot::DataColumn { display_position: 2, .. })
+            Some(PaneColumnSlot::DataColumn {
+                display_position: 2,
+                ..
+            })
         ));
 
         // Cannot move across freeze line, can move within side.
@@ -915,14 +963,18 @@ mod tests {
 
     #[test]
     fn selection_reducer_tracks_cursor_cells_and_rows_modes() {
-        let cols = DataGridColumnSet::from_names(&["a".to_owned(), "b".to_owned(), "c".to_owned()], 100.0);
+        let cols =
+            DataGridColumnSet::from_names(&["a".to_owned(), "b".to_owned(), "c".to_owned()], 100.0);
         let rows = DataGridRowOrder::new(vec![RowID(1), RowID(2), RowID(3)]);
         let c0 = cols.columns()[0].id;
         let c2 = cols.columns()[2].id;
 
         let s1 = GridSelectionReducer::reduce(
             &GridSelection::default(),
-            GridSelectionAction::Click(GridCoord { row: RowID(1), col: c0 }),
+            GridSelectionAction::Click(GridCoord {
+                row: RowID(1),
+                col: c0,
+            }),
             &rows,
             &cols,
         );
@@ -930,7 +982,10 @@ mod tests {
 
         let s2 = GridSelectionReducer::reduce(
             &s1,
-            GridSelectionAction::ShiftClick(GridCoord { row: RowID(2), col: c2 }),
+            GridSelectionAction::ShiftClick(GridCoord {
+                row: RowID(2),
+                col: c2,
+            }),
             &rows,
             &cols,
         );
@@ -950,7 +1005,11 @@ mod tests {
             sample_cols(),
             vec![
                 vec![Value::Int(2), Value::Text("Bob".to_owned()), Value::Int(10)],
-                vec![Value::Int(1), Value::Text("Alice".to_owned()), Value::Int(30)],
+                vec![
+                    Value::Int(1),
+                    Value::Text("Alice".to_owned()),
+                    Value::Int(30),
+                ],
             ],
             Some(5),
         );

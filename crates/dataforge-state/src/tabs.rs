@@ -109,7 +109,11 @@ impl TabStripModel {
     }
 
     /// Opens a new query editor tab with a guaranteed non-blank label.
-    pub fn open_query_tab(&mut self, connection_id: TabConnectionId, explicit_title: Option<&str>) -> TabId {
+    pub fn open_query_tab(
+        &mut self,
+        connection_id: TabConnectionId,
+        explicit_title: Option<&str>,
+    ) -> TabId {
         let id = self.alloc_id();
         let title = EditorTabLabelResolver::resolve(explicit_title, self.tabs.len(), false);
         self.tabs.push(TabItem {
@@ -130,7 +134,11 @@ impl TabStripModel {
     ///
     /// Per `connection-window.md`: never replaces a tab with unsaved edits,
     /// active filters, or active sorting; opens a new tab instead.
-    pub fn open_table_tab(&mut self, connection_id: TabConnectionId, table_name: impl Into<String>) -> TabId {
+    pub fn open_table_tab(
+        &mut self,
+        connection_id: TabConnectionId,
+        table_name: impl Into<String>,
+    ) -> TabId {
         let table_name = table_name.into();
         if let Some(active_id) = self.active_tab
             && let Some(active) = self.tabs.iter_mut().find(|t| t.id == active_id)
@@ -310,7 +318,11 @@ impl SavedTabsStore {
     }
 
     /// Explicitly clears saved tabs when the user closes or moves out the last tab.
-    pub fn clear_by_user(&mut self, conn: &TabConnectionId, strip: &TabStripModel) -> SaveTabsOutcome {
+    pub fn clear_by_user(
+        &mut self,
+        conn: &TabConnectionId,
+        strip: &TabStripModel,
+    ) -> SaveTabsOutcome {
         if !strip.has_observed_tabs {
             return SaveTabsOutcome::SkippedUnobserved;
         }
@@ -368,12 +380,18 @@ impl MoveQueryTabQueue {
         target_phase: &crate::connection_window::ConnectionWindowPhase,
         target_strip: &mut TabStripModel,
     ) -> usize {
-        if matches!(target_phase, crate::connection_window::ConnectionWindowPhase::Unavailable(_)) {
-            self.pending.retain(|m| &m.target_connection != target_connection);
+        if matches!(
+            target_phase,
+            crate::connection_window::ConnectionWindowPhase::Unavailable(_)
+        ) {
+            self.pending
+                .retain(|m| &m.target_connection != target_connection);
             return 0;
         }
-        if !matches!(target_phase, crate::connection_window::ConnectionWindowPhase::Connected)
-            || !target_strip.has_observed_tabs
+        if !matches!(
+            target_phase,
+            crate::connection_window::ConnectionWindowPhase::Connected
+        ) || !target_strip.has_observed_tabs
         {
             return 0;
         }
@@ -412,7 +430,10 @@ impl SessionRestorePlanner {
     /// Builds the restore plan for `connections` where `frontmost_index` is the active strip item.
     #[must_use]
     pub fn plan(
-        connections: &[(TabConnectionId, crate::connection_window::ConnectionWindowPhase)],
+        connections: &[(
+            TabConnectionId,
+            crate::connection_window::ConnectionWindowPhase,
+        )],
         frontmost_index: usize,
     ) -> Vec<RestoredConnectionEntry> {
         connections
@@ -494,7 +515,8 @@ impl CrashSafeTabPersistence {
         path: &std::path::Path,
     ) -> Result<std::collections::BTreeMap<TabConnectionId, Vec<TabItem>>, String> {
         let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-        let envelope: TabSessionEnvelope = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let envelope: TabSessionEnvelope =
+            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
         let payload_bytes = serde_json::to_vec(&envelope.strips).map_err(|e| e.to_string())?;
         if fnv1a_64(&payload_bytes) != envelope.checksum {
             return Err("tab session checksum mismatch".to_owned());

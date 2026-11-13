@@ -2,13 +2,19 @@
 
 use chrono::{TimeDelta, Utc};
 use dataforge_state::connection_window::{
-    ConnectionSession, ConnectionUnavailableView, ConnectionWindowPhase, ConnectionWindowPhaseMachine, DriverHandle,
-    ReportedStatus, WorkspaceId,
+    ConnectionSession, ConnectionUnavailableView, ConnectionWindowPhase,
+    ConnectionWindowPhaseMachine, DriverHandle, ReportedStatus, WorkspaceId,
 };
-use dataforge_state::data_grid::{DataGridLayoutScope, DataGridModel, GridSelectionAction, GridSelectionMode};
+use dataforge_state::data_grid::{
+    DataGridLayoutScope, DataGridModel, GridSelectionAction, GridSelectionMode,
+};
 use dataforge_state::editor::{CursorPosition, Rope, UndoHistory};
-use dataforge_state::tabs::{MoveQueryTabQueue, RestoredTabMerge, TabConnectionId, TabItem, TabKind, TabStripModel};
-use dataforge_state::theme::{ThemeAppearance, ThemeDefinition, ThemeFileFormat, ThemeResolver, ThemeScope};
+use dataforge_state::tabs::{
+    MoveQueryTabQueue, RestoredTabMerge, TabConnectionId, TabItem, TabKind, TabStripModel,
+};
+use dataforge_state::theme::{
+    ThemeAppearance, ThemeDefinition, ThemeFileFormat, ThemeResolver, ThemeScope,
+};
 use std::collections::BTreeMap;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::column::{ColumnType, ResultColumn};
@@ -40,7 +46,8 @@ fn account_fakes_entitlement_and_theme_roundtrip() -> Result<(), Box<dyn std::er
 }
 
 #[test]
-fn session_fakes_connection_phase_tab_move_grid_and_editor_flow() -> Result<(), Box<dyn std::error::Error>> {
+fn session_fakes_connection_phase_tab_move_grid_and_editor_flow()
+-> Result<(), Box<dyn std::error::Error>> {
     // Verify session fake constructors are wired and usable.
     let _connector = FakeConnector::new([]);
     let _creds = FakeCredentialSource::new();
@@ -101,7 +108,9 @@ fn session_fakes_connection_phase_tab_move_grid_and_editor_flow() -> Result<(), 
 
     // Verify queued move drops if target turns Unavailable.
     let mut drop_queue = MoveQueryTabQueue::default();
-    let detached2 = strip2.detach_tab(strip2.tabs()[0].id).ok_or("detach2 failed")?;
+    let detached2 = strip2
+        .detach_tab(strip2.tabs()[0].id)
+        .ok_or("detach2 failed")?;
     let c3 = TabConnectionId("w3".to_owned());
     drop_queue.enqueue(detached2, c3.clone());
     let mut strip3 = TabStripModel::new();
