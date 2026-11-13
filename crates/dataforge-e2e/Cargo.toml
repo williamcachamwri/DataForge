@@ -7,9 +7,13 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+csv.workspace = true
 dataforge-gfx.workspace = true
 dataforge-state.workspace = true
 dataforge-windows-platform.workspace = true
+futures.workspace = true
 serde_json.workspace = true
 tablepro-core.workspace = true
 tablepro-driver-cassandra.workspace = true
@@ -22,10 +26,13 @@ tablepro-driver-postgres.workspace = true
 tablepro-driver-redis.workspace = true
 tablepro-driver-sqlite.workspace = true
 tablepro-foreign-import.workspace = true
-tablepro-session.workspace = true
+tablepro-session = { workspace = true, features = ["in-process-ssh"] }
+tablepro-ssh = { workspace = true, features = ["in-process"] }
 tablepro-storage.workspace = true
 tempfile.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
 url.workspace = true
 uuid.workspace = true
 
