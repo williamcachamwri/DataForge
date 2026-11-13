@@ -16,14 +16,11 @@ pub use browser::{WindowsBrowserLauncher, validate_http_url};
 pub use cli_host::WindowsCliHost;
 pub use error::PlatformError;
 pub use foreign::{
-    ForeignAppDirs, ForeignHost, ForeignPlatform, PlainHost, foreign_app_dirs,
-    foreign_app_dirs_for,
+    ForeignAppDirs, ForeignHost, ForeignPlatform, PlainHost, foreign_app_dirs, foreign_app_dirs_for,
 };
 pub use machine_id::{derive_machine_id, normalize_machine_guid, read_machine_id};
 pub use paths::{APP_DIR_NAME, storage_paths, storage_paths_for};
-pub use secrets::{
-    DEFAULT_CREDENTIAL_PREFIX, LAYOUT_KEYWORD, PART_SIZE, WindowsCredentialStore,
-};
+pub use secrets::{DEFAULT_CREDENTIAL_PREFIX, LAYOUT_KEYWORD, PART_SIZE, WindowsCredentialStore};
 pub use settings::{
     AppSettings, EditorFont, McpSettings, SETTINGS_FILENAME, ThemePreference, WindowGeometry,
 };

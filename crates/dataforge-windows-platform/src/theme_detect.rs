@@ -123,12 +123,18 @@ pub fn apps_use_light_theme() -> Result<Option<bool>, PlatformError> {
         if is_not_found(read_status) {
             return Ok(None);
         }
-        return Err(reg_error("RegQueryValueExW(AppsUseLightTheme)", read_status));
+        return Err(reg_error(
+            "RegQueryValueExW(AppsUseLightTheme)",
+            read_status,
+        ));
     }
     if value_type != REG_DWORD || byte_len != 4 {
         return Err(PlatformError::InvalidRegistryValue {
             value_name: APPS_USE_LIGHT_THEME.to_owned(),
-            detail: format!("expected 4-byte REG_DWORD, got type {} ({byte_len} bytes)", value_type.0),
+            detail: format!(
+                "expected 4-byte REG_DWORD, got type {} ({byte_len} bytes)",
+                value_type.0
+            ),
         });
     }
 

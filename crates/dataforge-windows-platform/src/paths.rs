@@ -58,12 +58,13 @@ pub fn storage_paths() -> Result<StoragePaths, PlatformError> {
 
 /// Returns [`StoragePaths`] under a custom application directory name.
 pub fn storage_paths_for(app_dir_name: &str) -> Result<StoragePaths, PlatformError> {
-    let local_root =
-        known_folder(&FOLDERID_LocalAppData, "SHGetKnownFolderPath(LocalAppData)")?
-            .join(app_dir_name);
-    let roaming_root =
-        known_folder(&FOLDERID_RoamingAppData, "SHGetKnownFolderPath(RoamingAppData)")?
-            .join(app_dir_name);
+    let local_root = known_folder(&FOLDERID_LocalAppData, "SHGetKnownFolderPath(LocalAppData)")?
+        .join(app_dir_name);
+    let roaming_root = known_folder(
+        &FOLDERID_RoamingAppData,
+        "SHGetKnownFolderPath(RoamingAppData)",
+    )?
+    .join(app_dir_name);
 
     Ok(StoragePaths {
         config: roaming_root.join("config"),

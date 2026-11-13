@@ -136,11 +136,12 @@ impl Host for WindowsCliHost {
         }
 
         let store = WindowsCredentialStore::new(&self.credential_prefix);
-        let secret = store
-            .load_item_sync(SecretItem::McpToken)
-            .map_err(|err| HostError::Keyring {
-                reason: err.to_string(),
-            })?;
+        let secret =
+            store
+                .load_item_sync(SecretItem::McpToken)
+                .map_err(|err| HostError::Keyring {
+                    reason: err.to_string(),
+                })?;
         Ok(secret.map(|value| value.expose_secret().to_owned()))
     }
 

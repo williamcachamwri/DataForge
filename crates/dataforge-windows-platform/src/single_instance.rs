@@ -61,12 +61,13 @@ impl SingleInstanceLock {
     pub fn try_acquire(name: &str) -> Result<Option<Self>, PlatformError> {
         let wide = to_wide_null(name);
         // SAFETY: `wide` is NUL-terminated and outlives the `CreateMutexW` call.
-        let handle = unsafe { CreateMutexW(None, false, PCWSTR(wide.as_ptr())) }.map_err(|err| {
-            PlatformError::Win32 {
-                operation: "CreateMutexW",
-                source: std::io::Error::from_raw_os_error(err.code().0),
-            }
-        })?;
+        let handle =
+            unsafe { CreateMutexW(None, false, PCWSTR(wide.as_ptr())) }.map_err(|err| {
+                PlatformError::Win32 {
+                    operation: "CreateMutexW",
+                    source: std::io::Error::from_raw_os_error(err.code().0),
+                }
+            })?;
 
         let owned = OwnedHandle(handle);
         // SAFETY: `GetLastError` reads the status set by `CreateMutexW` on this thread.

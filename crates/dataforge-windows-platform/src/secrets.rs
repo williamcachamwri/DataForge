@@ -143,15 +143,14 @@ fn decode_utf16_blob(blob: &[u8]) -> Result<SecretString, SecretError> {
         return Err(SecretError::InvalidEncoding);
     }
     let (pairs, _) = blob.as_chunks::<2>();
-    let units: Vec<u16> = pairs
-        .iter()
-        .map(|pair| u16::from_le_bytes(*pair))
-        .collect();
+    let units: Vec<u16> = pairs.iter().map(|pair| u16::from_le_bytes(*pair)).collect();
     let units = Zeroizing::new(units);
 
     let mut size = 0;
     for decoded in char::decode_utf16(units.iter().copied()) {
-        size += decoded.map_err(|_| SecretError::InvalidEncoding)?.len_utf8();
+        size += decoded
+            .map_err(|_| SecretError::InvalidEncoding)?
+            .len_utf8();
     }
     let mut text = String::with_capacity(size);
     text.extend(char::decode_utf16(units.iter().copied()).flatten());
