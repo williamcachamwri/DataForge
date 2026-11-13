@@ -806,3 +806,259 @@ impl ThemeFileFormat {
         Ok(theme)
     }
 }
+
+/// Imports VS Code JSON color themes into DataForge `ThemeDefinition`s.
+///
+/// Untrusted input rules:
+/// - Checks size before reading (`<= MAX_THEME_FILE_BYTES`).
+/// - Mints a fresh UUID `ThemeId` on every import.
+/// - Never follows an `include` outside the theme file's folder.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VsCodeThemeImporter;
+
+impl VsCodeThemeImporter {
+    /// Imports a VS Code theme JSON file from `path`, following same-folder `include`s
+    /// up to a bounded depth.
+    ///
+    /// # Errors
+    /// Returns [`ThemeError`] on size limit violation, directory escape, or invalid JSON.
+    pub fn import_file(path: &std::path::Path) -> Result<ThemeDefinition, ThemeError> {
+        let base_dir = path
+            .parent()
+            .ok_or_else(|| ThemeError::Io("theme path has no parent directory".to_owned()))?;
+        let canonical_base = base_dir
+            .canonicalize()
+            .map_err(|e| ThemeError::Io(e.to_string()))?;
+        Self::import_file_inner(path, &canonical_base, 0)
+    }
+
+    fn import_file_inner(
+        path: &std::path::Path,
+        canonical_base: &std::path::Path,
+        depth: usize,
+    ) -> Result<ThemeDefinition, ThemeError> {
+        if depth > 4 {
+            return Err(ThemeError::NestingTooDeep);
+        }
+        let meta = std::fs::metadata(path).map_err(|e| ThemeError::Io(e.to_string()))?;
+        let size = usize::try_from(meta.len()).unwrap_or(usize::MAX);
+        if size > MAX_THEME_FILE_BYTES {
+            return Err(ThemeError::FileTooLarge { size });
+        }
+        let bytes = std::fs::read(path).map_err(|e| ThemeError::Io(e.to_string()))?;
+        if bytes.len() > MAX_THEME_FILE_BYTES {
+            return Err(ThemeError::FileTooLarge { size: bytes.len() });
+        }
+
+        let raw: serde_json::Value =
+            serde_json::from_slice(&bytes).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
+        check_json_depth(&raw, 1)?;
+
+        let mut merged = if let Some(include_rel) = raw.get("include").and_then(serde_json::Value::as_str) {
+            let include_path = Self::resolve_safe_include(canonical_base, include_rel)?;
+            Self::import_file_inner(&include_path, canonical_base, depth + 1)?
+        } else {
+            let appearance = Self::detect_appearance(&raw);
+            let name = raw
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or("Imported VS Code Theme")
+                .to_owned();
+            ThemeDefinition {
+                id: ThemeId(uuid::Uuid::new_v4().to_string()),
+                name,
+                appearance,
+                is_builtin: false,
+                colors: BTreeMap::new(),
+            }
+        };
+
+        // Always mint a fresh id for the top-level import.
+        merged.id = ThemeId(uuid::Uuid::new_v4().to_string());
+        if let Some(name) = raw
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            merged.name = name.to_owned();
+        }
+        if raw.get("type").is_some() {
+            merged.appearance = Self::detect_appearance(&raw);
+        }
+
+        Self::apply_vscode_colors(&raw, &mut merged.colors)?;
+        Self::apply_token_colors(&raw, &mut merged.colors)?;
+        Ok(merged)
+    }
+
+    /// Imports from an in-memory VS Code theme JSON slice (no filesystem `include`s).
+    ///
+    /// # Errors
+    /// Returns [`ThemeError`] if size/depth/JSON/color validation fails, or if an `include`
+    /// is present without a directory context.
+    pub fn import_bytes(bytes: &[u8]) -> Result<ThemeDefinition, ThemeError> {
+        if bytes.len() > MAX_THEME_FILE_BYTES {
+            return Err(ThemeError::FileTooLarge { size: bytes.len() });
+        }
+        let raw: serde_json::Value =
+            serde_json::from_slice(bytes).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
+        check_json_depth(&raw, 1)?;
+        if let Some(inc) = raw.get("include").and_then(serde_json::Value::as_str) {
+            return Err(ThemeError::IncludeEscapesDirectory(inc.to_owned()));
+        }
+        let appearance = Self::detect_appearance(&raw);
+        let name = raw
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Imported VS Code Theme")
+            .to_owned();
+        let mut colors = BTreeMap::new();
+        Self::apply_vscode_colors(&raw, &mut colors)?;
+        Self::apply_token_colors(&raw, &mut colors)?;
+        Ok(ThemeDefinition {
+            id: ThemeId(uuid::Uuid::new_v4().to_string()),
+            name,
+            appearance,
+            is_builtin: false,
+            colors,
+        })
+    }
+
+    fn resolve_safe_include(
+        canonical_base: &std::path::Path,
+        include_rel: &str,
+    ) -> Result<std::path::PathBuf, ThemeError> {
+        let rel = std::path::Path::new(include_rel);
+        if rel.is_absolute() {
+            return Err(ThemeError::IncludeEscapesDirectory(include_rel.to_owned()));
+        }
+        for comp in rel.components() {
+            if matches!(
+                comp,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            ) {
+                return Err(ThemeError::IncludeEscapesDirectory(include_rel.to_owned()));
+            }
+        }
+        let candidate = canonical_base.join(rel);
+        let canonical = candidate
+            .canonicalize()
+            .map_err(|e| ThemeError::Io(e.to_string()))?;
+        if !canonical.starts_with(canonical_base) {
+            return Err(ThemeError::IncludeEscapesDirectory(include_rel.to_owned()));
+        }
+        Ok(canonical)
+    }
+
+    fn detect_appearance(raw: &serde_json::Value) -> ThemeAppearance {
+        match raw.get("type").and_then(serde_json::Value::as_str) {
+            Some("light") => ThemeAppearance::Light,
+            Some("hc" | "hcBlack" | "hcLight") => ThemeAppearance::HighContrast,
+            _ => ThemeAppearance::Dark,
+        }
+    }
+
+    fn apply_vscode_colors(
+        raw: &serde_json::Value,
+        out: &mut BTreeMap<ThemeSlot, Rgba>,
+    ) -> Result<(), ThemeError> {
+        let Some(colors_obj) = raw.get("colors").and_then(serde_json::Value::as_object) else {
+            return Ok(());
+        };
+        for (key, val) in colors_obj {
+            let Some(hex) = val.as_str() else {
+                continue;
+            };
+            if let Some(slot) = Self::map_vscode_color_key(key) {
+                let rgba = Rgba::from_hex(hex).ok_or_else(|| ThemeError::InvalidColor {
+                    key: key.clone(),
+                    value: hex.to_owned(),
+                })?;
+                out.insert(slot, rgba);
+            }
+        }
+        Ok(())
+    }
+
+    fn map_vscode_color_key(key: &str) -> Option<ThemeSlot> {
+        if let Some(direct) = ThemeSlot::from_key(key) {
+            return Some(direct);
+        }
+        match key {
+            "editor.foreground" => Some(ThemeSlot::EditorText),
+            "editor.selectionBackground" => Some(ThemeSlot::EditorSelection),
+            "editorCursor.foreground" => Some(ThemeSlot::EditorCaret),
+            "editor.lineHighlightBackground" => Some(ThemeSlot::EditorCurrentLine),
+            "editorGutter.background" => Some(ThemeSlot::EditorGutterBackground),
+            "editorLineNumber.foreground" => Some(ThemeSlot::EditorGutterText),
+            "sideBarSectionHeader.background" => Some(ThemeSlot::DataGridHeaderBackground),
+            "sideBarSectionHeader.foreground" => Some(ThemeSlot::DataGridHeaderText),
+            "list.activeSelectionBackground" => Some(ThemeSlot::DataGridSelection),
+            "list.inactiveSelectionBackground" => Some(ThemeSlot::DataGridInactiveSelection),
+            "list.activeSelectionForeground" => Some(ThemeSlot::DataGridSelectionText),
+            "focusBorder" => Some(ThemeSlot::DataGridFocusBorder),
+            "diffEditor.insertedLineBackground" => Some(ThemeSlot::DataGridInserted),
+            "diffEditor.modifiedTextBackground" => Some(ThemeSlot::DataGridModified),
+            "diffEditor.removedLineBackground" => Some(ThemeSlot::DataGridDeleted),
+            _ => None,
+        }
+    }
+
+    fn apply_token_colors(
+        raw: &serde_json::Value,
+        out: &mut BTreeMap<ThemeSlot, Rgba>,
+    ) -> Result<(), ThemeError> {
+        let Some(rules) = raw.get("tokenColors").and_then(serde_json::Value::as_array) else {
+            return Ok(());
+        };
+        for rule in rules {
+            let Some(hex) = rule
+                .get("settings")
+                .and_then(|s| s.get("foreground"))
+                .and_then(serde_json::Value::as_str)
+            else {
+                continue;
+            };
+            let rgba = Rgba::from_hex(hex).ok_or_else(|| ThemeError::InvalidColor {
+                key: "tokenColors.settings.foreground".to_owned(),
+                value: hex.to_owned(),
+            })?;
+            for scope in Self::extract_scopes(rule.get("scope")) {
+                if let Some(slot) = Self::map_token_scope(scope.trim()) {
+                    out.insert(slot, rgba);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn extract_scopes(scope_val: Option<&serde_json::Value>) -> Vec<&str> {
+        match scope_val {
+            Some(serde_json::Value::String(s)) => s.split(',').collect(),
+            Some(serde_json::Value::Array(arr)) => {
+                arr.iter().filter_map(serde_json::Value::as_str).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn map_token_scope(scope: &str) -> Option<ThemeSlot> {
+        match scope {
+            "keyword" | "keyword.control" | "storage.type" => Some(ThemeSlot::EditorSyntaxKeyword),
+            "string" | "string.quoted" => Some(ThemeSlot::EditorSyntaxString),
+            "comment" | "comment.line" | "comment.block" => Some(ThemeSlot::EditorSyntaxComment),
+            "constant.numeric" => Some(ThemeSlot::EditorSyntaxNumber),
+            "keyword.operator" => Some(ThemeSlot::EditorSyntaxOperator),
+            "punctuation" => Some(ThemeSlot::EditorSyntaxPunctuation),
+            "variable" | "entity.name" => Some(ThemeSlot::EditorSyntaxIdentifier),
+            _ => None,
+        }
+    }
+}
