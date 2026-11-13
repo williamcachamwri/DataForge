@@ -399,3 +399,210 @@ impl GridSelectionReducer {
         }
     }
 }
+
+/// Paging state for `table_query` (`offset`, `limit`, `table_row_count`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TableQueryPage {
+    pub offset: u64,
+    pub limit: u64,
+    pub table_row_count: Option<u64>,
+}
+
+impl TableQueryPage {
+    /// Creates a page starting at `offset` with `limit` (clamped >= 1).
+    #[must_use]
+    pub fn new(offset: u64, limit: u64, table_row_count: Option<u64>) -> Self {
+        Self {
+            offset,
+            limit: limit.max(1),
+            table_row_count,
+        }
+    }
+
+    /// Advances to the next page if more rows remain.
+    pub fn next_page(&mut self) -> bool {
+        let next = self.offset.saturating_add(self.limit);
+        if let Some(total) = self.table_row_count
+            && next >= total
+        {
+            return false;
+        }
+        self.offset = next;
+        true
+    }
+
+    /// Moves to the previous page, clamping at offset 0.
+    pub fn prev_page(&mut self) -> bool {
+        if self.offset == 0 {
+            return false;
+        }
+        self.offset = self.offset.saturating_sub(self.limit);
+        true
+    }
+
+    /// Returns 1-based current page and total pages when `table_row_count` is known.
+    #[must_use]
+    pub fn page_info(&self) -> (u64, Option<u64>) {
+        let current = (self.offset / self.limit) + 1;
+        let total = self.table_row_count.map(|n| n.div_ceil(self.limit).max(1));
+        (current, total)
+    }
+}
+
+/// Sort direction for a grid column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SortDirection {
+    Ascending,
+    Descending,
+}
+
+impl SortDirection {
+    /// Flips ascending <-> descending.
+    #[must_use]
+    pub const fn toggled(self) -> Self {
+        match self {
+            Self::Ascending => Self::Descending,
+            Self::Descending => Self::Ascending,
+        }
+    }
+}
+
+/// A single sort key in `HeaderSortCycle`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortKey {
+    pub column_id: DataGridColumnID,
+    pub direction: SortDirection,
+}
+
+/// Header sort cycle state (plain click replaces & flips; Option-click appends).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct HeaderSortCycle {
+    pub keys: Vec<SortKey>,
+}
+
+impl HeaderSortCycle {
+    /// Applies a header click on `column_id`.
+    ///
+    /// Per `data-grid.md`: plain click keeps only the clicked key and flips on
+    /// repeat; `keep_existing` (Option-click) keeps existing keys and appends/flips.
+    pub fn click(&mut self, column_id: DataGridColumnID, keep_existing: bool) {
+        if !keep_existing {
+            let next_dir = match self.keys.as_slice() {
+                [only] if only.column_id == column_id => only.direction.toggled(),
+                _ => SortDirection::Ascending,
+            };
+            self.keys = vec![SortKey {
+                column_id,
+                direction: next_dir,
+            }];
+            return;
+        }
+        if let Some(existing) = self.keys.iter_mut().find(|k| k.column_id == column_id) {
+            existing.direction = existing.direction.toggled();
+        } else {
+            self.keys.push(SortKey {
+                column_id,
+                direction: SortDirection::Ascending,
+            });
+        }
+    }
+
+    /// Clears all sort keys.
+    pub fn clear(&mut self) {
+        self.keys.clear();
+    }
+}
+
+/// A single cell edit captured by stable IDs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataGridCellEdit {
+    pub row_id: RowID,
+    pub column_id: DataGridColumnID,
+    pub old_value: tablepro_core::value::Value,
+    pub new_value: tablepro_core::value::Value,
+}
+
+/// A committed batch of edits (one undo step).
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditUndoBatch {
+    pub action_name: String,
+    pub edits: Vec<DataGridCellEdit>,
+}
+
+/// Pending row edit batching (`TableEdits`) supporting insert, modify, delete,
+/// Commit, and Roll back.
+#[derive(Debug, Default, Clone)]
+pub struct TableEdits {
+    pub modified_cells: std::collections::BTreeMap<(RowID, DataGridColumnID), tablepro_core::value::Value>,
+    pub inserted_rows: std::collections::BTreeMap<RowID, Vec<tablepro_core::value::Value>>,
+    pub deleted_rows: std::collections::BTreeSet<RowID>,
+    undo_stack: Vec<EditUndoBatch>,
+    redo_stack: Vec<EditUndoBatch>,
+    next_temp_row_id: u64,
+}
+
+impl TableEdits {
+    /// Creates an empty `TableEdits` buffer.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            modified_cells: std::collections::BTreeMap::new(),
+            inserted_rows: std::collections::BTreeMap::new(),
+            deleted_rows: std::collections::BTreeSet::new(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            next_temp_row_id: 1_000_000,
+        }
+    }
+
+    /// Returns whether there are any pending uncommitted edits.
+    #[must_use]
+    pub fn has_pending_edits(&self) -> bool {
+        !self.modified_cells.is_empty() || !self.inserted_rows.is_empty() || !self.deleted_rows.is_empty()
+    }
+
+    /// Records a batch of cell modifications as one undo step.
+    pub fn commit_cells(&mut self, edits: Vec<DataGridCellEdit>, action_name: impl Into<String>) {
+        if edits.is_empty() {
+            return;
+        }
+        for edit in &edits {
+            self.modified_cells
+                .insert((edit.row_id, edit.column_id), edit.new_value.clone());
+        }
+        self.undo_stack.push(EditUndoBatch {
+            action_name: action_name.into(),
+            edits,
+        });
+        self.redo_stack.clear();
+    }
+
+    /// Inserts a new pending row and returns its temporary [`RowID`].
+    pub fn insert_row(&mut self, values: Vec<tablepro_core::value::Value>) -> RowID {
+        let id = RowID(self.next_temp_row_id);
+        self.next_temp_row_id = self.next_temp_row_id.saturating_add(1);
+        self.inserted_rows.insert(id, values);
+        id
+    }
+
+    /// Marks `row_id` for deletion (or removes it if it was a newly inserted row).
+    pub fn delete_row(&mut self, row_id: RowID) {
+        if self.inserted_rows.remove(&row_id).is_none() {
+            self.deleted_rows.insert(row_id);
+        }
+    }
+
+    /// Rolls back all pending edits.
+    pub fn rollback(&mut self) {
+        self.modified_cells.clear();
+        self.inserted_rows.clear();
+        self.deleted_rows.clear();
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+    }
+
+    /// Consumes and returns all pending edits on commit.
+    pub fn take_committed(&mut self) -> Self {
+        std::mem::take(self)
+    }
+}
