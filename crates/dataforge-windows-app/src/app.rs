@@ -291,18 +291,29 @@ impl AppController {
             if trimmed.is_empty() {
                 continue;
             }
-            if let Ok(conn) = self.connection_form.apply_url(trimmed) {
+            if let Ok(conn) = self.parse_and_apply_connection_url(trimmed) {
                 let engine = engine_from_driver_id(&conn.driver_id);
                 let label = conn.name.clone();
                 self.library.upsert_connection(conn);
                 self.add_rail_connection(trimmed, &label, engine, true);
+                if matches!(engine, EngineKind::Sqlite | EngineKind::Duckdb) {
+                    let path = std::path::Path::new(&self.connection_form.database).to_path_buf();
+                    if path.exists() {
+                        let _ = self.connect_local_file_blocking(&path);
+                    }
+                }
             } else {
+                let path = std::path::Path::new(trimmed);
                 let engine = if trimmed.to_ascii_lowercase().ends_with(".duckdb") {
                     EngineKind::Duckdb
                 } else {
                     EngineKind::Sqlite
                 };
-                self.add_rail_connection(trimmed, trimmed, engine, true);
+                if path.exists() {
+                    let _ = self.connect_local_file_blocking(path);
+                } else {
+                    self.add_rail_connection(trimmed, trimmed, engine, true);
+                }
             }
             self.screen_mode = ScreenMode::Workspace;
         }
@@ -424,7 +435,9 @@ impl AppController {
                 self.screen_mode = ScreenMode::ConnectionsLibrary;
             }
             KeyCommand::ExecuteQuery => {
-                self.toolbar_status.latency_label = "<1ms".to_owned();
+                if self.execute_active_sql_blocking().is_err() {
+                    self.toolbar_status.latency_label = "<1ms".to_owned();
+                }
             }
         }
         false
@@ -489,14 +502,25 @@ impl AppController {
             }
             ShellHitTarget::StatusStructureToggle => {
                 self.status_bar.view_mode = TableViewMode::Structure;
+                if let Some(table) = self.active_table.clone() {
+                    let _ = self.load_table_structure_blocking(&table);
+                }
             }
             ShellHitTarget::StatusPrevPage if self.status_bar.current_page > 1 => {
-                self.status_bar.current_page -= 1;
+                if self.active_table.is_some() {
+                    let _ = self.prev_grid_page_blocking();
+                } else {
+                    self.status_bar.current_page -= 1;
+                }
             }
             ShellHitTarget::StatusNextPage
                 if self.status_bar.current_page < self.status_bar.total_pages =>
             {
-                self.status_bar.current_page += 1;
+                if self.active_table.is_some() {
+                    let _ = self.next_grid_page_blocking();
+                } else {
+                    self.status_bar.current_page += 1;
+                }
             }
             _ => {}
         }
