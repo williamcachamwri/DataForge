@@ -58,3 +58,20 @@ cargo test -j 2 -p dataforge-e2e
 # Build optimized release binary (LTO = "fat", codegen-units = 1, stripped)
 cargo build --release -p dataforge-windows-app
 ```
+
+## Keyboard Shortcuts
+
+| Shortcut | Command | Action |
+| --- | --- | --- |
+| `Tab` / `Shift+Tab` | `FocusNextRegion` / `FocusPrevRegion` | Cycle focus across workbench regions |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | `NextTab` / `PrevTab` | Switch to next / previous tab |
+| `Ctrl+W` | `CloseTabOrWindow` | Close active tab first, or close window |
+| `Ctrl+Shift+T` | `ReopenClosedTab` | Reopen most recently closed tab |
+| `F5` or `Ctrl+Enter` | `ExecuteQuery` | Run current SQL query / selection |
+| `Ctrl+N` | `NewQueryTab` | Open a new SQL query tab |
+| `Ctrl+B` | `ToggleSidebar` | Show / hide schema sidebar |
+| `Ctrl+I` | `ToggleInspector` | Show / hide Row Inspector |
+| `Ctrl+Shift+A` | `ToggleAiDrawer` | Show / hide AI Assistant drawer |
+| `Ctrl+F` | `FocusFilter` | Focus schema or grid filter bar |
+| `Ctrl+L` | `OpenConnectionsLibrary` | Open Connections Library |
+| `Ctrl+,` | `OpenSettings` | Open Settings dialog |
