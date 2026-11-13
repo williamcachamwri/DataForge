@@ -12,17 +12,29 @@ path = "src/main.rs"
 
 [dependencies]
 dataforge-gfx.workspace = true
+dataforge-services = { path = "../dataforge-services" }
 dataforge-state.workspace = true
 dataforge-windows-platform.workspace = true
+secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tablepro-ai.workspace = true
 tablepro-cli.workspace = true
 tablepro-core.workspace = true
 tablepro-foreign-import.workspace = true
+tablepro-mcp.workspace = true
+tablepro-session.workspace = true
+tablepro-storage.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 windows.workspace = true
 windows-numerics = "0.2"
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints]
 workspace = true
