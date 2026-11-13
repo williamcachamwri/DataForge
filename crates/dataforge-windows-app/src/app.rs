@@ -1,7 +1,8 @@
 //! Central application controller coordinating state models, layout, theme,
 //! keyboard/mouse dispatch, and Direct2D frame rendering.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use dataforge_gfx::Result;
 use dataforge_gfx::context::{D2dContext, RenderSurface};
@@ -16,15 +17,21 @@ use dataforge_gfx::palette::{ThemeMode, ThemePalette};
 use dataforge_state::connection_window::{
     AttemptToken, ConnectionWindowPhase, ConnectionWindowPhaseMachine, WorkspaceId,
 };
+use dataforge_state::data_grid::{DataGridLayoutScope, DataGridModel, RowID};
 use dataforge_state::library::ConnectionsLibraryModel;
 use dataforge_state::tabs::{CloseActionResult, TabConnectionId, TabId, TabKind, TabStripModel};
 use dataforge_state::theme::{ThemeDefinition, ThemeSlot};
 use dataforge_windows_platform::{
     AppSettings, ThemePreference, WindowsTheme, detect_theme_or_default,
 };
+use tablepro_core::meta::{ObjectInfo, PagePosition, SchemaInfo, TableRef};
+use tablepro_core::value::Value;
 
 use crate::accessibility::{FocusRegion, KeyCommand};
+use crate::controller_types::{QueryHistoryEntry, SavedQueryEntry, SplitPaneMode, VimMode};
+use crate::error::AppError;
 use crate::i18n::{Locale, Strings};
+use crate::services::ServiceHub;
 use crate::shell_layout::{ShellHitTarget, ShellLayout, ShellLayoutConfig};
 use crate::views::ai_drawer::{AiDrawerState, render_ai_drawer};
 use crate::views::content::{
@@ -83,6 +90,25 @@ pub struct AppController {
     pub editor_autocomplete: Option<AutocompletePopup>,
     pub open_transactions: BTreeMap<WorkspaceId, bool>,
     pub safe_mode_enabled: bool,
+    pub services: Option<Arc<ServiceHub>>,
+    pub headless: bool,
+    pub active_attempt: Option<AttemptToken>,
+    pub active_table: Option<TableRef>,
+    pub grid_model: DataGridModel,
+    pub grid_row_keys: BTreeMap<RowID, Vec<Value>>,
+    pub grid_page_prev: Option<PagePosition>,
+    pub grid_page_next: Option<PagePosition>,
+    pub cached_schemas: Vec<SchemaInfo>,
+    pub cached_objects: Vec<ObjectInfo>,
+    pub favorite_objects: BTreeSet<String>,
+    pub query_history: Vec<QueryHistoryEntry>,
+    pub saved_queries: Vec<SavedQueryEntry>,
+    pub query_notices: Vec<String>,
+    pub vim_mode: Option<VimMode>,
+    pub split_pane: SplitPaneMode,
+    pub split_editor_lines: Vec<EditorLine>,
+    pub last_test_status: Option<String>,
+    pub last_export_status: Option<String>,
     pub last_width_dip: f32,
     pub last_height_dip: f32,
     grid_renderer: DataGridRenderer,
@@ -158,6 +184,25 @@ impl AppController {
             editor_autocomplete: None,
             open_transactions: BTreeMap::new(),
             safe_mode_enabled: false,
+            services: ServiceHub::new(Some(2)).ok().map(Arc::new),
+            headless: true,
+            active_attempt: None,
+            active_table: None,
+            grid_model: DataGridModel::new(DataGridLayoutScope::Ephemeral, 100),
+            grid_row_keys: BTreeMap::new(),
+            grid_page_prev: None,
+            grid_page_next: None,
+            cached_schemas: Vec::new(),
+            cached_objects: Vec::new(),
+            favorite_objects: BTreeSet::new(),
+            query_history: Vec::new(),
+            saved_queries: Vec::new(),
+            query_notices: Vec::new(),
+            vim_mode: None,
+            split_pane: SplitPaneMode::Single,
+            split_editor_lines: Vec::new(),
+            last_test_status: None,
+            last_export_status: None,
             last_width_dip: 1280.0,
             last_height_dip: 800.0,
             grid_renderer: DataGridRenderer::new(settings.editor_font.family.clone()),
@@ -645,6 +690,13 @@ impl AppController {
     /// Marks an active workspace as connecting with a new `AttemptToken`.
     pub fn begin_workspace_connect(&mut self, id: WorkspaceId) -> Option<AttemptToken> {
         self.connections.begin_connect(id)
+    }
+
+    /// Returns the initialized [`ServiceHub`] or [`AppError::InvalidState`].
+    pub fn require_services(&self) -> std::result::Result<&Arc<ServiceHub>, AppError> {
+        self.services
+            .as_ref()
+            .ok_or_else(|| AppError::InvalidState("service hub is not initialized".to_owned()))
     }
 }
 
