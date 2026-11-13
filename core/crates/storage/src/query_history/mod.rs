@@ -1,0 +1,1564 @@
+mod backup_folders;
+mod entry;
+mod export;
+#[cfg(test)]
+mod favourites_migration_tests;
+mod history_connection;
+mod history_cursor;
+mod history_page;
+mod history_query;
+mod new_entry;
+mod outcome;
+mod prune_report;
+pub mod retention;
+mod schema;
+mod search_fold;
+mod status_filter;
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::SystemTime;
+
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::{AssertSqlSafe, ConnectOptions, Connection, Row, SqlitePool};
+use tokio::sync::watch;
+use uuid::Uuid;
+
+use crate::error::StorageError;
+use crate::paths::StoragePaths;
+use crate::unix_time::{from_unix, to_unix};
+
+pub use entry::Entry;
+pub use history_connection::HistoryConnection;
+pub use history_cursor::HistoryCursor;
+pub use history_page::{HistoryPage, HistoryPageRequest, MAX_PAGE_SIZE};
+pub use history_query::HistoryQuery;
+pub use new_entry::NewEntry;
+pub use outcome::Outcome;
+pub use prune_report::PruneReport;
+pub use status_filter::StatusFilter;
+
+use export::{history_csv, history_sql};
+use history_query::TermMatch;
+use search_fold::fold;
+
+pub const MAX_QUERY_BYTES: usize = 1024 * 1024;
+
+/// Unpinned entries kept regardless of the retention window. History is
+/// a convenience, not an archive, and an unbounded table makes every
+/// search slower for everyone.
+const MAX_UNPINNED_ENTRIES: i64 = 100_000;
+
+/// Ids per statement when a list of them is bound, well under SQLite's
+/// limit on parameters.
+const IDS_PER_STATEMENT: usize = 500;
+
+const ENTRY_COLUMNS: &str = "h.id, h.query, h.driver_id, h.connection_id, h.connection_name, h.executed_at, \
+     h.duration_ms, h.rows_affected, h.success, h.cancelled, h.pinned, h.error";
+
+/// A value for a placeholder of a statement built from parts.
+pub(crate) enum Bind {
+    Text(String),
+    Integer(i64),
+}
+
+/// The query-history database. Cloning shares the pool, so a clone per
+/// consumer is cheap and they all see the same rows.
+#[derive(Debug, Clone)]
+pub struct QueryHistory {
+    pool: SqlitePool,
+    path: PathBuf,
+    // Shared by every handle `saved_queries` gives out, so a write through one reaches the others' followers.
+    saved_changes: Arc<watch::Sender<u64>>,
+}
+
+impl QueryHistory {
+    /// SQLite creates the database, its WAL and its SHM with the umask
+    /// mode. Pre-creating the database at 0600 makes the siblings copy
+    /// that instead, so query text is never world-readable.
+    pub async fn open(paths: &StoragePaths) -> Result<Self, StorageError> {
+        let path = paths.history_database();
+        crate::fs::create_private_file_if_missing(&path)?;
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            // Query text is the user's own SQL, which may carry values
+            // they would not want in a log.
+            .disable_statement_logging();
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await?;
+        if let Some(version) = crate::upgrade_copies::pending_upgrade(&pool, &schema::MIGRATOR).await? {
+            crate::upgrade_copies::keep_database(&pool, &path, version).await?;
+        }
+        schema::migrate(&pool).await?;
+        Ok(Self {
+            pool,
+            path,
+            saved_changes: Arc::new(watch::channel(0).0),
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn saved_queries(&self) -> crate::saved_queries::SavedQueries {
+        crate::saved_queries::SavedQueries::new(self.pool.clone(), self.path.clone(), self.saved_changes.clone())
+    }
+
+    /// The folders saved queries are filed in, in the same database.
+    pub fn saved_query_folders(&self) -> crate::saved_queries::SavedQueryFolders {
+        crate::saved_queries::SavedQueryFolders::new(self.pool.clone(), self.path.clone(), self.saved_changes.clone())
+    }
+
+    /// The favourite tables and databases, in the same database.
+    pub fn favourites(&self) -> crate::favourites::Favourites {
+        crate::favourites::Favourites::new(self.pool.clone(), self.path.clone(), self.saved_changes.clone())
+    }
+
+    pub async fn record(&self, entry: NewEntry) -> Result<i64, StorageError> {
+        if entry.query.len() > MAX_QUERY_BYTES {
+            return Err(StorageError::TooLarge {
+                got: entry.query.len(),
+                limit: MAX_QUERY_BYTES,
+            });
+        }
+        let executed_at = to_unix(entry.executed_at);
+        let (success, cancelled, error_text) = match &entry.outcome {
+            Outcome::Success => (1_i64, 0_i64, None),
+            Outcome::Error(msg) => (0, 0, Some(msg.clone())),
+            Outcome::Cancelled => (0, 1, None),
+        };
+        let id = sqlx::query(
+            r#"
+            INSERT INTO history (
+                query, query_folded, driver_id, connection_id, connection_name,
+                executed_at, duration_ms, rows_affected,
+                success, cancelled, error
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&entry.query)
+        .bind(fold(&entry.query))
+        .bind(&entry.driver_id)
+        .bind(entry.connection_id.to_string())
+        .bind(&entry.connection_name)
+        .bind(executed_at)
+        .bind(entry.duration_ms)
+        .bind(entry.rows_affected)
+        .bind(success)
+        .bind(cancelled)
+        .bind(error_text)
+        .execute(&self.pool)
+        .await?
+        .last_insert_rowid();
+        Ok(id)
+    }
+
+    /// One page of the entries `query` matches, pinned first, then
+    /// newest. Paging is by keyset, so rows recorded while the user
+    /// scrolls shift nothing and no row is shown twice.
+    pub async fn search_page(
+        &self,
+        query: &HistoryQuery,
+        request: HistoryPageRequest,
+    ) -> Result<HistoryPage, StorageError> {
+        let limit = request.limit.clamp(1, MAX_PAGE_SIZE);
+        let mut clauses: Vec<&'static str> = Vec::new();
+        let mut binds: Vec<Bind> = Vec::new();
+        for term in query.term_matches() {
+            match term {
+                TermMatch::Trigram(phrase) => {
+                    clauses.push("h.id IN (SELECT rowid FROM history_search WHERE history_search MATCH ?)");
+                    binds.push(Bind::Text(phrase));
+                }
+                TermMatch::Substring(text) => {
+                    clauses.push("instr(h.query_folded, ?) > 0");
+                    binds.push(Bind::Text(text));
+                }
+            }
+        }
+        if let Some(connection) = query.connection {
+            clauses.push("h.connection_id = ?");
+            binds.push(Bind::Text(connection.to_string()));
+        }
+        if let Some(predicate) = query.status.predicate() {
+            clauses.push(predicate);
+        }
+        if let Some(after) = query.executed_after {
+            clauses.push("h.executed_at >= ?");
+            binds.push(Bind::Integer(to_unix(after)));
+        }
+        if let Some(cursor) = request.after {
+            clauses.push("(h.pinned, h.executed_at, h.id) < (?, ?, ?)");
+            binds.push(Bind::Integer(i64::from(cursor.pinned)));
+            binds.push(Bind::Integer(cursor.executed_at));
+            binds.push(Bind::Integer(cursor.id));
+        }
+
+        let mut sql = format!("SELECT {ENTRY_COLUMNS} FROM history h");
+        if !clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&clauses.join(" AND "));
+        }
+        // One row past the page says whether there is another.
+        sql.push_str(" ORDER BY h.pinned DESC, h.executed_at DESC, h.id DESC LIMIT ?");
+        binds.push(Bind::Integer(limit as i64 + 1));
+
+        let mut statement = sqlx::query(AssertSqlSafe(sql));
+        for bind in binds {
+            statement = match bind {
+                Bind::Text(text) => statement.bind(text),
+                Bind::Integer(value) => statement.bind(value),
+            };
+        }
+        let rows = statement.fetch_all(&self.pool).await?;
+        let mut entries = rows
+            .into_iter()
+            .map(Self::row_to_entry)
+            .collect::<Result<Vec<_>, _>>()?;
+        let next = if entries.len() > limit {
+            entries.truncate(limit);
+            entries.last().map(HistoryCursor::after)
+        } else {
+            None
+        };
+        Ok(HistoryPage { entries, next })
+    }
+
+    fn row_to_entry(row: sqlx::sqlite::SqliteRow) -> Result<Entry, StorageError> {
+        let conn_id_str: String = row.try_get("connection_id")?;
+        let connection_id = Uuid::parse_str(&conn_id_str).unwrap_or_default();
+        let executed_at: i64 = row.try_get("executed_at")?;
+        let success_i: i64 = row.try_get("success")?;
+        let cancelled_i: i64 = row.try_get("cancelled")?;
+        let pinned_i: i64 = row.try_get("pinned")?;
+        Ok(Entry {
+            id: row.try_get("id")?,
+            query: row.try_get("query")?,
+            driver_id: row.try_get("driver_id")?,
+            connection_id,
+            connection_name: row.try_get("connection_name")?,
+            executed_at: from_unix(executed_at),
+            duration_ms: row.try_get::<Option<i64>, _>("duration_ms")?,
+            rows_affected: row.try_get::<Option<i64>, _>("rows_affected")?,
+            success: success_i != 0,
+            cancelled: cancelled_i != 0,
+            pinned: pinned_i != 0,
+            error: row.try_get::<Option<String>, _>("error")?,
+        })
+    }
+
+    pub async fn set_pinned(&self, id: i64, pinned: bool) -> Result<(), StorageError> {
+        sqlx::query("UPDATE history SET pinned = ? WHERE id = ?")
+            .bind(if pinned { 1_i64 } else { 0 })
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Delete the entries and hand back what they held, so the delete
+    /// can be undone with `restore`.
+    pub async fn delete_returning(&self, ids: &[i64]) -> Result<Vec<Entry>, StorageError> {
+        let from_copies: Vec<CopyDelete> = ids
+            .chunks(IDS_PER_STATEMENT)
+            .map(|chunk| CopyDelete {
+                table: "history",
+                sql: format!(
+                    "DELETE FROM main.history WHERE id IN ({})",
+                    vec!["?"; chunk.len()].join(",")
+                ),
+                binds: chunk.iter().map(|id| Bind::Integer(*id)).collect(),
+            })
+            .collect();
+        let mut connection = self.pool.acquire().await?;
+        let mut transaction = connection.begin_with(AssertSqlSafe("BEGIN IMMEDIATE")).await?;
+        trim_upgrade_copies(&self.path, &from_copies).await?;
+        let mut deleted = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(IDS_PER_STATEMENT) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            let sql = format!(
+                "DELETE FROM history WHERE id IN ({placeholders}) RETURNING id, query, driver_id, connection_id, \
+                 connection_name, executed_at, duration_ms, rows_affected, success, cancelled, pinned, error"
+            );
+            let mut statement = sqlx::query(AssertSqlSafe(sql));
+            for id in chunk {
+                statement = statement.bind(id);
+            }
+            for row in statement.fetch_all(&mut *transaction).await? {
+                deleted.push(Self::row_to_entry(row)?);
+            }
+        }
+        transaction.commit().await?;
+        deleted.sort_by_key(|entry| entry.id);
+        Ok(deleted)
+    }
+
+    /// Put deleted entries back under their own ids, pinned or not as
+    /// they were. The insert triggers index them again.
+    pub async fn restore(&self, entries: &[Entry]) -> Result<(), StorageError> {
+        let mut transaction = self.pool.begin().await?;
+        for entry in entries {
+            sqlx::query(
+                "INSERT INTO history (
+                     id, query, query_folded, driver_id, connection_id, connection_name,
+                     executed_at, duration_ms, rows_affected, success, cancelled, pinned, error
+                 )
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(entry.id)
+            .bind(&entry.query)
+            .bind(fold(&entry.query))
+            .bind(&entry.driver_id)
+            .bind(entry.connection_id.to_string())
+            .bind(&entry.connection_name)
+            .bind(to_unix(entry.executed_at))
+            .bind(entry.duration_ms)
+            .bind(entry.rows_affected)
+            .bind(i64::from(entry.success))
+            .bind(i64::from(entry.cancelled))
+            .bind(i64::from(entry.pinned))
+            .bind(&entry.error)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn clear_all(&self) -> Result<usize, StorageError> {
+        let mut database = self.pool.acquire().await?;
+        let mut transaction = database.begin_with(AssertSqlSafe("BEGIN IMMEDIATE")).await?;
+        trim_upgrade_copies(
+            &self.path,
+            &[CopyDelete {
+                table: "history",
+                sql: "DELETE FROM main.history".to_owned(),
+                binds: Vec::new(),
+            }],
+        )
+        .await?;
+        let affected = sqlx::query("DELETE FROM history")
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+        // The delete triggers leave the queries' words in the index until it is optimized.
+        if affected > 0 {
+            sqlx::query("INSERT INTO history_search(history_search) VALUES('optimize')")
+                .execute(&mut *transaction)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(affected as usize)
+    }
+
+    /// Drop what the user no longer needs: first anything past the
+    /// retention window, then anything past the entry cap. Pinned rows
+    /// survive both.
+    pub async fn prune(&self, retention_days: u32) -> Result<PruneReport, StorageError> {
+        self.prune_with_cap(retention_days, MAX_UNPINNED_ENTRIES).await
+    }
+
+    pub(crate) async fn prune_with_cap(&self, retention_days: u32, cap: i64) -> Result<PruneReport, StorageError> {
+        let mut report = PruneReport::default();
+
+        if let Some(cutoff) = retention::cutoff(retention_days, SystemTime::now()) {
+            report.expired = sqlx::query("DELETE FROM history WHERE pinned = 0 AND executed_at < ?")
+                .bind(to_unix(cutoff))
+                .execute(&self.pool)
+                .await?
+                .rows_affected();
+        }
+
+        report.over_cap = sqlx::query(
+            "DELETE FROM history WHERE pinned = 0 AND id NOT IN (
+                 SELECT id FROM history WHERE pinned = 0 ORDER BY executed_at DESC, id DESC LIMIT ?
+             )",
+        )
+        .bind(cap)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        // The delete triggers queue tombstones in the FTS index; without
+        // this the index keeps growing even as the table shrinks.
+        if report.removed_anything() {
+            sqlx::query("INSERT INTO history_search(history_search) VALUES('optimize')")
+                .execute(&self.pool)
+                .await?;
+        }
+        // Rows expired here, or unpinned since a copy was made, leave the copies too.
+        let mut database = self.pool.acquire().await?;
+        let transaction = database.begin_with(AssertSqlSafe("BEGIN IMMEDIATE")).await?;
+        trim_upgrade_copies(&self.path, &[]).await?;
+        transaction.commit().await?;
+        Ok(report)
+    }
+
+    /// How many queries ran on a connection, pinned ones included.
+    pub async fn count_for_connection(&self, connection: Uuid) -> Result<u64, StorageError> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM history WHERE connection_id = ?")
+            .bind(connection.to_string())
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(u64::try_from(count).unwrap_or(0))
+    }
+
+    /// Drop every query run on a connection, pinned ones included, for a
+    /// connection the user deleted along with its history.
+    pub async fn delete_for_connection(&self, connection: Uuid) -> Result<u64, StorageError> {
+        let mut database = self.pool.acquire().await?;
+        let mut transaction = database.begin_with(AssertSqlSafe("BEGIN IMMEDIATE")).await?;
+        trim_upgrade_copies(
+            &self.path,
+            &[CopyDelete {
+                table: "history",
+                sql: "DELETE FROM main.history WHERE connection_id = ?".to_owned(),
+                binds: vec![Bind::Text(connection.to_string())],
+            }],
+        )
+        .await?;
+        let removed = sqlx::query("DELETE FROM history WHERE connection_id = ?")
+            .bind(connection.to_string())
+            .execute(&mut *transaction)
+            .await?
+            .rows_affected();
+        // As after a prune: the delete triggers leave tombstones in the
+        // index until it is optimized.
+        if removed > 0 {
+            sqlx::query("INSERT INTO history_search(history_search) VALUES('optimize')")
+                .execute(&mut *transaction)
+                .await?;
+        }
+        transaction.commit().await?;
+        Ok(removed)
+    }
+
+    /// Every connection the history holds entries for, under the name
+    /// of its latest run, so a renamed connection is listed once.
+    pub async fn connections_with_history(&self) -> Result<Vec<HistoryConnection>, StorageError> {
+        let rows: Vec<(String, String)> = sqlx::query_as(
+            "SELECT connection_id, connection_name FROM (
+                 SELECT connection_id, connection_name,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY connection_id ORDER BY executed_at DESC, id DESC
+                        ) AS recency
+                 FROM history
+             )
+             WHERE recency = 1
+             ORDER BY connection_name COLLATE NOCASE, connection_id",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|(id, name)| Uuid::parse_str(&id).ok().map(|id| HistoryConnection { id, name }))
+            .collect())
+    }
+
+    /// The entries with these ids, in the order the history lists them.
+    pub async fn fetch_by_ids(&self, ids: &[i64]) -> Result<Vec<Entry>, StorageError> {
+        let mut entries = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(IDS_PER_STATEMENT) {
+            let placeholders = vec!["?"; chunk.len()].join(",");
+            let sql = format!("SELECT {ENTRY_COLUMNS} FROM history h WHERE h.id IN ({placeholders})");
+            let mut statement = sqlx::query(AssertSqlSafe(sql));
+            for id in chunk {
+                statement = statement.bind(id);
+            }
+            for row in statement.fetch_all(&self.pool).await? {
+                entries.push(Self::row_to_entry(row)?);
+            }
+        }
+        entries.sort_by_key(|entry| std::cmp::Reverse(HistoryCursor::after(entry)));
+        Ok(entries)
+    }
+
+    pub async fn export_sql(&self, ids: &[i64]) -> Result<String, StorageError> {
+        let entries = self.fetch_by_ids(ids).await?;
+        Ok(history_sql(&entries, chrono::Utc::now()))
+    }
+
+    pub async fn export_csv(&self, ids: &[i64]) -> Result<String, StorageError> {
+        let entries = self.fetch_by_ids(ids).await?;
+        history_csv(&entries)
+    }
+}
+
+// A copy an upgrade kept never holds a history entry or saved query the database no longer has, so
+// what the user deleted, or the retention window dropped, is gone from it too. One transaction with
+// secure_delete, so the words leave the full-text blocks and freed pages at once, even after a crash.
+// A delete the user asked for goes to the copies before the database: when a copy fails, nothing is
+// deleted, so the user is told and an Undo never loses what it would put back.
+pub(crate) struct CopyDelete {
+    pub(crate) table: &'static str,
+    pub(crate) sql: String,
+    pub(crate) binds: Vec<Bind>,
+}
+
+// Callers hold the live SQLite write lock until their deletion commits, so copy reconciliation cannot restore a pending deletion.
+pub(crate) async fn trim_upgrade_copies(path: &Path, first: &[CopyDelete]) -> Result<(), StorageError> {
+    crate::upgrade_copies::remove_leftovers_blocking(path)?;
+    let copies = crate::upgrade_copies::copies_blocking(path)?;
+    if copies.is_empty() {
+        return Ok(());
+    }
+    let live = path.to_str().ok_or_else(|| StorageError::Io {
+        path: path.to_owned(),
+        source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "the path is not UTF-8"),
+    })?;
+    for copy in copies {
+        // A copy that cannot be trimmed, being damaged or unreadable, goes rather than keep what the
+        // user deleted.
+        match trim_copy(&copy.path, live, first).await {
+            Ok(()) => {}
+            // Another trim holds it: the copy is fine, and this one tries again next time.
+            Err(error) if is_busy(&error) => return Err(error),
+            Err(_) => crate::upgrade_copies::remove_copy_blocking(&copy.path)?,
+        }
+    }
+    Ok(())
+}
+
+// SQLITE_BUSY and SQLITE_LOCKED, with their extended codes.
+fn is_busy(error: &StorageError) -> bool {
+    let StorageError::Database(error) = error else {
+        return false;
+    };
+    error
+        .as_database_error()
+        .and_then(|database| database.code())
+        .and_then(|code| code.parse::<i32>().ok())
+        .is_some_and(|code| matches!(code & 0xff, 5 | 6))
+}
+
+async fn trim_copy(copy: &Path, live: &str, first: &[CopyDelete]) -> Result<(), StorageError> {
+    let mut database = SqliteConnectOptions::new()
+        .filename(copy)
+        .foreign_keys(false)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Delete)
+        .pragma("secure_delete", "ON")
+        .disable_statement_logging()
+        .connect()
+        .await?;
+    sqlx::query("ATTACH DATABASE ? AS live")
+        .bind(live)
+        .execute(&mut database)
+        .await?;
+    let mut transaction = database.begin().await?;
+    let has_folders = backup_folders::reconcile(&mut transaction).await?;
+    for delete in first {
+        let present: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM main.sqlite_master WHERE type = 'table' AND name = ?")
+                .bind(delete.table)
+                .fetch_one(&mut *transaction)
+                .await?;
+        if present > 0 {
+            let mut statement = sqlx::query(AssertSqlSafe(delete.sql.clone()));
+            for bind in &delete.binds {
+                statement = match bind {
+                    Bind::Text(text) => statement.bind(text.clone()),
+                    Bind::Integer(value) => statement.bind(*value),
+                };
+            }
+            statement.execute(&mut *transaction).await?;
+        }
+    }
+    for table in ["history", "saved_queries", "saved_query_folders"] {
+        let present: i64 = sqlx::query_scalar(
+            "SELECT (SELECT COUNT(*) FROM main.sqlite_master WHERE type = 'table' AND name = ?1) \
+             * (SELECT COUNT(*) FROM live.sqlite_master WHERE type = 'table' AND name = ?1)",
+        )
+        .bind(table)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if present > 0 {
+            sqlx::query(AssertSqlSafe(format!(
+                "DELETE FROM main.{table} WHERE id NOT IN (SELECT id FROM live.{table})"
+            )))
+            .execute(&mut *transaction)
+            .await?;
+        }
+    }
+    if has_folders {
+        backup_folders::repair_queries(&mut transaction).await?;
+    }
+    if sqlx::query("PRAGMA main.foreign_key_check")
+        .fetch_optional(&mut *transaction)
+        .await?
+        .is_some()
+    {
+        return Err(StorageError::Schema("invalid references in an upgrade copy".to_owned()));
+    }
+    optimize_full_text_indexes(&mut transaction).await?;
+    transaction.commit().await?;
+    sqlx::query("PRAGMA foreign_keys = ON").execute(&mut database).await?;
+    sqlx::query("DETACH DATABASE live").execute(&mut database).await?;
+    database.close().await?;
+    Ok(())
+}
+
+// A copy fresh from VACUUM INTO still holds, in its full-text blocks, the words of entries deleted
+// before it was made.
+pub(crate) async fn scrub_copy(copy: &Path) -> Result<(), StorageError> {
+    let mut database = SqliteConnectOptions::new()
+        .filename(copy)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Delete)
+        .pragma("secure_delete", "ON")
+        .disable_statement_logging()
+        .connect()
+        .await?;
+    optimize_full_text_indexes(&mut database).await?;
+    database.close().await?;
+    Ok(())
+}
+
+async fn optimize_full_text_indexes(database: &mut sqlx::SqliteConnection) -> Result<(), StorageError> {
+    for index in full_text_indexes(database).await? {
+        sqlx::query(AssertSqlSafe(format!(
+            "INSERT INTO main.\"{index}\"(\"{index}\") VALUES('optimize')"
+        )))
+        .execute(&mut *database)
+        .await?;
+    }
+    Ok(())
+}
+
+// A copy holds the schema of the build that wrote it, so its indexes are found rather than named.
+async fn full_text_indexes(database: &mut sqlx::SqliteConnection) -> Result<Vec<String>, StorageError> {
+    let names: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM main.sqlite_master WHERE type = 'table' AND sql LIKE 'CREATE VIRTUAL TABLE%USING fts5%'",
+    )
+    .fetch_all(&mut *database)
+    .await?;
+    Ok(names.into_iter().filter(|name| !name.contains('"')).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::Duration;
+
+    use super::*;
+
+    fn paths(root: &tempfile::TempDir) -> StoragePaths {
+        StoragePaths::under(root.path(), "tablepro", "app.tablepro.TablePro")
+    }
+
+    fn entry(query: &str, connection: Uuid) -> NewEntry {
+        NewEntry {
+            query: query.to_owned(),
+            driver_id: "sqlite".to_owned(),
+            connection_id: connection,
+            connection_name: "test".to_owned(),
+            executed_at: SystemTime::now(),
+            duration_ms: Some(3),
+            rows_affected: Some(1),
+            outcome: Outcome::Success,
+        }
+    }
+
+    async fn find(history: &QueryHistory, query: &HistoryQuery) -> Vec<Entry> {
+        history
+            .search_page(query, HistoryPageRequest::first(MAX_PAGE_SIZE))
+            .await
+            .expect("search")
+            .entries
+    }
+
+    async fn all(history: &QueryHistory) -> Vec<Entry> {
+        find(history, &HistoryQuery::default()).await
+    }
+
+    async fn matching(history: &QueryHistory, input: &str) -> Vec<String> {
+        find(history, &HistoryQuery::from_input(input))
+            .await
+            .into_iter()
+            .map(|entry| entry.query)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn history_open_creates_0600_db_and_wal() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = paths(&root);
+
+        let history = QueryHistory::open(&paths).await.expect("open");
+        history.record(entry("SELECT 1", Uuid::nil())).await.expect("record");
+
+        let mode = |path: &Path| std::fs::metadata(path).expect("metadata").permissions().mode() & 0o777;
+        assert_eq!(mode(&paths.history_database()), 0o600);
+        let wal = paths.history_database().with_extension("db-wal");
+        assert!(wal.exists(), "WAL was not created");
+        assert_eq!(mode(&wal), 0o600);
+    }
+
+    #[tokio::test]
+    async fn history_record_search_round_trip() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let connection = Uuid::new_v4();
+
+        let id = history
+            .record(entry("SELECT name FROM widgets", connection))
+            .await
+            .expect("record");
+        let found = find(&history, &HistoryQuery::from_input("widgets")).await;
+
+        assert!(id > 0);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].query, "SELECT name FROM widgets");
+        assert_eq!(found[0].connection_id, connection);
+    }
+
+    #[tokio::test]
+    async fn two_histories_in_one_process_are_independent() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let installed = QueryHistory::open(&StoragePaths::under(root.path(), "tablepro", "app.tablepro.TablePro"))
+            .await
+            .expect("installed");
+        let devel = QueryHistory::open(&StoragePaths::under(
+            root.path(),
+            "tablepro-devel",
+            "app.tablepro.TablePro.Devel",
+        ))
+        .await
+        .expect("devel");
+
+        installed
+            .record(entry("SELECT 'installed'", Uuid::nil()))
+            .await
+            .expect("record");
+
+        assert_ne!(installed.path(), devel.path());
+        assert_eq!(all(&installed).await.len(), 1);
+        assert!(all(&devel).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn fresh_database_applies_every_migration() {
+        let root = tempfile::tempdir().expect("tempdir");
+
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+
+        let applied: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations")
+            .fetch_one(&history.pool)
+            .await
+            .expect("count migrations");
+        assert_eq!(applied, 3);
+    }
+
+    /// A database an earlier build wrote, with its saved queries, is kept
+    /// as a copy before the favourites' migration and then reads as it did,
+    /// with no keyword and no folder.
+    #[tokio::test]
+    async fn a_database_from_before_the_favourites_keeps_its_saved_queries() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = paths(&root);
+        let path = paths.history_database();
+        crate::fs::create_private_file_if_missing(&path).expect("the file");
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(&path)
+                    .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal),
+            )
+            .await
+            .expect("a pool");
+        sqlx::migrate::Migrator::with_migrations(schema::MIGRATOR.iter().take(1).cloned().collect())
+            .run(&pool)
+            .await
+            .expect("the first migration");
+        let connection = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO saved_queries (name, query, connection_id, connection_name, created_at, updated_at) \
+             VALUES ('daily', 'SELECT 1', ?, 'local', 1, 1)",
+        )
+        .bind(connection.to_string())
+        .execute(&pool)
+        .await
+        .expect("a saved query");
+        pool.close().await;
+
+        let history = QueryHistory::open(&paths).await.expect("open");
+
+        let saved = history.saved_queries().list(Some(connection)).await.expect("list");
+        assert_eq!(saved.len(), 1);
+        assert_eq!(
+            (saved[0].keyword.as_deref(), saved[0].folder_id, saved[0].order),
+            (None, None, 0)
+        );
+        assert!(
+            !crate::upgrade_copies::copies_blocking(&path)
+                .expect("copies")
+                .is_empty(),
+            "no copy was kept before the migration"
+        );
+    }
+
+    #[tokio::test]
+    async fn open_twice_is_idempotent() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = paths(&root);
+
+        let first = QueryHistory::open(&paths).await.expect("first open");
+        first.record(entry("SELECT 1", Uuid::nil())).await.expect("record");
+        drop(first);
+        let second = QueryHistory::open(&paths).await.expect("second open");
+
+        assert_eq!(all(&second).await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn newer_database_is_refused_without_changes() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let paths = paths(&root);
+        let history = QueryHistory::open(&paths).await.expect("open");
+        // A version this build has no migration for is what a newer
+        // binary leaves behind.
+        sqlx::query("INSERT INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time) VALUES (99999999999999, 'from the future', CURRENT_TIMESTAMP, 1, X'00', 0)")
+            .execute(&history.pool)
+            .await
+            .expect("insert a future migration");
+        drop(history);
+
+        let refused = QueryHistory::open(&paths).await;
+
+        assert!(
+            matches!(refused, Err(StorageError::HistoryNewerThanApp { .. })),
+            "{:?}",
+            refused.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn schema_matches_the_expected_objects() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+
+        let names: Vec<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlx%' ORDER BY name",
+        )
+        .fetch_all(&history.pool)
+        .await
+        .expect("list objects");
+
+        for expected in [
+            "history",
+            "history_connection_idx",
+            "history_executed_at_idx",
+            "history_page_idx",
+            "history_search",
+            "history_search_ad",
+            "history_search_ai",
+            "history_search_au",
+            "saved_queries",
+            "saved_queries_name_idx",
+        ] {
+            assert!(
+                names.iter().any(|name| name == expected),
+                "{expected} missing: {names:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn prune_caps_unpinned_entries_and_keeps_pinned() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        for index in 0..6 {
+            let id = history
+                .record(entry(&format!("SELECT {index}"), Uuid::nil()))
+                .await
+                .expect("record");
+            if index == 0 {
+                history.set_pinned(id, true).await.expect("pin");
+            }
+        }
+
+        let report = history.prune_with_cap(0, 2).await.expect("prune");
+        let left = all(&history).await;
+
+        assert_eq!(report.expired, 0);
+        assert_eq!(report.over_cap, 3);
+        assert_eq!(left.len(), 3, "the pinned row plus the cap");
+        assert!(left.iter().any(|entry| entry.pinned), "the pinned row was dropped");
+    }
+
+    #[tokio::test]
+    async fn delete_for_connection_removes_only_that_connections_queries() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let (going, staying) = (Uuid::new_v4(), Uuid::new_v4());
+        for index in 0..3 {
+            let id = history
+                .record(entry(&format!("SELECT widgets {index}"), going))
+                .await
+                .expect("record");
+            if index == 0 {
+                history.set_pinned(id, true).await.expect("pin");
+            }
+        }
+        history
+            .record(entry("SELECT widgets kept", staying))
+            .await
+            .expect("record");
+        assert_eq!(history.count_for_connection(going).await.expect("count"), 3);
+
+        let removed = history.delete_for_connection(going).await.expect("delete");
+
+        assert_eq!(removed, 3, "a pinned query outlived its connection");
+        assert_eq!(history.count_for_connection(going).await.expect("count"), 0);
+        assert_eq!(history.count_for_connection(staying).await.expect("count"), 1);
+        let found = find(&history, &HistoryQuery::from_input("widgets")).await;
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].connection_id, staying);
+        assert_eq!(history.delete_for_connection(going).await.expect("delete"), 0);
+    }
+
+    #[tokio::test]
+    async fn search_still_matches_after_optimize() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        for index in 0..4 {
+            history
+                .record(entry(&format!("SELECT widgets {index}"), Uuid::nil()))
+                .await
+                .expect("record");
+        }
+
+        let report = history.prune_with_cap(0, 2).await.expect("prune");
+
+        assert!(report.removed_anything());
+        assert_eq!(matching(&history, "widgets").await.len(), 2);
+    }
+
+    /// Bump this with each new migration file. An applied migration is
+    /// never edited, so a count that did not move when the schema did
+    /// means a change went into a file that has already run somewhere.
+    #[test]
+    fn migrator_embeds_every_migration() {
+        assert_eq!(schema::MIGRATOR.iter().count(), 3);
+    }
+
+    #[tokio::test]
+    async fn rejects_query_over_limit() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let big = "x".repeat(MAX_QUERY_BYTES + 1);
+
+        let error = history.record(entry(&big, Uuid::nil())).await.unwrap_err();
+
+        assert!(matches!(error, StorageError::TooLarge { .. }));
+    }
+
+    #[tokio::test]
+    async fn trigram_index_available_on_system_sqlite() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        history
+            .record(entry("SELECT name FROM widgets", Uuid::nil()))
+            .await
+            .expect("record");
+
+        let matches: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM history_search WHERE history_search MATCH ?")
+            .bind("\"idge\"")
+            .fetch_one(&history.pool)
+            .await
+            .expect("trigram match");
+
+        assert_eq!(matches, 1);
+    }
+
+    #[tokio::test]
+    async fn partial_token_matches() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        history
+            .record(entry("SELECT * FROM customer_orders", Uuid::nil()))
+            .await
+            .expect("record");
+        history
+            .record(entry("SELECT * FROM products", Uuid::nil()))
+            .await
+            .expect("record");
+
+        assert_eq!(
+            matching(&history, "tomer_ord").await,
+            vec!["SELECT * FROM customer_orders"]
+        );
+        assert_eq!(matching(&history, "ROM").await.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn two_char_term_matches_via_instr() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        history
+            .record(entry("SELECT a.id FROM t1 a", Uuid::nil()))
+            .await
+            .expect("record");
+        history.record(entry("VACUUM", Uuid::nil())).await.expect("record");
+
+        assert_eq!(matching(&history, "T1").await, vec!["SELECT a.id FROM t1 a"]);
+        assert_eq!(matching(&history, ".").await, vec!["SELECT a.id FROM t1 a"]);
+        assert!(matching(&history, "zz").await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unicode_case_fold() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        history
+            .record(entry("SELECT * FROM ÉLÈVES WHERE nom = 'Ærø'", Uuid::nil()))
+            .await
+            .expect("record");
+
+        assert_eq!(matching(&history, "élèves").await.len(), 1);
+        assert_eq!(matching(&history, "ÉlÈv").await.len(), 1);
+        assert_eq!(matching(&history, "æR").await.len(), 1, "a short term was not folded");
+    }
+
+    #[tokio::test]
+    async fn quote_and_fts_operators_are_literal() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let tricky = "SELECT \"a b\" FROM t WHERE x = 'OR' AND y NEAR(z) -- *";
+        history.record(entry(tricky, Uuid::nil())).await.expect("record");
+        history.record(entry("SELECT 1", Uuid::nil())).await.expect("record");
+
+        for input in [
+            "\"a", "b\"", "NEAR(z)", "'OR'", "OR", "AND", "*", "-- *", "\"", "y NEAR",
+        ] {
+            assert_eq!(matching(&history, input).await, vec![tricky.to_owned()], "{input}");
+        }
+        assert!(matching(&history, "NEAR(zz)").await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_quote_in_a_long_term_matches_literally() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let quoted = "SELECT \"total\" FROM sales";
+        history.record(entry(quoted, Uuid::nil())).await.expect("record");
+        history
+            .record(entry("SELECT total FROM sales", Uuid::nil()))
+            .await
+            .expect("record");
+
+        for input in ["\"total\"", "total\"", "\"tot"] {
+            assert_eq!(matching(&history, input).await, vec![quoted.to_owned()], "{input}");
+        }
+        for input in ["\"totals\"", "t\"\"", "\"FROM"] {
+            assert!(matching(&history, input).await.is_empty(), "{input}");
+        }
+        assert_eq!(matching(&history, "total").await.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn fetch_by_ids_reads_past_one_statement_in_list_order() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let mut ids = Vec::new();
+        for index in 0..IDS_PER_STATEMENT + 10 {
+            ids.push(
+                history
+                    .record(entry(&format!("SELECT {index}"), Uuid::nil()))
+                    .await
+                    .expect("record"),
+            );
+        }
+        // In the last statement's ids, but first in the list.
+        let pinned = ids[ids.len() - 1];
+        history.set_pinned(pinned, true).await.expect("pin");
+
+        let fetched = history.fetch_by_ids(&ids).await.expect("fetch");
+
+        assert_eq!(fetched.len(), ids.len());
+        assert_eq!(fetched.first().map(|entry| entry.id), Some(pinned));
+        assert_eq!(fetched, all(&history).await);
+    }
+
+    #[tokio::test]
+    async fn terms_are_anded() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        for query in ["SELECT id FROM users", "SELECT id FROM orders", "DELETE FROM users"] {
+            history.record(entry(query, Uuid::nil())).await.expect("record");
+        }
+
+        assert_eq!(matching(&history, "users select").await, vec!["SELECT id FROM users"]);
+        assert_eq!(matching(&history, "id  rs").await.len(), 2);
+        assert!(matching(&history, "users orders").await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn keyset_pages_cover_all_rows_once() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        // Groups of runs in the same second, so only the id orders them.
+        let base = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+        for index in 0..450_u64 {
+            let mut run = entry(&format!("SELECT {index}"), Uuid::nil());
+            run.executed_at = base + Duration::from_secs(index / 7);
+            let id = history.record(run).await.expect("record");
+            if index % 50 == 0 {
+                history.set_pinned(id, true).await.expect("pin");
+            }
+        }
+
+        let mut seen = Vec::new();
+        let mut request = HistoryPageRequest::first(100);
+        let mut pages = 0;
+        loop {
+            let page = history
+                .search_page(&HistoryQuery::default(), request)
+                .await
+                .expect("a page");
+            pages += 1;
+            for entry in &page.entries {
+                let cursor = HistoryCursor::after(entry);
+                assert!(
+                    request.after.is_none_or(|after| cursor < after),
+                    "an entry on a later page does not sort below the cursor"
+                );
+                assert!(
+                    page.next.is_none_or(|next| cursor >= next),
+                    "an entry on this page sorts below its own cursor"
+                );
+            }
+            seen.extend(
+                page.entries
+                    .iter()
+                    .map(|entry| (entry.pinned, entry.executed_at, entry.id)),
+            );
+            match page.next {
+                Some(next) => request.after = Some(next),
+                None => break,
+            }
+        }
+
+        assert_eq!(pages, 5);
+        assert_eq!(seen.len(), 450);
+        let mut sorted = seen.clone();
+        sorted.sort_by(|a, b| b.cmp(a));
+        assert_eq!(seen, sorted, "pages are not in pinned, newest, id order");
+        sorted.dedup();
+        assert_eq!(sorted.len(), 450, "a row was shown twice");
+        assert_eq!(seen.iter().take_while(|(pinned, _, _)| *pinned).count(), 9);
+    }
+
+    #[tokio::test]
+    async fn status_and_connection_filters() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let (mine, theirs) = (Uuid::new_v4(), Uuid::new_v4());
+        let old = SystemTime::now() - Duration::from_secs(10 * 86_400);
+        for (query, connection, outcome, executed_at) in [
+            ("SELECT ok", mine, Outcome::Success, SystemTime::now()),
+            ("SELECT bad", mine, Outcome::Error("boom".to_owned()), SystemTime::now()),
+            ("SELECT stopped", mine, Outcome::Cancelled, SystemTime::now()),
+            ("SELECT theirs", theirs, Outcome::Success, SystemTime::now()),
+            ("SELECT old", mine, Outcome::Success, old),
+        ] {
+            let mut run = entry(query, connection);
+            run.outcome = outcome;
+            run.executed_at = executed_at;
+            history.record(run).await.expect("record");
+        }
+        let queries = |entries: Vec<Entry>| -> Vec<String> {
+            let mut queries: Vec<String> = entries.into_iter().map(|entry| entry.query).collect();
+            queries.sort();
+            queries
+        };
+        let filtered = |status: StatusFilter, connection: Option<Uuid>, executed_after: Option<SystemTime>| {
+            let mut query = HistoryQuery::default();
+            query.connection = connection;
+            query.status = status;
+            query.executed_after = executed_after;
+            query
+        };
+
+        assert_eq!(
+            queries(find(&history, &filtered(StatusFilter::Succeeded, Some(mine), None)).await),
+            ["SELECT ok", "SELECT old"]
+        );
+        assert_eq!(
+            queries(find(&history, &filtered(StatusFilter::Failed, None, None)).await),
+            ["SELECT bad"]
+        );
+        assert_eq!(
+            queries(find(&history, &filtered(StatusFilter::Cancelled, None, None)).await),
+            ["SELECT stopped"]
+        );
+        assert_eq!(
+            queries(find(&history, &filtered(StatusFilter::Any, Some(theirs), None)).await),
+            ["SELECT theirs"]
+        );
+        let last_week = SystemTime::now() - Duration::from_secs(7 * 86_400);
+        assert_eq!(
+            queries(
+                find(
+                    &history,
+                    &filtered(StatusFilter::Succeeded, Some(mine), Some(last_week))
+                )
+                .await
+            ),
+            ["SELECT ok"]
+        );
+    }
+
+    #[tokio::test]
+    async fn connections_with_history_uses_latest_name() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let (renamed, other) = (Uuid::new_v4(), Uuid::new_v4());
+        let now = SystemTime::now();
+        for (connection, name, ago) in [
+            (renamed, "Old name", 300),
+            (renamed, "New name", 10),
+            // Recorded last but ran first, as a restore leaves it.
+            (renamed, "Oldest name", 900),
+            (other, "beta", 60),
+        ] {
+            let mut run = entry("SELECT 1", connection);
+            run.connection_name = name.to_owned();
+            run.executed_at = now - Duration::from_secs(ago);
+            history.record(run).await.expect("record");
+        }
+
+        let connections = history.connections_with_history().await.expect("list");
+
+        assert_eq!(
+            connections,
+            vec![
+                HistoryConnection {
+                    id: other,
+                    name: "beta".to_owned()
+                },
+                HistoryConnection {
+                    id: renamed,
+                    name: "New name".to_owned()
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_returning_then_restore_roundtrips_entries_and_search() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let mut ids = Vec::new();
+        for query in ["SELECT widgets 1", "SELECT widgets 2", "SELECT gadgets"] {
+            let mut run = entry(query, Uuid::new_v4());
+            run.outcome = Outcome::Error("no such table".to_owned());
+            ids.push(history.record(run).await.expect("record"));
+        }
+        history.set_pinned(ids[0], true).await.expect("pin");
+        let before = all(&history).await;
+
+        let deleted = history
+            .delete_returning(&[ids[0], ids[2], 9_999])
+            .await
+            .expect("delete");
+
+        assert_eq!(
+            deleted.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![ids[0], ids[2]]
+        );
+        assert_eq!(matching(&history, "widgets").await, vec!["SELECT widgets 2"]);
+        assert!(matching(&history, "gadg").await.is_empty());
+
+        history.restore(&deleted).await.expect("restore");
+
+        assert_eq!(all(&history).await, before);
+        assert_eq!(matching(&history, "widgets").await.len(), 2);
+        assert_eq!(matching(&history, "gadg").await, vec!["SELECT gadgets"]);
+        let integrity = sqlx::query("INSERT INTO history_search(history_search) VALUES('integrity-check')")
+            .execute(&history.pool)
+            .await;
+        assert!(integrity.is_ok(), "{integrity:?}");
+    }
+
+    // Rows the history holds before a copy is kept of it, as an upgrade keeps one.
+    async fn history_with_a_copy(root: &tempfile::TempDir) -> (QueryHistory, PathBuf) {
+        let history = QueryHistory::open(&paths(root)).await.expect("open");
+        for (query, connection) in [("SELECT qqqq", Uuid::nil()), ("SELECT zzzz", Uuid::max())] {
+            history.record(entry(query, connection)).await.expect("record");
+        }
+        let copy = crate::upgrade_copies::keep_database(&history.pool, &history.path, 1)
+            .await
+            .expect("a copy");
+        (history, copy)
+    }
+
+    async fn copy_rows(copy: &Path) -> i64 {
+        let mut database = SqliteConnectOptions::new()
+            .filename(copy)
+            .read_only(true)
+            .connect()
+            .await
+            .expect("open the copy");
+        let rows = sqlx::query_scalar("SELECT COUNT(*) FROM history")
+            .fetch_one(&mut database)
+            .await
+            .expect("count");
+        database.close().await.expect("close");
+        rows
+    }
+
+    // Whether a trigram is still in the blocks of a full-text index of the database.
+    async fn indexed(copy: &Path, trigram: &str) -> bool {
+        let mut database = SqliteConnectOptions::new()
+            .filename(copy)
+            .read_only(true)
+            .connect()
+            .await
+            .expect("open the copy");
+        let mut found = false;
+        for index in full_text_indexes(&mut database).await.expect("the indexes") {
+            let blocks: i64 = sqlx::query_scalar(AssertSqlSafe(format!(
+                "SELECT COUNT(*) FROM \"{index}_data\" WHERE instr(block, ?) > 0"
+            )))
+            .bind(trigram.as_bytes())
+            .fetch_one(&mut database)
+            .await
+            .expect("read the index");
+            found |= blocks > 0;
+        }
+        database.close().await.expect("close");
+        found
+    }
+
+    #[tokio::test]
+    async fn deleting_a_connections_history_deletes_it_from_the_copies_too() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let (history, copy) = history_with_a_copy(&root).await;
+        assert!(indexed(&copy, "zzz").await);
+
+        history.delete_for_connection(Uuid::max()).await.expect("delete");
+
+        assert_eq!(copy_rows(&copy).await, 1);
+        assert!(
+            !indexed(&copy, "zzz").await,
+            "a deleted query's words stayed in the copy's index"
+        );
+        assert!(indexed(&copy, "qqq").await, "another connection's query went");
+    }
+
+    // The copy took the row pinned; once unpinned it expires, and the copy follows the history.
+    #[tokio::test]
+    async fn a_row_pinned_in_a_copy_still_expires_once_unpinned() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let mut old = entry("SELECT xxxx", Uuid::nil());
+        old.executed_at = SystemTime::now() - Duration::from_secs(400 * 24 * 60 * 60);
+        let id = history.record(old).await.expect("record");
+        history.set_pinned(id, true).await.expect("pin");
+        let copy = crate::upgrade_copies::keep_database(&history.pool, &history.path, 1)
+            .await
+            .expect("a copy");
+
+        history.set_pinned(id, false).await.expect("unpin");
+        history.prune(30).await.expect("prune");
+
+        assert_eq!(copy_rows(&copy).await, 0, "an expired query stayed in the copy");
+        assert!(!indexed(&copy, "xxx").await);
+    }
+
+    #[tokio::test]
+    async fn clearing_the_history_clears_the_copies_and_keeps_their_saved_queries() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        history.record(entry("SELECT qqqq", Uuid::nil())).await.expect("record");
+        history
+            .saved_queries()
+            .save(crate::saved_queries::NewSavedQuery {
+                name: "kept".to_owned(),
+                query: "SELECT 1".to_owned(),
+                connection_id: Uuid::nil(),
+                connection_name: "test".to_owned(),
+            })
+            .await
+            .expect("a saved query");
+        let copy = crate::upgrade_copies::keep_database(&history.pool, &history.path, 1)
+            .await
+            .expect("a copy");
+
+        history.clear_all().await.expect("clear");
+
+        assert_eq!(copy_rows(&copy).await, 0);
+        assert!(
+            !indexed(&copy, "qqq").await,
+            "a cleared query's words stayed in the copy's index"
+        );
+        assert!(
+            !indexed(&history.path, "qqq").await,
+            "a cleared query's words stayed in the history's own index"
+        );
+        let mut database = SqliteConnectOptions::new()
+            .filename(&copy)
+            .read_only(true)
+            .connect()
+            .await
+            .expect("open the copy");
+        let saved: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM saved_queries")
+            .fetch_one(&mut database)
+            .await
+            .expect("count");
+        assert_eq!(saved, 1, "a saved query went with the history");
+    }
+
+    #[tokio::test]
+    async fn deleted_entries_expired_ones_and_deleted_saved_queries_leave_the_copies_too() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let kept = history.record(entry("SELECT qqqq", Uuid::nil())).await.expect("record");
+        let deleted = history.record(entry("SELECT zzzz", Uuid::nil())).await.expect("record");
+        let mut old = entry("SELECT xxxx", Uuid::nil());
+        old.executed_at = SystemTime::now() - Duration::from_secs(400 * 24 * 60 * 60);
+        history.record(old).await.expect("record");
+        let saved = history.saved_queries();
+        let named = |name: &str| crate::saved_queries::NewSavedQuery {
+            name: name.to_owned(),
+            query: "SELECT 1".to_owned(),
+            connection_id: Uuid::nil(),
+            connection_name: "test".to_owned(),
+        };
+        saved.save(named("first")).await.expect("a saved query");
+        saved.save(named("second")).await.expect("a saved query");
+        let first = saved
+            .list(None)
+            .await
+            .expect("list")
+            .into_iter()
+            .find(|query| query.name == "first")
+            .expect("the first saved query")
+            .id;
+        let copy = crate::upgrade_copies::keep_database(&history.pool, &history.path, 1)
+            .await
+            .expect("a copy");
+
+        history.delete_returning(&[deleted]).await.expect("delete");
+        history.prune(30).await.expect("prune");
+        saved.delete(first).await.expect("delete a saved query");
+
+        assert_eq!(
+            copy_rows(&copy).await,
+            1,
+            "a deleted or expired query stayed in the copy"
+        );
+        assert!(!indexed(&copy, "zzz").await);
+        assert!(!indexed(&copy, "xxx").await);
+        assert!(indexed(&copy, "qqq").await, "a kept query went");
+        let mut database = SqliteConnectOptions::new()
+            .filename(&copy)
+            .read_only(true)
+            .connect()
+            .await
+            .expect("open the copy");
+        let names: Vec<String> = sqlx::query_scalar("SELECT name FROM saved_queries")
+            .fetch_all(&mut database)
+            .await
+            .expect("names");
+        assert_eq!(names, ["second"], "a deleted saved query stayed in the copy");
+        assert!(all(&history).await.iter().any(|entry| entry.id == kept));
+    }
+
+    // VACUUM INTO copies the index blocks as they are, words of entries already deleted included.
+    #[tokio::test]
+    async fn a_copy_holds_no_word_of_an_entry_deleted_before_it_was_made() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        history.record(entry("SELECT qqqq", Uuid::nil())).await.expect("record");
+        let deleted = history.record(entry("SELECT zzzz", Uuid::nil())).await.expect("record");
+        history.delete_returning(&[deleted]).await.expect("delete");
+
+        let copy = crate::upgrade_copies::keep_database(&history.pool, &history.path, 1)
+            .await
+            .expect("a copy");
+
+        assert!(
+            !indexed(&copy, "zzz").await,
+            "a deleted entry's words came along into the copy"
+        );
+        assert!(indexed(&copy, "qqq").await);
+    }
+
+    /// A copy made after the favourites existed holds no folder, table or
+    /// database the user then deleted.
+    #[tokio::test]
+    async fn deleted_folders_and_favourites_leave_the_copies_too() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let connection = Uuid::new_v4();
+        let folders = history.saved_query_folders();
+        let favourites = history.favourites();
+        let folder = folders.create(connection, "Reports", None).await.expect("a folder");
+        folders
+            .create(connection, "Monthly", Some(folder))
+            .await
+            .expect("a subfolder");
+        let table = crate::favourites::FavouriteTable {
+            connection_id: connection,
+            database: None,
+            schema: None,
+            name: "orders".to_owned(),
+        };
+        favourites.add_table(&table).await.expect("a table");
+        favourites
+            .set_database(connection, "shop", crate::favourites::DatabaseEnvironment::Testing)
+            .await
+            .expect("a database");
+        let copy = crate::upgrade_copies::keep_database(&history.pool, &history.path, 1)
+            .await
+            .expect("a copy");
+        async fn kept(copy: &Path) -> Vec<i64> {
+            let mut database = SqliteConnectOptions::new()
+                .filename(copy)
+                .read_only(true)
+                .connect()
+                .await
+                .expect("open the copy");
+            let mut counts = Vec::new();
+            for table in ["saved_query_folders", "favourite_tables", "favourite_databases"] {
+                counts.push(
+                    sqlx::query_scalar(AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}")))
+                        .fetch_one(&mut database)
+                        .await
+                        .expect("count"),
+                );
+            }
+            database.close().await.expect("close");
+            counts
+        }
+        assert_eq!(kept(&copy).await, [2, 1, 1]);
+
+        folders.delete(folder).await.expect("delete the folder");
+        favourites.remove_table(&table).await.expect("remove the table");
+        favourites
+            .remove_database(connection, "shop")
+            .await
+            .expect("remove the database");
+
+        assert_eq!(kept(&copy).await, [0, 0, 0], "a deleted favourite stayed in the copy");
+    }
+
+    #[tokio::test]
+    async fn a_copy_that_cannot_be_trimmed_is_removed() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let history = QueryHistory::open(&paths(&root)).await.expect("open");
+        let damaged = root.path().join("state/tablepro/history.db.v1-100");
+        std::fs::write(&damaged, b"not a database").expect("seed");
+
+        history.clear_all().await.expect("clear");
+
+        assert!(!damaged.exists(), "a copy that could not be trimmed stayed");
+    }
+}

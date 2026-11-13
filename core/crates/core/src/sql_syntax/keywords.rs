@@ -1,0 +1,246 @@
+use crate::sql_syntax::SqlGrammar;
+
+const COMMON: &[&str] = &[
+    "ADD",
+    "ALL",
+    "ALTER",
+    "AND",
+    "ANY",
+    "AS",
+    "ASC",
+    "AVG",
+    "BEGIN",
+    "BETWEEN",
+    "BY",
+    "CASE",
+    "CAST",
+    "CHECK",
+    "COALESCE",
+    "COLUMN",
+    "COMMIT",
+    "CONSTRAINT",
+    "COUNT",
+    "CREATE",
+    "CROSS",
+    "DEFAULT",
+    "DELETE",
+    "DESC",
+    "DISTINCT",
+    "DROP",
+    "ELSE",
+    "END",
+    "EXCEPT",
+    "EXISTS",
+    "FALSE",
+    "FOREIGN",
+    "FROM",
+    "FULL",
+    "GROUP",
+    "HAVING",
+    "IN",
+    "INDEX",
+    "INNER",
+    "INSERT",
+    "INTERSECT",
+    "INTO",
+    "IS",
+    "JOIN",
+    "KEY",
+    "LEFT",
+    "LIKE",
+    "MAX",
+    "MIN",
+    "NOT",
+    "NULL",
+    "NULLIF",
+    "ON",
+    "OR",
+    "ORDER",
+    "OUTER",
+    "PRIMARY",
+    "REFERENCES",
+    "RIGHT",
+    "ROLLBACK",
+    "SELECT",
+    "SET",
+    "SUM",
+    "TABLE",
+    "THEN",
+    "TRUE",
+    "TRUNCATE",
+    "UNION",
+    "UNIQUE",
+    "UPDATE",
+    "USING",
+    "VALUES",
+    "VIEW",
+    "WHEN",
+    "WHERE",
+    "WITH",
+];
+
+const POSTGRESQL: &[&str] = &[
+    "ANALYZE",
+    "CONFLICT",
+    "DO",
+    "EXPLAIN",
+    "ILIKE",
+    "LATERAL",
+    "LIMIT",
+    "MATERIALIZED",
+    "NOTHING",
+    "OFFSET",
+    "RETURNING",
+    "SCHEMA",
+    "SEQUENCE",
+    "SIMILAR",
+    "USER",
+    "VACUUM",
+];
+
+const MYSQL: &[&str] = &[
+    "AUTO_INCREMENT",
+    "DATABASE",
+    "DESCRIBE",
+    "DUPLICATE",
+    "EXPLAIN",
+    "IGNORE",
+    "LIMIT",
+    "OFFSET",
+    "REGEXP",
+    "REPLACE",
+    "SHOW",
+    "USE",
+];
+
+const SQLITE: &[&str] = &[
+    "ATTACH",
+    "AUTOINCREMENT",
+    "DETACH",
+    "EXPLAIN",
+    "GLOB",
+    "IGNORE",
+    "LIMIT",
+    "OFFSET",
+    "PRAGMA",
+    "REPLACE",
+    "RETURNING",
+    "VACUUM",
+    "WITHOUT",
+];
+
+const MSSQL: &[&str] = &[
+    "DECLARE", "EXEC", "FETCH", "IDENTITY", "MERGE", "NEXT", "OFFSET", "ONLY", "OUTPUT", "ROWS", "TOP", "USE",
+];
+
+const CLICKHOUSE: &[&str] = &[
+    "ARRAY", "DATABASE", "DESCRIBE", "ENGINE", "EXPLAIN", "FINAL", "FORMAT", "LIMIT", "OFFSET", "OPTIMIZE", "PREWHERE",
+    "SAMPLE", "SETTINGS", "SHOW",
+];
+
+const DUCKDB: &[&str] = &[
+    "ANTI",
+    "ASOF",
+    "ATTACH",
+    "CHECKPOINT",
+    "COPY",
+    "DESCRIBE",
+    "DETACH",
+    "EXCLUDE",
+    "EXPLAIN",
+    "ILIKE",
+    "LIMIT",
+    "OFFSET",
+    "PIVOT",
+    "POSITIONAL",
+    "PRAGMA",
+    "QUALIFY",
+    "REPLACE",
+    "RETURNING",
+    "SAMPLE",
+    "SEMI",
+    "SHOW",
+    "SUMMARIZE",
+    "UNPIVOT",
+    "USE",
+];
+
+const CQL: &[&str] = &[
+    "ALLOW",
+    "APPLY",
+    "BATCH",
+    "CLUSTERING",
+    "CONTAINS",
+    "COUNTER",
+    "DESCRIBE",
+    "FILTERING",
+    "FROZEN",
+    "KEYSPACE",
+    "KEYSPACES",
+    "LIMIT",
+    "LIST",
+    "MAP",
+    "MATERIALIZED",
+    "PARTITION",
+    "PER",
+    "ROLE",
+    "STATIC",
+    "TIMESTAMP",
+    "TOKEN",
+    "TTL",
+    "TUPLE",
+    "TYPE",
+    "UNLOGGED",
+    "USE",
+    "WRITETIME",
+];
+
+impl SqlGrammar {
+    /// The keywords the editor completes for this grammar, in upper case.
+    /// Redis and MongoDB have none: their words are not SQL keywords.
+    pub fn keywords(self) -> impl Iterator<Item = &'static str> {
+        let (common, own): (&[&str], &[&str]) = match self {
+            Self::PostgreSql => (COMMON, POSTGRESQL),
+            Self::MySql => (COMMON, MYSQL),
+            Self::Sqlite => (COMMON, SQLITE),
+            Self::MsSql => (COMMON, MSSQL),
+            Self::ClickHouse => (COMMON, CLICKHOUSE),
+            Self::DuckDb => (COMMON, DUCKDB),
+            Self::Cql => (COMMON, CQL),
+            Self::Redis | Self::Mongo => (&[], &[]),
+        };
+        common.iter().chain(own).copied()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn has(grammar: SqlGrammar, word: &str) -> bool {
+        grammar.keywords().any(|keyword| keyword == word)
+    }
+
+    #[test]
+    fn every_grammar_has_the_common_words_and_its_own() {
+        for grammar in SqlGrammar::SQL {
+            assert!(has(grammar, "SELECT"), "{grammar:?}");
+        }
+        assert!(has(SqlGrammar::PostgreSql, "RETURNING"));
+        assert!(has(SqlGrammar::MsSql, "TOP"));
+        assert!(!has(SqlGrammar::MsSql, "LIMIT"));
+        assert!(has(SqlGrammar::ClickHouse, "PREWHERE"));
+        assert!(has(SqlGrammar::DuckDb, "QUALIFY"));
+    }
+
+    #[test]
+    fn keywords_are_upper_case_and_listed_once() {
+        for grammar in SqlGrammar::SQL {
+            let mut seen = std::collections::HashSet::new();
+            for keyword in grammar.keywords() {
+                assert_eq!(keyword, keyword.to_ascii_uppercase());
+                assert!(seen.insert(keyword), "{keyword} twice for {grammar:?}");
+            }
+        }
+    }
+}

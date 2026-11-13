@@ -1,0 +1,123 @@
+use std::sync::Arc;
+use std::time::Duration;
+
+use tablepro_core::{
+    CopyInRows, CopyInSummary, DriverError, LossPhase, ResultSink, RunOptions, RunSummary, ServerNotice,
+    TransactionState, UserSql,
+};
+use tokio::sync::{mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
+
+use super::notice_queue::NoticeSender;
+use super::session_core::{SessionCore, drive};
+use super::session_status::SessionStatus;
+use crate::physical::PgRawConnection;
+
+pub(crate) enum Command {
+    Run {
+        sql: UserSql,
+        options: RunOptions,
+        sink: Box<dyn ResultSink>,
+        reply: oneshot::Sender<Result<RunSummary, DriverError>>,
+    },
+    CopyIn {
+        statement: UserSql,
+        rows: CopyInRows,
+        options: RunOptions,
+        reply: oneshot::Sender<Result<CopyInSummary, DriverError>>,
+    },
+    Close,
+}
+
+/// The session's task. It owns the client and the connection's I/O
+/// half and polls both itself, so notices and parameter changes stay
+/// with the session. A result stream's channel is bounded, so while a
+/// run awaits the sink the connection stops reading the socket, which
+/// holds a fast server back for a slow grid.
+pub(crate) async fn session_actor(
+    mut core: SessionCore,
+    connection: PgRawConnection,
+    notices: NoticeSender<ServerNotice>,
+    mut commands: mpsc::Receiver<Command>,
+    status: Arc<SessionStatus>,
+    shutdown: CancellationToken,
+    close_timeout: Duration,
+) {
+    let driving = drive(connection, notices, core.conforming.clone());
+    let mut driving = std::pin::pin!(driving);
+    loop {
+        let command = tokio::select! {
+            () = &mut driving => break,
+            command = commands.recv() => command,
+        };
+        let going_on = match command {
+            Some(Command::Run {
+                sql,
+                options,
+                mut sink,
+                reply,
+            }) => {
+                let outcome = tokio::select! {
+                    () = &mut driving => None,
+                    outcome = core.run(&sql, options, sink.as_mut(), &shutdown) => outcome.ok(),
+                };
+                let outcome = outcome.map(|summary| {
+                    let state = summary.transaction_state;
+                    (summary, state)
+                });
+                answer(outcome, reply, &status)
+            }
+            Some(Command::CopyIn {
+                statement,
+                rows,
+                options,
+                reply,
+            }) => {
+                let outcome = tokio::select! {
+                    () = &mut driving => None,
+                    outcome = core.copy_in(&statement, rows, options, &shutdown) => outcome.ok(),
+                };
+                let outcome = outcome.map(|summary| {
+                    let state = summary.transaction_state;
+                    (summary, state)
+                });
+                answer(outcome, reply, &status)
+            }
+            // A close, or every handle is gone. Dropping the client first
+            // lets the connection send Terminate before it ends.
+            Some(Command::Close) | None => {
+                drop(core);
+                let _ = tokio::time::timeout(close_timeout, &mut driving).await;
+                status.lose();
+                return;
+            }
+        };
+        if !going_on {
+            break;
+        }
+    }
+    status.lose();
+}
+
+/// Send a command's answer, or the connection's loss when there is none.
+/// False once the session is lost.
+fn answer<T>(
+    outcome: Option<(T, TransactionState)>,
+    reply: oneshot::Sender<Result<T, DriverError>>,
+    status: &SessionStatus,
+) -> bool {
+    match outcome {
+        Some((outcome, state)) => {
+            status.finish(state);
+            let _ = reply.send(Ok(outcome));
+            true
+        }
+        None => {
+            status.lose();
+            let _ = reply.send(Err(DriverError::ConnectionLost {
+                during: LossPhase::Statement,
+            }));
+            false
+        }
+    }
+}

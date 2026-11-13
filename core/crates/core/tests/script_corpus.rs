@@ -1,0 +1,1249 @@
+use std::num::NonZeroU32;
+
+use proptest::prelude::*;
+use sqlparser::dialect::{
+    ClickHouseDialect, Dialect, DuckDbDialect, GenericDialect, MsSqlDialect, MySqlDialect, PostgreSqlDialect,
+    SQLiteDialect,
+};
+use sqlparser::tokenizer::{Token, Tokenizer, TokenizerError};
+use tablepro_core::sql_syntax::script::{
+    BatchErrorPolicy, LexicalSettings, OpenConstruct, ScriptDiagnostic, ScriptPlan, ScriptTokenKind, text_offsets,
+};
+use tablepro_core::sql_syntax::{SqlGrammar, StatementAccess, statement_access};
+
+fn plan(grammar: SqlGrammar, text: &str) -> ScriptPlan {
+    ScriptPlan::build(text, grammar, LexicalSettings::default_for(grammar))
+}
+
+fn statements(grammar: SqlGrammar, text: &str) -> Vec<&str> {
+    plan(grammar, text)
+        .statements()
+        .iter()
+        .map(|statement| statement.text(text))
+        .collect()
+}
+
+fn batch_texts<'a>(plan: &ScriptPlan, text: &'a str) -> Vec<&'a str> {
+    plan.batches()
+        .iter()
+        .map(|batch| text.get(batch.range.clone()).unwrap_or_default())
+        .collect()
+}
+
+#[test]
+fn dollar_quoted_body_hides_semicolons() {
+    let text = "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; SELECT 2; $$ LANGUAGE sql;\nSELECT 3;";
+    let plan = plan(SqlGrammar::PostgreSql, text);
+    let first = &plan.statements()[0];
+    assert_eq!(first.range, 0..73);
+    assert_eq!(first.extent, 0..74);
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        [
+            "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; SELECT 2; $$ LANGUAGE sql",
+            "SELECT 3"
+        ]
+    );
+}
+
+#[test]
+fn tagged_dollar_quote_with_inner_double_dollar() {
+    let text = "DO $body$ BEGIN RAISE NOTICE '$$;'; END $body$;\nSELECT 1;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        ["DO $body$ BEGIN RAISE NOTICE '$$;'; END $body$", "SELECT 1"]
+    );
+}
+
+#[test]
+fn identifier_with_dollar_is_not_a_quote() {
+    let text = "SELECT a$b$c FROM t; SELECT $1;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        ["SELECT a$b$c FROM t", "SELECT $1"]
+    );
+}
+
+#[test]
+fn escape_string_backslash_quote() {
+    let text = r"SELECT E'it\'s; fine'; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        [r"SELECT E'it\'s; fine'", "SELECT 2"]
+    );
+}
+
+/// A string that follows `E'...'` after a line break continues it, and
+/// PostgreSQL reads it with backslash escapes on, so `\'` does not end it.
+#[test]
+fn escape_string_continues_past_a_line_break() {
+    for continued in [
+        "SELECT E'a'\n'\\'; b'",
+        "SELECT E'a'\r'\\'; b'",
+        "SELECT E'a' \t\x0c-- note\n\x0b -- note\r\n '\\'; b'",
+        "SELECT E'a'\n'b'\n'\\'; c'",
+        "SELECT E'a'\x0b\n'\\'; b'",
+        "SELECT E'a' \x0b-- note\n'\\'; b'",
+    ] {
+        let text = format!("{continued}; SELECT 2;");
+        assert_eq!(
+            statements(SqlGrammar::PostgreSql, &text),
+            [continued, "SELECT 2"],
+            "{continued:?}"
+        );
+    }
+    // Without a line break, past a block comment, or past anything but a
+    // blank or a `--` comment, the server ends the string and so must the
+    // lexer. PostgreSQL 17.11 reads a non-ASCII space as part of a name.
+    for apart in [
+        "SELECT E'a' '\\'",
+        "SELECT E'a' /* note */\n'\\'",
+        "SELECT E'a'\n, '\\'",
+        "SELECT E'a'\u{a0}\n'\\'",
+        "SELECT E'a'\n\u{3000}'\\'",
+    ] {
+        let text = format!("{apart}; SELECT 2;");
+        assert_eq!(
+            statements(SqlGrammar::PostgreSql, &text),
+            [apart, "SELECT 2"],
+            "{apart:?}"
+        );
+    }
+    assert_eq!(
+        statements(
+            SqlGrammar::PostgreSql,
+            "SELECT E'x'\x0b\n'\\' || ' || '\\' ; COMMIT; DELETE FROM orders; --'"
+        ),
+        ["SELECT E'x'\x0b\n'\\' || ' || '\\'", "COMMIT", "DELETE FROM orders"]
+    );
+    assert_eq!(
+        plan(SqlGrammar::PostgreSql, "SELECT E'a'\n'b").diagnostics(),
+        [ScriptDiagnostic::Unterminated {
+            construct: OpenConstruct::StringLiteral,
+            start: 7,
+        }]
+    );
+}
+
+#[test]
+fn duckdb_ends_an_escape_string_at_its_quote_whatever_follows() {
+    let text = "SELECT E'x'\n'\\'; DELETE FROM orders; --'";
+    assert_eq!(
+        statements(SqlGrammar::DuckDb, text),
+        ["SELECT E'x'\n'\\'", "DELETE FROM orders"]
+    );
+    assert_eq!(statements(SqlGrammar::PostgreSql, text), [text]);
+}
+
+// Measured on DuckDB 2.0.0: each of these spaces ended `varchar` and the DROP ran; each other unit kept the name.
+#[test]
+fn duckdb_ends_a_name_at_the_spaces_it_blanks_before_lexing() {
+    for space in [
+        "\u{a0}", "\u{2000}", "\u{2005}", "\u{2009}", "\u{200a}", "\u{200b}", "\u{202f}", "\u{205f}", "\u{2060}",
+        "\u{3000}", "\u{feff}",
+    ] {
+        let text = format!("SELECT varchar{space}E'\\''; DROP TABLE t; --'");
+        let first = format!("SELECT varchar{space}E'\\''");
+        assert_eq!(
+            statements(SqlGrammar::DuckDb, &text),
+            [first.as_str(), "DROP TABLE t"],
+            "{space:?}"
+        );
+        assert_eq!(statements(SqlGrammar::PostgreSql, &text), [text.as_str()], "{space:?}");
+    }
+    for kept in [
+        "\u{85}", "\u{1680}", "\u{200c}", "\u{200d}", "\u{2019}", "\u{2028}", "\u{2029}",
+    ] {
+        let text = format!("SELECT varchar{kept}E'\\''; DROP TABLE t; --'");
+        assert_eq!(statements(SqlGrammar::DuckDb, &text), [text.as_str()], "{kept:?}");
+    }
+    assert_eq!(
+        statements(
+            SqlGrammar::DuckDb,
+            "SELECT 1 AS a,\u{200b}$$'$$; DROP TABLE t; SELECT 'x'"
+        ),
+        ["SELECT 1 AS a,\u{200b}$$'$$", "DROP TABLE t", "SELECT 'x'"]
+    );
+    let words: Vec<&str> = {
+        let text = "SELECT\u{a0}*\u{a0}FROM\u{3000}t";
+        plan(SqlGrammar::DuckDb, text)
+            .tokens(0..text.len())
+            .filter(|token| token.kind == ScriptTokenKind::Word)
+            .map(|token| &text[token.range.clone()])
+            .collect()
+    };
+    assert_eq!(words, ["SELECT", "FROM", "t"]);
+}
+
+// Measured on DuckDB 2.0.0. Its pass reads `'`, `"`, `$tag$` and `--` its own way, not block comments or
+// backslashes, and keeps a space inside what it takes for a quote: there the space is a name character.
+#[test]
+fn duckdb_keeps_a_space_where_its_pass_sees_a_quote() {
+    for (text, expected) in [
+        (
+            "SELECT 1 AS a$$, 2 AS b\u{200b}$$, varchar\u{200b}E'\\''; DROP TABLE t; --'x$$",
+            vec![
+                "SELECT 1 AS a$$, 2 AS b\u{200b}$$, varchar\u{200b}E'\\''",
+                "DROP TABLE t",
+            ],
+        ),
+        (
+            "SELECT 1 AS a$$, 2 AS b\u{200b}$$; DROP TABLE t; --$$",
+            vec!["SELECT 1 AS a$$, 2 AS b\u{200b}$$", "DROP TABLE t"],
+        ),
+        (
+            "SELECT $a\u{200b}$x$a\u{200b}$, varchar\u{200b}E'\\''; DROP TABLE t; --'",
+            vec!["SELECT $a\u{200b}$x$a\u{200b}$, varchar\u{200b}E'\\''", "DROP TABLE t"],
+        ),
+        (
+            "-- it's\nSELECT varchar\u{200b}E'\\''; DROP TABLE t; --'",
+            vec!["SELECT varchar\u{200b}E'\\''", "DROP TABLE t"],
+        ),
+    ] {
+        assert_eq!(statements(SqlGrammar::DuckDb, text), expected, "{text:?}");
+    }
+}
+
+// Measured on DuckDB 2.0.0: whole, the pass is inside the comment's quote at the space and keeps it; the second
+// statement sent alone, as the driver sends it, has the space blanked and runs the DROP.
+#[test]
+fn duckdb_reads_each_statement_as_it_is_sent_alone() {
+    assert_eq!(
+        statements(
+            SqlGrammar::DuckDb,
+            "/* ' */ SELECT 1; SELECT varchar\u{200b}E'\\''; DROP TABLE t; --'"
+        ),
+        ["SELECT 1", "SELECT varchar\u{200b}E'\\''", "DROP TABLE t"]
+    );
+    // It gets each one without the comments before it.
+    assert_eq!(
+        statements(
+            SqlGrammar::DuckDb,
+            "/* ' */ SELECT varchar\u{200b}E'\\''; /* $$ */ SELECT 1 AS a,\u{200b}$$'$$; DROP TABLE t; --'"
+        ),
+        [
+            "SELECT varchar\u{200b}E'\\''",
+            "SELECT 1 AS a,\u{200b}$$'$$",
+            "DROP TABLE t"
+        ]
+    );
+}
+
+// Measured on PostgreSQL 17.11: with a domain of each name, the server ran the DROP.
+#[test]
+fn postgresql_continues_a_name_with_a_dollar_and_every_non_ascii_unit() {
+    for glue in [
+        "$", "\u{e9}", "\u{a0}", "\u{200b}", "\u{2060}", "\u{3000}", "\u{feff}", "\u{2019}", "\u{ff0c}",
+    ] {
+        let text = format!("SELECT x{glue}e'\\'; DROP TABLE t; --'");
+        let first = format!("SELECT x{glue}e'\\'");
+        assert_eq!(
+            statements(SqlGrammar::PostgreSql, &text),
+            [first.as_str(), "DROP TABLE t"],
+            "{glue:?}"
+        );
+    }
+}
+
+#[test]
+fn a_sqlite_parameter_runs_to_its_closing_parenthesis() {
+    for parameter in [
+        "$1(')",
+        "$a::b(;)",
+        "@a(\")",
+        ":a(`)",
+        "#a([)",
+        "$a(\u{1b}')",
+        ":::a(')",
+    ] {
+        let text = format!("SELECT {parameter}; SELECT 2; --'");
+        assert_eq!(
+            statements(SqlGrammar::Sqlite, &text),
+            [format!("SELECT {parameter}").as_str(), "SELECT 2"],
+            "{parameter}"
+        );
+    }
+    // White space ends it early, and one of no name is none.
+    for text in [
+        "SELECT $1( '; SELECT 2; --')",
+        "SELECT $1(\n'; SELECT 2; --')",
+        "SELECT $('; SELECT 2; --')",
+        "SELECT $::('; SELECT 2; --')",
+        "SELECT a$1('; SELECT 2; --')",
+        "SELECT ?1('; SELECT 2; --')",
+    ] {
+        assert_eq!(statements(SqlGrammar::Sqlite, text), [text], "{text}");
+    }
+    for grammar in [SqlGrammar::PostgreSql, SqlGrammar::MySql, SqlGrammar::MsSql] {
+        let text = "SELECT $1('); SELECT 2; --')";
+        assert_eq!(statements(grammar, text), [text], "{grammar:?}");
+    }
+
+    let text = "SELECT $a::b, $a::b(c;d), $e(";
+    let words: Vec<&str> = plan(SqlGrammar::Sqlite, text)
+        .tokens(0..text.len())
+        .filter(|token| token.kind == ScriptTokenKind::Word)
+        .map(|token| &text[token.range.clone()])
+        .collect();
+    assert_eq!(words, ["SELECT", "$a::b", "$a::b(c;d)", "$e("]);
+}
+
+#[test]
+fn a_byte_order_mark_is_a_space_where_sqlite_starts_a_token() {
+    let words = |grammar: SqlGrammar, text: &str| -> Vec<String> {
+        plan(grammar, text)
+            .tokens(0..text.len())
+            .filter(|token| token.kind == ScriptTokenKind::Word)
+            .map(|token| text[token.range.clone()].to_owned())
+            .collect()
+    };
+
+    assert_eq!(
+        words(SqlGrammar::Sqlite, "\u{feff}DROP \u{feff}\u{feff}TABLE t"),
+        ["DROP", "TABLE", "t"]
+    );
+    assert_eq!(
+        words(SqlGrammar::Sqlite, "DROP\u{feff} TABLE t"),
+        ["DROP\u{feff}", "TABLE", "t"]
+    );
+    assert_eq!(
+        statements(SqlGrammar::Sqlite, "SELECT 1;\u{feff}DELETE FROM t;"),
+        ["SELECT 1", "DELETE FROM t"]
+    );
+    for grammar in [SqlGrammar::PostgreSql, SqlGrammar::MySql] {
+        assert_eq!(
+            words(grammar, "\u{feff}DROP TABLE t"),
+            ["\u{feff}DROP", "TABLE", "t"],
+            "{grammar:?}"
+        );
+    }
+}
+
+#[test]
+fn backslash_plain_string_when_enabled_vs_disabled() {
+    let text = r"SELECT 'a\'; SELECT 'b';";
+    assert_eq!(statements(SqlGrammar::PostgreSql, text), [r"SELECT 'a\'", "SELECT 'b'"]);
+
+    let enabled = ScriptPlan::build(
+        text,
+        SqlGrammar::PostgreSql,
+        LexicalSettings {
+            backslash_escapes: true,
+        },
+    );
+    assert_eq!(enabled.statements().len(), 1);
+    assert_eq!(
+        enabled.diagnostics(),
+        [ScriptDiagnostic::Unterminated {
+            construct: OpenConstruct::StringLiteral,
+            start: 22,
+        }]
+    );
+}
+
+#[test]
+fn nested_block_comment() {
+    let text = "SELECT /* outer /* inner; */ still; */ 1; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        ["SELECT /* outer /* inner; */ still; */ 1", "SELECT 2"]
+    );
+}
+
+#[test]
+fn routine_begin_atomic_block_is_one_statement() {
+    let text = "CREATE FUNCTION add(a int, b int) RETURNS int LANGUAGE sql\nBEGIN ATOMIC\n  SELECT 1;\n  SELECT a + b;\nEND;\nSELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        [
+            "CREATE FUNCTION add(a int, b int) RETURNS int LANGUAGE sql\nBEGIN ATOMIC\n  SELECT 1;\n  SELECT a + b;\nEND",
+            "SELECT 2"
+        ]
+    );
+}
+
+#[test]
+fn routine_case_end_inside_body() {
+    let text = "CREATE OR REPLACE PROCEDURE p() LANGUAGE sql BEGIN ATOMIC SELECT CASE WHEN true THEN 1 ELSE 2 END; END; SELECT 3;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        [
+            "CREATE OR REPLACE PROCEDURE p() LANGUAGE sql BEGIN ATOMIC SELECT CASE WHEN true THEN 1 ELSE 2 END; END",
+            "SELECT 3"
+        ]
+    );
+}
+
+// Measured on PostgreSQL 17.11: each definition ran in one simple query
+// with the statement after it.
+#[test]
+fn a_begin_name_in_a_routine_opens_no_body() {
+    for routine in [
+        "CREATE FUNCTION begin() RETURNS int AS 'select 1' LANGUAGE sql",
+        "CREATE OR REPLACE PROCEDURE s.begin() LANGUAGE sql AS 'select 1'",
+        "CREATE FUNCTION f(begin int) RETURNS int RETURN begin",
+        "CREATE FUNCTION f() RETURNS int LANGUAGE sql SET search_path = begin RETURN 1",
+        "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT begin FROM t; SELECT 2; END",
+        "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT begin atomic FROM (SELECT 1 AS begin) s; END",
+        "CREATE PROCEDURE p() LANGUAGE sql BEGIN ATOMIC CREATE OR REPLACE FUNCTION g() RETURNS int BEGIN ATOMIC SELECT begin atomic FROM t; END; SELECT begin atomic FROM t; END",
+    ] {
+        let text = format!("{routine};\nDROP TABLE users;");
+        assert_eq!(
+            statements(SqlGrammar::PostgreSql, &text),
+            [routine, "DROP TABLE users"],
+            "{routine}"
+        );
+        assert_eq!(
+            statement_access(&text, SqlGrammar::PostgreSql),
+            StatementAccess::Destructive,
+            "{routine}"
+        );
+    }
+}
+
+#[test]
+fn begin_column_outside_routine_is_identifier() {
+    let text = "SELECT begin, end FROM spans; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        ["SELECT begin, end FROM spans", "SELECT 2"]
+    );
+}
+
+#[test]
+fn transaction_begin_is_not_a_block() {
+    let text = "BEGIN; UPDATE t SET x = 1; COMMIT;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        ["BEGIN", "UPDATE t SET x = 1", "COMMIT"]
+    );
+}
+
+#[test]
+fn parenthesised_rule_actions_are_one_statement() {
+    let text =
+        "CREATE RULE r AS ON INSERT TO t DO ALSO (INSERT INTO a VALUES (1); INSERT INTO b VALUES (2)); SELECT 3;";
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        [
+            "CREATE RULE r AS ON INSERT TO t DO ALSO (INSERT INTO a VALUES (1); INSERT INTO b VALUES (2))",
+            "SELECT 3"
+        ]
+    );
+}
+
+#[test]
+fn procedure_with_delimiter_dollar_dollar_plans_three_batches() {
+    let text =
+        "DELIMITER $$\nCREATE PROCEDURE p()\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND$$\nDELIMITER ;\nCALL p();\nSELECT 3;";
+    let plan = plan(SqlGrammar::MySql, text);
+    assert_eq!(
+        batch_texts(&plan, text),
+        [
+            "CREATE PROCEDURE p()\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND",
+            "CALL p()",
+            "SELECT 3"
+        ]
+    );
+    let directives = plan
+        .tokens(0..text.len())
+        .filter(|token| token.kind == ScriptTokenKind::Directive)
+        .count();
+    assert_eq!(directives, 2);
+}
+
+#[test]
+fn delimiter_double_slash() {
+    let text = "DELIMITER //\nSELECT 1; SELECT 2//\nDELIMITER ;\n";
+    assert_eq!(statements(SqlGrammar::MySql, text), ["SELECT 1; SELECT 2"]);
+}
+
+#[test]
+fn procedure_without_delimiter_splits_like_mysql_client() {
+    let text = "CREATE PROCEDURE p() BEGIN SELECT 1; END; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::MySql, text),
+        ["CREATE PROCEDURE p() BEGIN SELECT 1", "END", "SELECT 2"]
+    );
+}
+
+#[test]
+fn hash_comment_hides_semicolon() {
+    let text = "SELECT 1 # not; a split\n, 2;\nSELECT 3;";
+    assert_eq!(
+        statements(SqlGrammar::MySql, text),
+        ["SELECT 1 # not; a split\n, 2", "SELECT 3"]
+    );
+}
+
+#[test]
+fn double_dash_needs_whitespace() {
+    let text = "SELECT 1--1;\nSELECT 2 -- comment; x\n;";
+    assert_eq!(statements(SqlGrammar::MySql, text), ["SELECT 1--1", "SELECT 2"]);
+}
+
+#[test]
+fn backtick_identifier_with_semicolon() {
+    let text = "SELECT `a;b` FROM t; SELECT 2;";
+    assert_eq!(statements(SqlGrammar::MySql, text), ["SELECT `a;b` FROM t", "SELECT 2"]);
+}
+
+#[test]
+fn mysql_executable_comments_are_statements() {
+    let text = "/*!40101 SET NAMES utf8mb4 */;\n/*!40103 SET TIME_ZONE='+00:00' */;\n\
+                CREATE TABLE t (id int) /*!50100 PARTITION BY HASH (id) */;\n/* plain */;\nSELECT 1;";
+    assert_eq!(
+        statements(SqlGrammar::MySql, text),
+        [
+            "/*!40101 SET NAMES utf8mb4 */",
+            "/*!40103 SET TIME_ZONE='+00:00' */",
+            "CREATE TABLE t (id int) /*!50100 PARTITION BY HASH (id) */",
+            "SELECT 1"
+        ]
+    );
+}
+
+#[test]
+fn a_mysql_executable_comment_ends_where_the_server_ends_it() {
+    let text = "SELECT 1 /*! AS '*/' */; SELECT 2 /*!50100 -- */\n*/; SELECT 3;";
+    assert_eq!(
+        statements(SqlGrammar::MySql, text),
+        ["SELECT 1 /*! AS '*/' */", "SELECT 2 /*!50100 -- */\n*/", "SELECT 3"]
+    );
+}
+
+#[test]
+fn a_dumped_mysql_trigger_is_one_batch() {
+    let text = "DELIMITER ;;\n/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`%`*/ /*!50003 TRIGGER t1 BEFORE INSERT ON t \
+                FOR EACH ROW BEGIN SET NEW.a = 1; END */;;\nDELIMITER ;\n";
+    assert_eq!(
+        batch_texts(&plan(SqlGrammar::MySql, text), text),
+        [
+            "/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`%`*/ /*!50003 TRIGGER t1 BEFORE INSERT ON t FOR EACH ROW BEGIN SET NEW.a = 1; END */"
+        ]
+    );
+}
+
+#[test]
+fn an_open_mysql_executable_comment_is_reported() {
+    let plan = plan(SqlGrammar::MySql, "SELECT 1; /*!40101 SET @a = 1;");
+    assert_eq!(
+        plan.diagnostics(),
+        [ScriptDiagnostic::Unterminated {
+            construct: OpenConstruct::BlockComment,
+            start: 10,
+        }]
+    );
+}
+
+#[test]
+fn other_engines_read_a_bang_comment_as_a_comment() {
+    for grammar in [SqlGrammar::PostgreSql, SqlGrammar::Sqlite, SqlGrammar::ClickHouse] {
+        assert_eq!(
+            statements(grammar, "/*! SELECT 1 */; SELECT 2;"),
+            ["SELECT 2"],
+            "{grammar:?}"
+        );
+    }
+}
+
+#[test]
+fn backslash_escaped_quote() {
+    let text = r"SELECT 'it\'s; fine'; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::MySql, text),
+        [r"SELECT 'it\'s; fine'", "SELECT 2"]
+    );
+}
+
+#[test]
+fn trigger_body_ends_at_semicolon_end_semicolon() {
+    let text = "CREATE TRIGGER t AFTER INSERT ON a BEGIN\n  INSERT INTO log VALUES (1);\n  UPDATE a SET n = n + 1;\nEND;\nSELECT 1;";
+    assert_eq!(
+        statements(SqlGrammar::Sqlite, text),
+        [
+            "CREATE TRIGGER t AFTER INSERT ON a BEGIN\n  INSERT INTO log VALUES (1);\n  UPDATE a SET n = n + 1;\nEND",
+            "SELECT 1"
+        ]
+    );
+}
+
+#[test]
+fn trigger_case_end_inside_body() {
+    let text = "CREATE TEMP TRIGGER t AFTER INSERT ON a BEGIN SELECT CASE WHEN 1 THEN 2 END; END; SELECT 3;";
+    assert_eq!(
+        statements(SqlGrammar::Sqlite, text),
+        [
+            "CREATE TEMP TRIGGER t AFTER INSERT ON a BEGIN SELECT CASE WHEN 1 THEN 2 END; END",
+            "SELECT 3"
+        ]
+    );
+}
+
+#[test]
+fn bracket_identifier_without_doubling() {
+    let text = "SELECT [a;b] FROM t; SELECT [x]]; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::Sqlite, text),
+        ["SELECT [a;b] FROM t", "SELECT [x]]", "SELECT 2"]
+    );
+}
+
+#[test]
+fn go_count_repeats_batch() {
+    let text = "INSERT INTO t VALUES (1)\nGO 3\nSELECT COUNT(*) FROM t\ngo\n";
+    let plan = plan(SqlGrammar::MsSql, text);
+    assert_eq!(
+        batch_texts(&plan, text),
+        ["INSERT INTO t VALUES (1)", "SELECT COUNT(*) FROM t"]
+    );
+    let repeats: Vec<u32> = plan.batches().iter().map(|batch| batch.repeat.get()).collect();
+    assert_eq!(repeats, [3, 1]);
+    assert_eq!(plan.batches()[1].repeat, NonZeroU32::MIN);
+    assert_eq!(plan.batch_error_policy(), BatchErrorPolicy::ContinueNextBatch);
+}
+
+#[test]
+fn go_semicolon_is_not_separator() {
+    let text = "SELECT 1\nGO;\nSELECT 2";
+    assert_eq!(statements(SqlGrammar::MsSql, text), ["SELECT 1\nGO;\nSELECT 2"]);
+}
+
+#[test]
+fn go_inside_string_is_not_separator() {
+    let text = "SELECT 'a\nGO\nb'\nGO\nSELECT 2";
+    assert_eq!(statements(SqlGrammar::MsSql, text), ["SELECT 'a\nGO\nb'", "SELECT 2"]);
+}
+
+#[test]
+fn bracket_identifier_with_doubling() {
+    let text = "SELECT [a]]\nGO\nb] FROM t\nGO\nSELECT 2";
+    assert_eq!(
+        statements(SqlGrammar::MsSql, text),
+        ["SELECT [a]]\nGO\nb] FROM t", "SELECT 2"]
+    );
+}
+
+#[test]
+fn heredoc_hides_semicolon() {
+    let text = "SELECT $doc$a; b$doc$; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::ClickHouse, text),
+        ["SELECT $doc$a; b$doc$", "SELECT 2"]
+    );
+}
+
+#[test]
+fn slash_slash_comment_hides_semicolon() {
+    let text = "SELECT 1 // it's; a comment\n, 2; SELECT 3;";
+    assert_eq!(
+        statements(SqlGrammar::ClickHouse, text),
+        ["SELECT 1 // it's; a comment\n, 2", "SELECT 3"]
+    );
+}
+
+#[test]
+fn hash_space_comment() {
+    let text = "#!/usr/bin/env clickhouse-client\nSELECT 1 # it's; hidden\n; SELECT 2;";
+    assert_eq!(statements(SqlGrammar::ClickHouse, text), ["SELECT 1", "SELECT 2"]);
+}
+
+#[test]
+fn hash_word_is_not_comment() {
+    let text = "SELECT #word; SELECT 2;";
+    assert_eq!(statements(SqlGrammar::ClickHouse, text), ["SELECT #word", "SELECT 2"]);
+}
+
+#[test]
+fn backslash_always_escapes() {
+    let text = r"SELECT 'a\'; b'; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::ClickHouse, text),
+        [r"SELECT 'a\'; b'", "SELECT 2"]
+    );
+}
+
+#[test]
+fn cql_batch_is_one_statement() {
+    let text = "BEGIN BATCH\n  INSERT INTO t (a) VALUES (1);\n  UPDATE t SET b = 2 WHERE a = 1;\nAPPLY BATCH;\nSELECT * FROM t;";
+    assert_eq!(
+        statements(SqlGrammar::Cql, text),
+        [
+            "BEGIN BATCH\n  INSERT INTO t (a) VALUES (1);\n  UPDATE t SET b = 2 WHERE a = 1;\nAPPLY BATCH",
+            "SELECT * FROM t"
+        ]
+    );
+}
+
+#[test]
+fn cql_unlogged_and_counter_batches_are_one_statement() {
+    let text = "begin unlogged batch insert into t (a) values (1); apply batch; BEGIN COUNTER BATCH UPDATE c SET n = n + 1 WHERE k = 1 APPLY BATCH; SELECT 1 FROM t;";
+    assert_eq!(
+        statements(SqlGrammar::Cql, text),
+        [
+            "begin unlogged batch insert into t (a) values (1); apply batch",
+            "BEGIN COUNTER BATCH UPDATE c SET n = n + 1 WHERE k = 1 APPLY BATCH",
+            "SELECT 1 FROM t"
+        ]
+    );
+}
+
+#[test]
+fn cql_lone_begin_is_its_own_statement() {
+    assert_eq!(
+        statements(SqlGrammar::Cql, "BEGIN; SELECT 1 FROM t;"),
+        ["BEGIN", "SELECT 1 FROM t"]
+    );
+}
+
+#[test]
+fn cql_double_dollar_body_hides_semicolons() {
+    let text = "CREATE FUNCTION f(x int) RETURNS NULL ON NULL INPUT RETURNS int LANGUAGE java AS $$ return x; $$;\nSELECT f(a) FROM t;";
+    assert_eq!(
+        statements(SqlGrammar::Cql, text),
+        [
+            "CREATE FUNCTION f(x int) RETURNS NULL ON NULL INPUT RETURNS int LANGUAGE java AS $$ return x; $$",
+            "SELECT f(a) FROM t"
+        ]
+    );
+}
+
+#[test]
+fn cql_tagged_dollar_is_not_a_quote() {
+    assert_eq!(
+        statements(SqlGrammar::Cql, "SELECT $a$ FROM t; SELECT 2 FROM t;"),
+        ["SELECT $a$ FROM t", "SELECT 2 FROM t"]
+    );
+}
+
+#[test]
+fn cql_quotes_double_and_backslash_does_not_escape() {
+    let text = r#"SELECT "a""b;c", 'x''y;z', 'd\' FROM t; SELECT 2 FROM t;"#;
+    let plan = plan(SqlGrammar::Cql, text);
+    assert!(plan.diagnostics().is_empty(), "{:?}", plan.diagnostics());
+    assert_eq!(
+        statements(SqlGrammar::Cql, text),
+        [r#"SELECT "a""b;c", 'x''y;z', 'd\' FROM t"#, "SELECT 2 FROM t"]
+    );
+}
+
+#[test]
+fn cql_comments_end_at_a_carriage_return_and_do_not_nest() {
+    let text = "SELECT a FROM t // note;\r; SELECT /* a /* b; */ c FROM t; -- x;\rSELECT 3 FROM t;";
+    assert_eq!(
+        statements(SqlGrammar::Cql, text),
+        ["SELECT a FROM t", "SELECT /* a /* b; */ c FROM t", "SELECT 3 FROM t"]
+    );
+}
+
+#[test]
+fn cql_unterminated_double_dollar_keeps_prior_statements() {
+    let text = "SELECT 1 FROM t; SELECT $$ open";
+    let plan = plan(SqlGrammar::Cql, text);
+    assert_eq!(statements(SqlGrammar::Cql, text), ["SELECT 1 FROM t", "SELECT $$ open"]);
+    assert_eq!(
+        plan.diagnostics(),
+        [ScriptDiagnostic::Unterminated {
+            construct: OpenConstruct::DollarQuoted,
+            start: 24,
+        }]
+    );
+}
+
+#[test]
+fn duckdb_escapes_only_in_an_e_string() {
+    let text = r"SELECT E'it\'s; x'; SELECT 'a\'; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::DuckDb, text),
+        [r"SELECT E'it\'s; x'", r"SELECT 'a\'", "SELECT 2"]
+    );
+}
+
+#[test]
+fn duckdb_nests_comments_and_quotes_with_dollar_tags() {
+    let text = "SELECT /* a /* b; */ c; */ $x$it's; here$x$, $$;$$; SELECT 2;";
+    assert_eq!(
+        statements(SqlGrammar::DuckDb, text),
+        ["SELECT /* a /* b; */ c; */ $x$it's; here$x$, $$;$$", "SELECT 2"]
+    );
+}
+
+#[test]
+fn duckdb_quotes_a_name_in_backticks() {
+    assert_eq!(
+        statements(SqlGrammar::DuckDb, "SELECT `a;b` FROM t;"),
+        ["SELECT `a;b` FROM t"]
+    );
+    assert_eq!(
+        statements(SqlGrammar::DuckDb, "SELECT 1 AS `a``b`; SELECT 2;"),
+        ["SELECT 1 AS `a``b`", "SELECT 2"]
+    );
+    assert_eq!(
+        statements(SqlGrammar::DuckDb, "SELECT 1 AS `'`; DROP TABLE orders; --'"),
+        ["SELECT 1 AS `'`", "DROP TABLE orders"]
+    );
+}
+
+#[test]
+fn statement_at_on_terminator_takes_preceding() {
+    let text = "SELECT 1;SELECT 2;";
+    let plan = plan(SqlGrammar::PostgreSql, text);
+    let text_at = |byte| plan.statement_at(byte).map(|statement| statement.text(text));
+    assert_eq!(text_at(8), Some("SELECT 1"));
+    assert_eq!(text_at(9), Some("SELECT 2"));
+    assert_eq!(text_at(18), Some("SELECT 2"));
+}
+
+#[test]
+fn statement_at_in_trailing_whitespace_line() {
+    let text = "SELECT 1; -- one\n   \nSELECT 2;";
+    let plan = plan(SqlGrammar::PostgreSql, text);
+    assert_eq!(plan.statements()[0].extent, 0..16);
+    assert_eq!(
+        plan.statement_at(18).map(|statement| statement.text(text)),
+        Some("SELECT 1")
+    );
+}
+
+#[test]
+fn unterminated_dollar_quote_reports_diagnostic_and_keeps_prior_statements() {
+    let text = "SELECT 1; SELECT $$abc; SELECT 2;";
+    let plan = plan(SqlGrammar::PostgreSql, text);
+    assert_eq!(
+        statements(SqlGrammar::PostgreSql, text),
+        ["SELECT 1", "SELECT $$abc; SELECT 2;"]
+    );
+    assert_eq!(
+        plan.diagnostics(),
+        [ScriptDiagnostic::Unterminated {
+            construct: OpenConstruct::DollarQuoted,
+            start: 17,
+        }]
+    );
+}
+
+#[test]
+fn char_byte_roundtrip_multibyte() {
+    let text = "SELECT 'é😀'; SELECT 2;";
+    let chars = text.chars().count();
+    for index in 0..=chars {
+        assert_eq!(
+            text_offsets::byte_to_char(text, text_offsets::char_to_byte(text, index)),
+            index
+        );
+    }
+    assert_eq!(text_offsets::char_to_byte(text, 10), 14);
+    let plan = plan(SqlGrammar::PostgreSql, text);
+    let second = &plan.statements()[1];
+    assert_eq!(text_offsets::byte_to_char(text, second.range.start), 13);
+}
+
+proptest! {
+    #[test]
+    fn ranges_on_char_boundaries_and_batches_disjoint(
+        text in "[ -~\n\té😀\u{a0}\u{200b}\u{3000}]{0,160}",
+        backslash_escapes in any::<bool>(),
+    ) {
+        for grammar in SqlGrammar::SQL.into_iter().chain([SqlGrammar::Redis, SqlGrammar::Mongo]) {
+            let plan = ScriptPlan::build(&text, grammar, LexicalSettings { backslash_escapes });
+            let mut cursor = 0;
+            for token in plan.tokens(0..text.len()) {
+                prop_assert_eq!(token.range.start, cursor);
+                prop_assert!(token.range.end > token.range.start);
+                prop_assert!(text.is_char_boundary(token.range.end));
+                cursor = token.range.end;
+            }
+            prop_assert_eq!(cursor, text.len());
+
+            let mut previous_end = 0;
+            for batch in plan.batches() {
+                prop_assert!(batch.range.start >= previous_end);
+                prop_assert!(batch.range.start < batch.range.end);
+                prop_assert!(text.is_char_boundary(batch.range.start) && text.is_char_boundary(batch.range.end));
+                previous_end = batch.range.end;
+            }
+            for statement in plan.statements() {
+                prop_assert!(statement.range.start < statement.range.end);
+                prop_assert!(statement.range.end <= statement.extent.end);
+                prop_assert!(statement.extent.end <= text.len());
+                prop_assert!(text.is_char_boundary(statement.extent.end));
+            }
+        }
+    }
+}
+
+#[test]
+fn redis_each_line_is_a_command() {
+    assert_eq!(
+        statements(SqlGrammar::Redis, "SET a 1\n\n  GET a  \r\nDEL a"),
+        ["SET a 1", "GET a", "DEL a"]
+    );
+}
+
+#[test]
+fn redis_a_semicolon_does_not_end_a_command() {
+    assert_eq!(statements(SqlGrammar::Redis, "SET k a;b; GET k"), ["SET k a;b; GET k"]);
+}
+
+#[test]
+fn redis_a_quoted_line_break_stays_in_its_command() {
+    assert_eq!(
+        statements(SqlGrammar::Redis, "SET k \"one\ntwo\"\nGET 'k\n'\nPING"),
+        ["SET k \"one\ntwo\"", "GET 'k\n'", "PING"]
+    );
+}
+
+#[test]
+fn redis_an_open_quote_runs_to_the_end_and_is_reported() {
+    let text = "GET a\nSET k \"open\nGET b";
+    let plan = plan(SqlGrammar::Redis, text);
+
+    assert_eq!(statements(SqlGrammar::Redis, text), ["GET a", "SET k \"open\nGET b"]);
+    assert_eq!(
+        plan.diagnostics(),
+        [ScriptDiagnostic::Unterminated {
+            construct: OpenConstruct::StringLiteral,
+            start: 12,
+        }]
+    );
+}
+
+#[test]
+fn redis_each_command_is_its_own_batch_and_a_failure_stops_the_script() {
+    let text = "PING\nPING";
+    let plan = plan(SqlGrammar::Redis, text);
+
+    assert_eq!(batch_texts(&plan, text), ["PING", "PING"]);
+    assert_eq!(plan.batch_error_policy(), BatchErrorPolicy::StopScript);
+}
+
+#[test]
+fn mongo_a_semicolon_or_a_line_break_ends_a_statement() {
+    assert_eq!(
+        statements(
+            SqlGrammar::Mongo,
+            "use shop\ndb.a.find(); db.b.find()\n\nshow collections"
+        ),
+        ["use shop", "db.a.find()", "db.b.find()", "show collections"]
+    );
+}
+
+#[test]
+fn mongo_a_statement_goes_on_inside_brackets_and_before_a_method() {
+    assert_eq!(
+        statements(
+            SqlGrammar::Mongo,
+            "db.orders.find({\n  qty: 1;\n})\n  .sort({at: -1})\n  .limit(5)\ndb.x.countDocuments()"
+        ),
+        [
+            "db.orders.find({\n  qty: 1;\n})\n  .sort({at: -1})\n  .limit(5)",
+            "db.x.countDocuments()"
+        ]
+    );
+}
+
+#[test]
+fn mongo_strings_regular_expressions_and_comments_hide_their_semicolons() {
+    assert_eq!(
+        statements(
+            SqlGrammar::Mongo,
+            "db.a.find({n: 'x;y', r: /a;b/}) /* ; */ // ;\ndb.b.find()"
+        ),
+        ["db.a.find({n: 'x;y', r: /a;b/})", "db.b.find()"]
+    );
+}
+
+#[test]
+fn mongo_an_open_string_runs_to_the_end_and_is_reported() {
+    let text = "db.a.find({n: 'open\ndb.b.find()";
+    let plan = plan(SqlGrammar::Mongo, text);
+
+    assert_eq!(statements(SqlGrammar::Mongo, text), [text]);
+    assert_eq!(
+        plan.diagnostics(),
+        [ScriptDiagnostic::Unterminated {
+            construct: OpenConstruct::StringLiteral,
+            start: 14,
+        }]
+    );
+}
+
+#[test]
+fn mongo_each_statement_is_its_own_batch_and_a_failure_stops_the_script() {
+    let text = "db.a.find()\ndb.b.find()";
+    let plan = plan(SqlGrammar::Mongo, text);
+
+    assert_eq!(batch_texts(&plan, text), ["db.a.find()", "db.b.find()"]);
+    assert_eq!(plan.batch_error_policy(), BatchErrorPolicy::StopScript);
+}
+
+fn mongo_access(text: &str) -> StatementAccess {
+    statement_access(text, SqlGrammar::Mongo)
+}
+
+#[test]
+fn mongo_a_rename_that_drops_its_target_is_destructive() {
+    for text in [
+        "db.orders_new.renameCollection('orders', true)",
+        "db.orders_new.renameCollection('orders', {dropTarget: true})",
+        "db.adminCommand({renameCollection: 'shop.orders_new', to: 'shop.orders', dropTarget: true})",
+        "db.adminCommand({renameCollection: 'shop.a', to: 'shop.b', dropTarget: false, dropTarget: true})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Destructive, "{text}");
+    }
+    for text in [
+        "db.orders_new.renameCollection('orders')",
+        "db.adminCommand({renameCollection: 'shop.a', to: 'shop.b', dropTarget: true, dropTarget: false})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Write, "{text}");
+    }
+}
+
+#[test]
+fn mongo_dropping_an_index_is_destructive() {
+    for text in [
+        "db.orders.dropIndex('qty_1')",
+        "db.orders.dropIndexes()",
+        "db.orders.dropSearchIndex('default')",
+        "db.runCommand({dropIndexes: 'orders', index: '*'})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Destructive, "{text}");
+    }
+}
+
+#[test]
+fn mongo_dropping_a_user_or_a_role_is_destructive() {
+    for text in [
+        "db.dropUser('ann')",
+        "db.dropRole('auditor')",
+        "db.dropAllUsers()",
+        "db.dropAllRoles()",
+        "db.runCommand({dropUser: 'ann'})",
+        "db.runCommand({dropRole: 'auditor'})",
+        "db.runCommand({dropAllUsersFromDatabase: 1})",
+        "db.adminCommand({dropAllRolesFromDatabase: 1})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Destructive, "{text}");
+    }
+}
+
+#[test]
+fn mongo_a_validate_that_repairs_is_a_write() {
+    for text in [
+        "db.runCommand({validate: 'orders', repair: true})",
+        "db.runCommand({validate: 'orders', repair: true, fixMultikey: true})",
+        "db.runCommand({validate: 'orders', fixMultikey: 1})",
+        "db.runCommand({validate: 'orders', repair: false, repair: true})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Write, "{text}");
+    }
+    for text in [
+        "db.runCommand({validate: 'orders', full: true})",
+        "db.runCommand({validate: 'orders', repair: true, repair: false})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Read, "{text}");
+    }
+}
+
+#[test]
+fn mongo_what_replaces_a_collection_is_destructive() {
+    for text in [
+        "db.orders.aggregate([{$match: {}}, {$out: 'orders_copy'}])",
+        "db.runCommand({aggregate: 'orders', pipeline: [{$out: 'orders_copy'}], cursor: {}})",
+        "db.runCommand({mapReduce: 'orders', map: 'm', reduce: 'r', out: 'totals'})",
+        "db.runCommand({mapReduce: 'orders', map: 'm', reduce: 'r', out: {replace: 'totals'}})",
+        "db.adminCommand({applyOps: [{op: 'd', ns: 'shop.orders', o: {_id: 1}}]})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Destructive, "{text}");
+    }
+    for text in [
+        "db.orders.aggregate([{$merge: {into: 'totals'}}])",
+        "db.runCommand({mapReduce: 'orders', map: 'm', reduce: 'r', out: {merge: 'totals'}})",
+        "db.runCommand({mapReduce: 'orders', map: 'm', reduce: 'r', out: {reduce: 'totals'}})",
+        "db.runCommand({mapReduce: 'orders', map: 'm', reduce: 'r', out: {inline: 1}})",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Write, "{text}");
+    }
+}
+
+#[test]
+fn mongo_a_merge_into_its_own_collection_is_destructive() {
+    for text in [
+        "db.users.aggregate([{$match: {}}, {$merge: {into: 'users', whenMatched: 'replace'}}])",
+        "db.users.aggregate([{$merge: 'users'}])",
+        "db.getSiblingDB('shop').users.aggregate([{$merge: {into: {db: 'shop', coll: 'users'}}}])",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Destructive, "{text}");
+    }
+    for text in [
+        "db.users.aggregate([{$merge: {into: 'users_archive', whenMatched: 'replace'}}])",
+        "db.getSiblingDB('shop').users.aggregate([{$merge: {into: {db: 'archive', coll: 'users'}}}])",
+    ] {
+        assert_eq!(mongo_access(text), StatementAccess::Write, "{text}");
+    }
+}
+
+#[test]
+fn mongo_a_bulk_write_that_reaches_every_document_is_destructive() {
+    for ops in [
+        "{delete: 0, filter: {}, multi: true}",
+        "{update: 0, filter: {}, updateMods: {$set: {a: 1}}, multi: true}",
+    ] {
+        let text = format!("db.adminCommand({{bulkWrite: 1, ops: [{ops}], nsInfo: [{{ns: 'shop.orders'}}]}})");
+        assert_eq!(mongo_access(&text), StatementAccess::Destructive, "{text}");
+    }
+    for ops in [
+        "{delete: 0, filter: {}}",
+        "{update: 0, filter: {_id: 1}, updateMods: {$set: {a: 1}}, multi: true}",
+    ] {
+        let text = format!("db.adminCommand({{bulkWrite: 1, ops: [{ops}], nsInfo: [{{ns: 'shop.orders'}}]}})");
+        assert_eq!(mongo_access(&text), StatementAccess::Write, "{text}");
+    }
+}
+
+const AGREED_CASES: &[(SqlGrammar, &str)] = &[
+    (
+        SqlGrammar::PostgreSql,
+        "CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; $$ LANGUAGE sql; SELECT 3;",
+    ),
+    (
+        SqlGrammar::PostgreSql,
+        "DO $body$ BEGIN RAISE NOTICE '$$;'; END $body$;\nSELECT 1;",
+    ),
+    (SqlGrammar::PostgreSql, "SELECT a$b$c FROM t; SELECT $1;"),
+    (SqlGrammar::PostgreSql, r"SELECT E'it\'s; fine'; SELECT 'x''y;';"),
+    (
+        SqlGrammar::PostgreSql,
+        "SELECT /* outer /* inner; */ still; */ 1; SELECT \"a;b\";",
+    ),
+    (SqlGrammar::PostgreSql, "BEGIN; UPDATE t SET x = 1; -- done;\nCOMMIT;"),
+    (SqlGrammar::MySql, "SELECT 1--1;\nSELECT 2 -- comment; x\n;"),
+    (SqlGrammar::MySql, "SELECT `a;b` FROM t; SELECT 1 # not; a split\n;"),
+    (SqlGrammar::MySql, r"SELECT 'it\'s; fine', 'a;b'; SELECT 2;"),
+    (SqlGrammar::Sqlite, "SELECT [a;b], \"c;d\", `e;f` FROM t; SELECT 'g;h';"),
+    (
+        SqlGrammar::Sqlite,
+        "CREATE TRIGGER t AFTER INSERT ON a BEGIN SELECT 1; END; SELECT 2;",
+    ),
+    (
+        SqlGrammar::MsSql,
+        "SELECT [a]]b;c] FROM t; SELECT N'x;y'; /* a /* b; */ c; */ SELECT 2;",
+    ),
+    (SqlGrammar::ClickHouse, "SELECT $doc$a; b$doc$; SELECT 2;"),
+    (SqlGrammar::ClickHouse, r"SELECT 'a\'; b', `c;d` FROM t; SELECT 2;"),
+    (SqlGrammar::DuckDb, "SELECT 'a;b', \"c;d\" FROM t; -- x;\nSELECT 2;"),
+    (SqlGrammar::Cql, "SELECT 'x''y;', \"a;b\" FROM t; -- c;\nSELECT 2;"),
+];
+
+fn byte_offset(text: &str, line: u64, column: u64) -> usize {
+    let (mut current_line, mut current_column) = (1, 1);
+    for (index, ch) in text.char_indices() {
+        if current_line == line && current_column == column {
+            return index;
+        }
+        if ch == '\n' {
+            current_line += 1;
+            current_column = 1;
+        } else {
+            current_column += 1;
+        }
+    }
+    text.len()
+}
+
+fn sqlparser_semicolons(grammar: SqlGrammar, text: &str) -> Result<Vec<usize>, TokenizerError> {
+    let dialect: &dyn Dialect = match grammar {
+        SqlGrammar::PostgreSql => &PostgreSqlDialect {},
+        SqlGrammar::MySql => &MySqlDialect {},
+        SqlGrammar::Sqlite => &SQLiteDialect {},
+        SqlGrammar::MsSql => &MsSqlDialect {},
+        SqlGrammar::ClickHouse => &ClickHouseDialect {},
+        SqlGrammar::DuckDb => &DuckDbDialect {},
+        SqlGrammar::Cql => &GenericDialect {},
+        // Commands and the shell have no SQL tokenizer to agree with, and
+        // no agreed case is a Redis or a MongoDB one.
+        SqlGrammar::Redis | SqlGrammar::Mongo => return Ok(Vec::new()),
+    };
+    let tokens = Tokenizer::new(dialect, text)
+        .with_unescape(false)
+        .tokenize_with_location()?;
+    Ok(tokens
+        .iter()
+        .filter(|token| token.token == Token::SemiColon)
+        .map(|token| byte_offset(text, token.span.start.line, token.span.start.column))
+        .collect())
+}
+
+#[test]
+fn lexer_matches_sqlparser_where_engines_agree() {
+    for (grammar, text) in AGREED_CASES {
+        let ours: Vec<usize> = plan(*grammar, text)
+            .tokens(0..text.len())
+            .filter(|token| token.kind == ScriptTokenKind::Semicolon)
+            .map(|token| token.range.start)
+            .collect();
+        let theirs = sqlparser_semicolons(*grammar, text).unwrap();
+        assert_eq!(ours, theirs, "{grammar:?} {text:?}");
+    }
+}
+
+#[test]
+fn numeric_constants_are_one_token() {
+    let cases = [
+        ("0.5", "0.5"),
+        (".5", ".5"),
+        ("1.", "1."),
+        ("1e-3", "1e-3"),
+        ("1.5E+10", "1.5E+10"),
+        ("0x1F", "0x1F"),
+        ("1_000", "1_000"),
+    ];
+    for (literal, expected) in cases {
+        let text = format!("SELECT {literal} FROM t");
+        let plan = plan(SqlGrammar::PostgreSql, &text);
+        let numbers: Vec<&str> = plan
+            .tokens(0..text.len())
+            .filter(|token| token.kind == ScriptTokenKind::Number)
+            .map(|token| &text[token.range.clone()])
+            .collect();
+        assert_eq!(numbers, [expected], "lexing {literal}");
+    }
+}
+
+#[test]
+fn a_digit_separator_keeps_a_number_whole_where_the_engine_reads_one() {
+    let numbers = |grammar: SqlGrammar, literal: &str| -> Vec<String> {
+        let text = format!("SELECT {literal} FROM t");
+        let plan = plan(grammar, &text);
+        plan.tokens(0..text.len())
+            .filter(|token| token.kind == ScriptTokenKind::Number)
+            .map(|token| text[token.range.clone()].to_owned())
+            .collect()
+    };
+
+    for grammar in [SqlGrammar::Sqlite, SqlGrammar::PostgreSql, SqlGrammar::ClickHouse] {
+        assert_eq!(numbers(grammar, "1_0e+2"), ["1_0e+2"], "{grammar:?}");
+        assert_eq!(numbers(grammar, "1_000.000_5"), ["1_000.000_5"], "{grammar:?}");
+        assert_eq!(numbers(grammar, "1._5"), ["1._5"], "{grammar:?}");
+    }
+    assert_eq!(
+        numbers(SqlGrammar::MySql, "1_0e+2"),
+        ["1_0e", "2"],
+        "a name, then a number"
+    );
+    // DuckDB 1.5 reads both as one number and refuses `1._5`.
+    assert_eq!(numbers(SqlGrammar::DuckDb, "1_0e+2"), ["1_0e+2"]);
+    assert_eq!(numbers(SqlGrammar::DuckDb, "1_000.000_5"), ["1_000.000_5"]);
+}
+
+#[test]
+fn a_qualified_name_and_a_range_keep_their_dots() {
+    let text = "SELECT t.a, a[1:2], 1..2 FROM t";
+    let plan = plan(SqlGrammar::PostgreSql, text);
+    let numbers: Vec<&str> = plan
+        .tokens(0..text.len())
+        .filter(|token| token.kind == ScriptTokenKind::Number)
+        .map(|token| &text[token.range.clone()])
+        .collect();
+    assert_eq!(numbers, ["1", "2", "1", "2"]);
+}

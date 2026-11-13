@@ -1,0 +1,87 @@
+#[cfg(unix)]
+use tablepro_core::LocalSocket;
+use tablepro_core::meta::ObjectKind;
+use tablepro_core::{
+    AuthMode, CommitResolutionSupport, DriverCapabilities, EndpointKind, EstimateQuality, NetworkOption,
+    ReadOnlyEnforcement, ScriptExecution, ServerNameOverride, StatementStop, TlsCapabilities, TlsMode, WriteAtomicity,
+};
+
+pub(crate) const DEFAULT_PORT: u16 = 5432;
+
+pub(crate) static CAPABILITIES: DriverCapabilities = DriverCapabilities {
+    data_model: tablepro_core::DataModel::Relational,
+    endpoint: EndpointKind::Network {
+        default_port: DEFAULT_PORT,
+    },
+    auth_modes: &[AuthMode::Password],
+    username_required: true,
+    tls: Some(TlsCapabilities {
+        modes: &[TlsMode::Disable, TlsMode::Prefer, TlsMode::Require, TlsMode::VerifyFull],
+        default_mode: TlsMode::Prefer,
+        tls_ports: &[],
+        ca_file: true,
+        client_identity: true,
+        server_name_override: ServerNameOverride::AnyRoute,
+    }),
+    // Read-only is a property of each transaction the driver opens, which
+    // a user's own SET TRANSACTION can still override.
+    read_only: ReadOnlyEnforcement::SessionDefault,
+    dml_writes: WriteAtomicity::Transactional,
+    ddl_writes: WriteAtomicity::Transactional,
+    script_execution: ScriptExecution::NativeBatch,
+    commit_resolution: CommitResolutionSupport::ServerTransactionStatus,
+    row_count_estimate: EstimateQuality::Statistics,
+    object_kinds: &[
+        ObjectKind::Table,
+        ObjectKind::PartitionedTable,
+        ObjectKind::View,
+        ObjectKind::MaterializedView,
+        ObjectKind::ForeignTable,
+        ObjectKind::Sequence,
+        ObjectKind::Function,
+        ObjectKind::Procedure,
+        ObjectKind::Trigger,
+    ],
+    database_required: false,
+    network_options: &[
+        NetworkOption::ChannelBinding,
+        // libpq's naming. Debian, Ubuntu and Fedora build libpq for /var/run/postgresql, Arch for /run/postgresql, upstream for /tmp.
+        #[cfg(unix)]
+        NetworkOption::LocalSocket(LocalSocket::Folder {
+            file_prefix: ".s.PGSQL.",
+            defaults: &["/run/postgresql", "/var/run/postgresql", "/tmp"],
+        }),
+    ],
+    statement_stop: StatementStop::Server,
+};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capabilities_match_driver_contract() {
+        assert_eq!(CAPABILITIES.default_port(), Some(5432));
+        assert!(CAPABILITIES.supports(AuthMode::Password));
+        assert!(!CAPABILITIES.supports(AuthMode::Kerberos));
+        let tls = CAPABILITIES.tls.expect("PostgreSQL offers TLS");
+        assert_eq!(
+            tls.modes,
+            [TlsMode::Disable, TlsMode::Prefer, TlsMode::Require, TlsMode::VerifyFull]
+        );
+        assert_eq!(tls.default_mode, TlsMode::Prefer);
+        assert!(tls.ca_file && tls.client_identity);
+        assert_eq!(tls.server_name_override, ServerNameOverride::AnyRoute);
+        assert_eq!(CAPABILITIES.read_only, ReadOnlyEnforcement::SessionDefault);
+        assert_eq!(CAPABILITIES.dml_writes, WriteAtomicity::Transactional);
+        assert_eq!(CAPABILITIES.ddl_writes, WriteAtomicity::Transactional);
+        assert_eq!(
+            CAPABILITIES.commit_resolution,
+            CommitResolutionSupport::ServerTransactionStatus
+        );
+        assert_eq!(CAPABILITIES.object_kinds.len(), 9);
+        assert!(!CAPABILITIES.database_required);
+        assert_eq!(CAPABILITIES.local_socket().is_some(), cfg!(unix));
+        assert!(CAPABILITIES.offers(NetworkOption::ChannelBinding));
+    }
+}

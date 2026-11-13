@@ -1,0 +1,22 @@
+//! ClickHouse against real servers. Every test that needs one starts
+//! its own container and is ignored without Docker.
+
+#![expect(
+    clippy::expect_used,
+    reason = "the setup helpers fail a test the way the test functions themselves do"
+)]
+
+mod conformance_engine;
+mod csv_import;
+mod ddl;
+mod dump;
+mod keys_and_decimals;
+mod metadata;
+mod restricted_logins;
+mod result_origins;
+mod round_trip;
+mod sessions;
+mod support;
+mod tls;
+mod value_corpus;
+mod writes;

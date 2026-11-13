@@ -1,0 +1,167 @@
+use super::{ColumnDefault, ColumnType, ResultColumn};
+
+/// Everything the catalogue says about a table column.
+///
+/// This is the authority for browse: what can be edited, what the
+/// server fills in, and what a value means. A result column carries
+/// only the part an arbitrary query can report.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColumnInfo {
+    pub name: String,
+    pub column_type: ColumnType,
+    pub nullable: bool,
+    pub primary_key: bool,
+    /// The server assigns the value, so an insert leaves the column
+    /// out of the user-facing form.
+    pub is_auto_increment: bool,
+    /// `GENERATED ALWAYS AS`. Read-only, and never written.
+    pub is_generated: bool,
+    /// The column holds one value per partition, as a CQL partition key
+    /// or static column does. An update that sets only such columns names
+    /// the partition, not the row.
+    pub partition_scoped: bool,
+    pub default: ColumnDefault,
+    /// What the schema says the column is for, where the engine stores
+    /// such a thing. `None` on an engine that has no column comments,
+    /// which is not the same as one left empty.
+    pub comment: Option<String>,
+}
+
+impl ColumnInfo {
+    pub fn result_column(&self) -> ResultColumn {
+        ResultColumn::new(self.name.clone(), self.column_type.clone())
+    }
+
+    /// Whether the user may put a value in this column at all. A
+    /// generated column is computed by the server.
+    pub fn is_writable(&self) -> bool {
+        !self.is_generated
+    }
+
+    /// Whether the server gives a new row its own value here: a numbered
+    /// column, or a table's only key column whose default is an
+    /// expression, such as a UUID. A row copied as a new one leaves the
+    /// column out. A literal default would give every copy the same key,
+    /// and a key of several columns keeps what the row held in each.
+    /// `columns` is every column of the table.
+    pub fn is_assigned_on_insert(&self, columns: &[ColumnInfo]) -> bool {
+        self.is_auto_increment
+            || (self.primary_key
+                && self.default.needs_server_evaluation()
+                && columns.iter().filter(|column| column.primary_key).count() == 1)
+    }
+
+    /// Whether an insert may leave the column out and still get a row:
+    /// the server has something to put there.
+    pub fn is_optional_on_insert(&self) -> bool {
+        self.nullable || self.is_auto_increment || !self.default.is_none()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{CatalogType, ColumnKind, IntegerKind, IntegerWidth, ReadForm, SqlExpression, SqlTypeExpr};
+    use super::*;
+    use crate::value::Value;
+
+    fn column(name: &str) -> ColumnInfo {
+        ColumnInfo {
+            name: name.to_owned(),
+            column_type: ColumnType {
+                name: "integer".to_owned(),
+                kind: ColumnKind::Integer(IntegerKind {
+                    width: IntegerWidth::W32,
+                    signed: true,
+                }),
+                catalog: Some(CatalogType {
+                    declaration: SqlTypeExpr::from_catalog_text("integer"),
+                    cast_target: SqlTypeExpr::from_catalog_text("integer"),
+                }),
+                dynamic_storage: false,
+                read_form: ReadForm::Native,
+            },
+            nullable: false,
+            primary_key: false,
+            is_auto_increment: false,
+            is_generated: false,
+            partition_scoped: false,
+            default: ColumnDefault::None,
+            comment: None,
+        }
+    }
+
+    #[test]
+    fn a_result_column_keeps_the_name_and_type() {
+        let info = column("id");
+
+        let result = info.result_column();
+
+        assert_eq!(result.name, "id");
+        assert_eq!(result.column_type, info.column_type);
+    }
+
+    #[test]
+    fn a_generated_column_is_not_writable() {
+        let mut info = column("total");
+        info.is_generated = true;
+
+        assert!(!info.is_writable());
+        assert!(column("id").is_writable());
+    }
+
+    #[test]
+    fn insert_may_omit_a_column_the_server_can_fill() {
+        let required = column("name");
+        assert!(!required.is_optional_on_insert());
+
+        let mut nullable = column("note");
+        nullable.nullable = true;
+        assert!(nullable.is_optional_on_insert());
+
+        let mut serial = column("id");
+        serial.is_auto_increment = true;
+        assert!(serial.is_optional_on_insert());
+
+        let mut defaulted = column("created_at");
+        defaulted.default = ColumnDefault::Expression(SqlExpression::from_catalog_text("now()"));
+        assert!(defaulted.is_optional_on_insert());
+    }
+
+    #[test]
+    fn a_new_row_takes_a_numbered_column_or_a_defaulted_key_from_the_server() {
+        let mut row_number = column("row_number");
+        row_number.is_auto_increment = true;
+        let mut uuid_key = column("id");
+        uuid_key.primary_key = true;
+        uuid_key.default = ColumnDefault::Expression(SqlExpression::from_catalog_text("gen_random_uuid()"));
+        let mut written_key = column("code");
+        written_key.primary_key = true;
+        let mut defaulted = column("created_at");
+        defaulted.default = ColumnDefault::Expression(SqlExpression::from_catalog_text("now()"));
+        let mut zero_key = column("id");
+        zero_key.primary_key = true;
+        zero_key.default = ColumnDefault::Literal(Value::Int(0));
+        let mut stamped_key = defaulted.clone();
+        stamped_key.primary_key = true;
+        let mut tenant = column("tenant");
+        tenant.primary_key = true;
+        let one_key = [uuid_key.clone(), defaulted.clone()];
+        let two_keys = [tenant, stamped_key.clone()];
+
+        assert!(row_number.is_assigned_on_insert(&[row_number.clone()]));
+        assert!(uuid_key.is_assigned_on_insert(&one_key));
+        assert!(!written_key.is_assigned_on_insert(&[written_key.clone()]));
+        assert!(
+            !defaulted.is_assigned_on_insert(&one_key),
+            "a value the row had stays its own"
+        );
+        assert!(
+            !zero_key.is_assigned_on_insert(&[zero_key.clone()]),
+            "every copy would get 0"
+        );
+        assert!(
+            !stamped_key.is_assigned_on_insert(&two_keys),
+            "part of a key keeps its value"
+        );
+    }
+}

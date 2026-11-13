@@ -1,0 +1,39 @@
+[package]
+name = "tablepro-driver-mssql"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Integrated login: GSSAPI behind this feature, since it links a library,
+# MIT Kerberos on Linux and the system's GSS framework on macOS; SSPI on
+# Windows, which every Windows has.
+[features]
+default = []
+kerberos = ["tiberius/integrated-auth-gssapi"]
+
+[dependencies]
+tablepro-core.workspace = true
+tablepro-net.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+deadpool.workspace = true
+futures-util.workspace = true
+secrecy.workspace = true
+tiberius.workspace = true
+tokio = { workspace = true, features = ["io-util", "rt"] }
+tokio-rustls.workspace = true
+tokio-util = { workspace = true, features = ["compat"] }
+tracing.workspace = true
+uuid.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+tiberius = { workspace = true, features = ["winauth"] }
+
+[dev-dependencies]
+tablepro-test-fixtures.workspace = true
+tablepro-test-support.workspace = true
+tokio = { workspace = true, features = ["io-util", "test-util"] }
+
+[lints]
+workspace = true

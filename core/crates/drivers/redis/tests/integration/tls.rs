@@ -1,0 +1,163 @@
+//! The TLS conformance suite against a Redis that takes only TLS, and a
+//! second one beside it that takes only clients with a certificate.
+
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use secrecy::SecretString;
+use tablepro_core::{
+    ClientIdentity, ConnectOptions, Credentials, DatabaseDriver, DriverError, ErrorCategory, TlsConfig, TlsFailure,
+    TlsMode, WorkspaceSettings,
+};
+use tablepro_driver_redis::RedisDriver;
+use tablepro_test_fixtures::{PkiFile, RedisFixture, TestPki};
+use tablepro_test_support::conformance::{
+    ClientIdentityEngine, ConformanceFailure, TlsConformanceEngine, test_liveness,
+};
+use tokio_util::sync::CancellationToken;
+
+use crate::support::{direct, options_over, password};
+
+pub struct RedisTlsEngine {
+    fixture: RedisFixture,
+    ca: PathBuf,
+    unrelated_ca: PathBuf,
+    server_certificate: PathBuf,
+}
+
+impl RedisTlsEngine {
+    fn from_fixture(fixture: RedisFixture) -> Self {
+        let ca = fixture.pki().path(PkiFile::Ca);
+        let unrelated_ca = fixture.pki().path(PkiFile::UnrelatedCa);
+        let server_certificate = fixture.pki().path(PkiFile::ServerCertificate);
+        Self {
+            fixture,
+            ca,
+            unrelated_ca,
+            server_certificate,
+        }
+    }
+
+    fn options(&self, port: u16, credentials: Credentials, tls: TlsConfig) -> ConnectOptions {
+        let liveness = test_liveness();
+        options_over(
+            direct(self.fixture.host(), port, &liveness),
+            credentials,
+            None,
+            tls,
+            WorkspaceSettings::workspace(false),
+            liveness,
+        )
+    }
+}
+
+#[async_trait::async_trait]
+impl TlsConformanceEngine for RedisTlsEngine {
+    fn driver() -> Arc<dyn DatabaseDriver> {
+        Arc::new(RedisDriver)
+    }
+
+    async fn start() -> Result<Self, ConformanceFailure> {
+        RedisFixture::start_tls()
+            .await
+            .map(Self::from_fixture)
+            .map_err(ConformanceFailure::setup)
+    }
+
+    async fn start_self_signed() -> Result<Self, ConformanceFailure> {
+        RedisFixture::start_tls_self_signed()
+            .await
+            .map(Self::from_fixture)
+            .map_err(ConformanceFailure::setup)
+    }
+
+    fn connect_options(&self, tls: TlsConfig) -> ConnectOptions {
+        self.options(self.fixture.port(), password(&self.fixture.password_credentials()), tls)
+    }
+
+    fn ca_file(&self) -> &Path {
+        &self.ca
+    }
+
+    fn unrelated_ca_file(&self) -> &Path {
+        &self.unrelated_ca
+    }
+
+    fn server_certificate_file(&self) -> &Path {
+        &self.server_certificate
+    }
+
+    fn served_name(&self) -> &str {
+        TestPki::SERVER_NAMES[1]
+    }
+
+    /// The server reads the plaintext login as a broken handshake and
+    /// closes the connection without a reply, then completes the
+    /// driver's own TLS handshake.
+    fn plaintext_rejection_category(&self) -> ErrorCategory {
+        ErrorCategory::Tls
+    }
+}
+
+impl ClientIdentityEngine for RedisTlsEngine {
+    fn client_identity(&self) -> ClientIdentity {
+        ClientIdentity {
+            certificate: self.fixture.pki().path(PkiFile::ClientCertificate),
+            key: self.fixture.pki().path(PkiFile::ClientKey),
+        }
+    }
+
+    /// Redis maps no certificate to a user: the server beside the first
+    /// takes only a client that presents one, as its default user.
+    fn certificate_connect_options(&self, tls: TlsConfig) -> ConnectOptions {
+        let port = self.fixture.certificate_port().expect("the certificate server");
+        let credentials = Credentials::Password {
+            username: String::new(),
+            password: SecretString::from(String::new()),
+        };
+        self.options(port, credentials, tls)
+    }
+}
+
+/// A plain Redis reads the TLS hello as a command and waits for its
+/// newline, so the handshake times out; a plain PING tells why.
+#[tokio::test]
+#[ignore = "requires docker"]
+async fn require_against_a_server_without_tls_is_refused_tls() {
+    let fixture = crate::support::start().await;
+    let liveness = test_liveness();
+    let options = options_over(
+        direct(fixture.host(), fixture.port(), &liveness),
+        password(&fixture.password_credentials()),
+        None,
+        TlsConfig {
+            mode: TlsMode::Require,
+            ..TlsConfig::disabled()
+        },
+        WorkspaceSettings::workspace(false),
+        liveness,
+    );
+
+    let outcome = RedisDriver.connect(options, CancellationToken::new()).await;
+
+    assert!(
+        matches!(
+            outcome,
+            Err(DriverError::Tls {
+                failure: TlsFailure::ServerRefusedTls,
+                ..
+            })
+        ),
+        "{:?}",
+        outcome.err()
+    );
+}
+
+mod suite {
+    use super::RedisTlsEngine;
+
+    tablepro_test_support::tls_conformance_suite! {
+        engine: RedisTlsEngine,
+        client_identity: true,
+    }
+}

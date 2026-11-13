@@ -1,0 +1,704 @@
+use std::future::Future;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
+
+use tablepro_core::credentials::CredentialInteraction;
+use tablepro_core::dialect::SqlDialect;
+use tablepro_core::meta::{ObjectInfo, ObjectScope, SchemaInfo};
+use tablepro_core::sql_syntax::SqlGrammar;
+use tablepro_core::{
+    CallOptions, ColumnInfo, DriverError, EditorSession, EditorSessionOptions, SafeModeLevel, TableRef,
+    UnsupportedFeature, WorkspaceSettings,
+};
+use tablepro_storage::CredentialDemand;
+use tokio::sync::watch;
+use tokio_util::sync::{CancellationToken, DropGuard};
+use tokio_util::task::AbortOnDropHandle;
+use uuid::Uuid;
+
+use super::byte_limited_editor::ByteLimitedEditor;
+use super::{ObjectListSnapshot, SchemaCatalog, SessionDeps};
+use crate::connect::{ConnectError, ConnectRequest, ConnectionMetadata, PendingSession, RequestTarget};
+use crate::health::{
+    LinkGeneration, MonitorContext, MonitorMailbox, MonitorSignal, ReachabilityTarget, ReconnectPlan, ReviewedHostKey,
+    SessionHealth, run_monitor,
+};
+use crate::link::{CloseReport, ConnectionLease, ConnectionLink};
+use crate::operation::{OperationError, OperationKind, OperationRunner};
+use crate::runtime::{TaskResult, Tasks};
+
+/// One window's connection to one database.
+///
+/// Built only from runtime-free parts, so the GTK thread can start one
+/// without entering the runtime; the monitor runs on the app's `Tasks`.
+/// Dropping the last handle cancels every operation and stops the
+/// monitor; `begin_shutdown` is what closes the connection.
+pub struct Session {
+    metadata: ConnectionMetadata,
+    workspace_settings: WorkspaceSettings,
+    safe_mode: Mutex<SafeModeLevel>,
+    // The engine's own, from the connection the session opened on, for SQL read while no connection is current.
+    grammar: SqlGrammar,
+    reachability: Arc<Mutex<ReachabilityTarget>>,
+    last_rejection: Arc<Mutex<Option<Arc<ConnectError>>>>,
+    trusted_host_key: Arc<Mutex<Option<ReviewedHostKey>>>,
+    /// The tunnel the connection goes through, which a changed host key
+    /// is checked against before its old key is removed.
+    ssh: Option<tablepro_ssh::SshConfig>,
+    /// The database the connection was asked to open, as the user named
+    /// it.
+    database: Option<String>,
+    /// What opens this connection's sessions in the server's other
+    /// databases: its request and the app's parts, as a reconnect has them.
+    origin: SessionOrigin,
+    runner: OperationRunner,
+    mailbox: Arc<MonitorMailbox>,
+    health: watch::Receiver<SessionHealth>,
+    link: Arc<ConnectionLink>,
+    catalog: Arc<SchemaCatalog>,
+    tasks: Tasks,
+    close_timeout: Duration,
+    cancel: CancellationToken,
+    _cancel_on_drop: DropGuard,
+    _monitor: AbortOnDropHandle<()>,
+}
+
+/// What a session was opened with, kept to open its siblings in the
+/// server's other databases.
+struct SessionOrigin {
+    request: ConnectRequest,
+    deps: SessionDeps,
+}
+
+impl Session {
+    pub fn start(pending: PendingSession, deps: SessionDeps) -> Arc<Session> {
+        let parts = pending.into_parts();
+        let origin = SessionOrigin {
+            request: parts.request.for_reconnect(),
+            deps: deps.clone(),
+        };
+        let close_timeout = deps
+            .deadlines
+            .deadline(OperationKind::Close)
+            .unwrap_or(parts.close_timeout);
+        let reachability = Arc::new(Mutex::new(ReachabilityTarget::for_established(
+            &parts.request,
+            &parts.established,
+        )));
+        let grammar = parts.established.connection.dialect().grammar();
+        let link = Arc::new(ConnectionLink::new(parts.established));
+        let last_rejection = Arc::new(Mutex::new(None));
+        let trusted_host_key = Arc::new(Mutex::new(None));
+        let mailbox = Arc::new(MonitorMailbox::new());
+        let (health_sender, health) = watch::channel(SessionHealth::Online);
+        let cancel = CancellationToken::new();
+        let runner = OperationRunner::new(
+            link.clone(),
+            deps.deadlines.clone(),
+            mailbox.clone(),
+            health.clone(),
+            cancel.clone(),
+        );
+        let catalog = Arc::new(SchemaCatalog::new(
+            parts.schemas,
+            parts.objects,
+            runner.clone(),
+            deps.tasks.clone(),
+        ));
+        let context = MonitorContext {
+            link: link.clone(),
+            plan: ReconnectPlan {
+                connector: deps.connector,
+                request: parts.request.for_reconnect(),
+                credentials: deps.credentials,
+                prompter: deps.prompter,
+            },
+            deadlines: deps.deadlines,
+            tasks: deps.tasks.clone(),
+            health: health_sender,
+            mailbox: mailbox.clone(),
+            cancel: cancel.clone(),
+            catalog: catalog.clone(),
+            reachability: reachability.clone(),
+            close_timeout,
+            last_rejection: last_rejection.clone(),
+            trusted_host_key: trusted_host_key.clone(),
+        };
+        let monitor = deps.tasks.spawn_owned(run_monitor(context));
+        let (ssh, database) = match &parts.request.target {
+            RequestTarget::Network { ssh, database, .. } => (ssh.clone(), database.clone()),
+            RequestTarget::File(_) => (None, None),
+        };
+        Arc::new(Session {
+            metadata: parts.request.metadata,
+            workspace_settings: parts.request.workspace_settings,
+            safe_mode: Mutex::new(parts.request.safe_mode),
+            grammar,
+            reachability,
+            last_rejection,
+            trusted_host_key,
+            ssh,
+            database,
+            origin,
+            runner,
+            mailbox,
+            health,
+            link,
+            catalog,
+            tasks: deps.tasks,
+            close_timeout,
+            _cancel_on_drop: cancel.clone().drop_guard(),
+            cancel,
+            _monitor: monitor,
+        })
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.metadata.id
+    }
+
+    pub fn metadata(&self) -> &ConnectionMetadata {
+        &self.metadata
+    }
+
+    /// What the current connection enforces, which is what the session
+    /// was asked for.
+    pub fn read_only(&self) -> bool {
+        self.link
+            .lease()
+            .map_or(self.workspace_settings.read_only, |lease| lease.read_only())
+    }
+
+    pub fn workspace_settings(&self) -> WorkspaceSettings {
+        self.workspace_settings
+    }
+
+    /// The level every statement and save goes through. A connection
+    /// that opened read-only is Read-Only whatever was chosen since.
+    pub fn safe_mode(&self) -> SafeModeLevel {
+        match self.read_only() {
+            true => SafeModeLevel::ReadOnly,
+            false => *self.safe_mode.lock().unwrap_or_else(PoisonError::into_inner),
+        }
+    }
+
+    /// Move to `level` on the connection as it is. False when `level` is
+    /// on the other side of Read-Only, which takes a new connection.
+    pub fn set_safe_mode(&self, level: SafeModeLevel) -> bool {
+        if level.blocks_writes() != self.read_only() {
+            return false;
+        }
+        *self.safe_mode.lock().unwrap_or_else(PoisonError::into_inner) = level;
+        true
+    }
+
+    /// What the network must reach for this session, recomputed when a
+    /// reconnect lands, because ssh may resolve its first hop anew.
+    pub fn reachability(&self) -> ReachabilityTarget {
+        self.reachability.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// The current connection's dialect, for UI that adapts to the
+    /// server. `None` once the session shut down. SQL that runs is built
+    /// inside an operation from its own lease instead, so it always
+    /// matches the connection it runs on.
+    pub fn current_dialect(&self) -> Option<Arc<dyn SqlDialect>> {
+        self.link.lease().map(|lease| lease.dialect())
+    }
+
+    // Also while the link is down, since an editor tab's own connection can still be up and run what it is sent.
+    pub fn grammar(&self) -> SqlGrammar {
+        self.current_dialect().map_or(self.grammar, |dialect| dialect.grammar())
+    }
+
+    /// Which connection is current. A request issued under an older one
+    /// may have failed because that connection went away.
+    pub fn link_generation(&self) -> LinkGeneration {
+        self.link.generation()
+    }
+
+    /// Ticks each time a reconnect replaces the connection.
+    pub fn link_changes(&self) -> watch::Receiver<LinkGeneration> {
+        self.link.subscribe()
+    }
+
+    pub fn health(&self) -> watch::Receiver<SessionHealth> {
+        self.health.clone()
+    }
+
+    /// What the window knows about the database's schemas, objects and
+    /// columns, shared by every view.
+    pub fn catalog(&self) -> &SchemaCatalog {
+        &self.catalog
+    }
+
+    pub async fn schemas(&self) -> Result<Arc<[SchemaInfo]>, Arc<OperationError>> {
+        self.catalog.schemas().await
+    }
+
+    /// Read the schemas again, after one was created or dropped.
+    pub async fn refresh_schemas(&self) -> Result<Arc<[SchemaInfo]>, Arc<OperationError>> {
+        self.catalog.refresh_schemas().await
+    }
+
+    pub async fn objects(&self, scope: ObjectScope) -> Result<Arc<[ObjectInfo]>, Arc<OperationError>> {
+        self.catalog.objects(scope).await
+    }
+
+    pub async fn refresh_objects(&self, scope: ObjectScope) -> Result<Arc<[ObjectInfo]>, Arc<OperationError>> {
+        self.catalog.refresh_objects(scope).await
+    }
+
+    pub async fn columns(&self, table: TableRef) -> Result<Arc<[ColumnInfo]>, Arc<OperationError>> {
+        self.catalog.columns(table).await
+    }
+
+    pub async fn refresh_columns(&self, table: TableRef) -> Result<Arc<[ColumnInfo]>, Arc<OperationError>> {
+        self.catalog.refresh_columns(table).await
+    }
+
+    pub fn invalidate_table(&self, table: &TableRef) {
+        self.catalog.invalidate_table(table);
+    }
+
+    pub fn invalidate_columns(&self) {
+        self.catalog.invalidate_columns();
+    }
+
+    pub fn subscribe_objects(&self, scope: ObjectScope) -> watch::Receiver<ObjectListSnapshot> {
+        self.catalog.subscribe(scope)
+    }
+
+    pub fn signal(&self, signal: MonitorSignal) {
+        self.mailbox.post(signal);
+    }
+
+    /// Why the last reconnect was refused, kept until one succeeds. A
+    /// parked session's banner reads it to say what the user can do.
+    pub fn last_rejection(&self) -> Option<Arc<ConnectError>> {
+        self.last_rejection
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Retry, answering ssh's question about the `reviewed` host key
+    /// for the user, who reviewed it. A different key or host, or any
+    /// other question, still reaches them; ssh records the key in
+    /// known_hosts as it does when the user answers.
+    pub fn retry_trusting_host_key(&self, reviewed: ReviewedHostKey) {
+        *self.trusted_host_key.lock().unwrap_or_else(PoisonError::into_inner) = Some(reviewed);
+        self.mailbox.post(MonitorSignal::RetryNow);
+    }
+
+    /// The database the connection was asked to open, as the user named
+    /// it: a name, or a key-value engine's number. `None` for a file.
+    pub fn database(&self) -> Option<&str> {
+        self.database.as_deref()
+    }
+
+    /// A session of this connection in another of the server's databases,
+    /// for a window that follows a query tab there. Opened as a reconnect
+    /// is: the stored secret, never a prompt. A file has no other
+    /// database.
+    pub async fn open_in_database(
+        &self,
+        database: &str,
+        cancel: CancellationToken,
+    ) -> Result<Arc<Session>, ConnectError> {
+        let request =
+            self.origin
+                .request
+                .in_database(database)
+                .ok_or(ConnectError::Driver(DriverError::Unsupported {
+                    feature: UnsupportedFeature::NetworkConnection,
+                }))?;
+        let refreshed = self
+            .origin
+            .deps
+            .credentials
+            .refresh(request, CredentialInteraction::Unattended, CredentialDemand::default())
+            .await?;
+        let pending = self
+            .origin
+            .deps
+            .connector
+            .establish(refreshed.request, CredentialInteraction::Unattended, cancel)
+            .await?;
+        let sibling = Session::start(pending, self.origin.deps.clone());
+        // The level the user chose since the connection opened, which a
+        // read-only connection's sibling shares by opening read-only too.
+        sibling.set_safe_mode(self.safe_mode());
+        Ok(sibling)
+    }
+
+    /// The SSH tunnel the connection was made through, if any.
+    pub fn ssh_config(&self) -> Option<&tablepro_ssh::SshConfig> {
+        self.ssh.as_ref()
+    }
+
+    pub fn runner(&self) -> &OperationRunner {
+        &self.runner
+    }
+
+    pub fn tasks(&self) -> &Tasks {
+        &self.tasks
+    }
+
+    pub async fn run<T, F, Fut>(&self, kind: OperationKind, op: F) -> Result<T, OperationError>
+    where
+        F: Fn(ConnectionLease, CallOptions) -> Fut + Send + Sync,
+        Fut: Future<Output = Result<T, OperationError>> + Send,
+        T: Send,
+    {
+        self.runner.run_cancellable(kind, &CancellationToken::new(), op).await
+    }
+
+    pub async fn run_cancellable<T, F, Fut>(
+        &self,
+        kind: OperationKind,
+        cancel: &CancellationToken,
+        op: F,
+    ) -> Result<T, OperationError>
+    where
+        F: Fn(ConnectionLease, CallOptions) -> Fut + Send + Sync,
+        Fut: Future<Output = Result<T, OperationError>> + Send,
+        T: Send,
+    {
+        self.runner.run_cancellable(kind, cancel, op).await
+    }
+
+    /// Open an editor tab's own connection from the current one.
+    ///
+    /// Opening is idempotent, so it runs as a replayable read: a tab
+    /// opened just as the link was replaced gets a session on the new
+    /// connection instead of an error. The session outlives any later
+    /// replacement; the tab closes it.
+    pub async fn open_editor_session(
+        &self,
+        options: EditorSessionOptions,
+        cancel: &CancellationToken,
+    ) -> Result<Arc<dyn EditorSession>, OperationError> {
+        self.runner
+            .run_cancellable(OperationKind::Metadata, cancel, |lease, call| {
+                let options = options.clone();
+                async move {
+                    lease
+                        .open_editor_session(options, call.cancel().clone())
+                        .await
+                        .map(ByteLimitedEditor::wrap)
+                        .map_err(OperationError::from)
+                }
+            })
+            .await
+    }
+
+    /// Stop every operation, take the connection and close it under the
+    /// close deadline. A second call finds nothing to close.
+    pub fn begin_shutdown(&self) -> TaskResult<CloseReport> {
+        self.cancel.cancel();
+        let retired = self.link.take();
+        let close_timeout = self.close_timeout;
+        self.tasks.spawn_task(async move {
+            match retired {
+                Some(retired) => retired.close(close_timeout).await,
+                None => CloseReport::AlreadyClosed,
+            }
+        })
+    }
+
+    pub fn is_shut_down(&self) -> bool {
+        self.link.is_taken()
+    }
+
+    /// Fires once the session begins to shut down, for work outside its
+    /// runner, such as an editor session of its own, that has to stop
+    /// with it.
+    pub fn shutdown_signal(&self) -> CancellationToken {
+        self.cancel.child_token()
+    }
+}
+
+impl std::fmt::Debug for Session {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Session")
+            .field("id", &self.metadata.id)
+            .field("name", &self.metadata.name)
+            .field("link", &self.link)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Weak;
+
+    use tablepro_core::column::{ColumnType, ResultColumn};
+    use tablepro_core::value::Value;
+    use tablepro_core::{
+        ByteLimit, DriverError, LivenessPolicy, ResultEvent, ResultSink, RunEnd, RunOptions, SinkFlow, Truncation,
+        UserSql,
+    };
+    use tablepro_test_support::{
+        CallCounters, CloseBehaviour, ConnectionScript, FakeConnection, FakeEditorSession, FakeReply, FakeRun, Replies,
+    };
+
+    use super::*;
+    use crate::fakes::{FakeConnector, FakeCredentialSource, FakeEstablish};
+    use crate::operation::DefaultDeadlines;
+    use crate::test_support::paused_tasks;
+
+    fn deps(credentials: Arc<FakeCredentialSource>) -> SessionDeps {
+        SessionDeps {
+            connector: Arc::new(FakeConnector::new([])),
+            credentials,
+            deadlines: Arc::new(DefaultDeadlines::new(LivenessPolicy::DESKTOP)),
+            tasks: paused_tasks(),
+            prompter: None,
+        }
+    }
+
+    fn start(script: ConnectionScript) -> (Arc<Session>, Arc<FakeConnection>) {
+        let (pending, connection) = FakeConnector::pending_session(FakeConnector::request().unwrap(), script);
+        (
+            Session::start(pending, deps(Arc::new(FakeCredentialSource::new()))),
+            connection,
+        )
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn begin_shutdown_closes_once_then_already_closed() {
+        let (session, connection) = start(ConnectionScript::default());
+
+        let first = session.begin_shutdown().await.unwrap();
+        let second = session.begin_shutdown().await.unwrap();
+
+        assert_eq!(first, CloseReport::Closed);
+        assert_eq!(second, CloseReport::AlreadyClosed);
+        assert_eq!(CallCounters::get(&connection.counters().close), 1);
+        assert!(session.is_shut_down());
+        let after = session.run(OperationKind::Page, |_, _| async { Ok(()) }).await;
+        assert_eq!(after, Err(OperationError::Closed));
+        assert!(session.current_dialect().is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn hanging_close_reports_abandoned_at_close_timeout() {
+        let (session, _) = start(ConnectionScript {
+            close: CloseBehaviour::Hang,
+            ..ConnectionScript::default()
+        });
+        let started = tokio::time::Instant::now();
+
+        let report = session.begin_shutdown().await.unwrap();
+
+        assert_eq!(report, CloseReport::Abandoned);
+        assert_eq!(started.elapsed(), LivenessPolicy::DESKTOP.close_timeout);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn dropping_last_arc_ends_monitor() {
+        let credentials = Arc::new(FakeCredentialSource::new());
+        let (pending, connection) =
+            FakeConnector::pending_session(FakeConnector::request().unwrap(), ConnectionScript::default());
+        let session = Session::start(pending, deps(credentials.clone()));
+        let weak: Weak<Session> = Arc::downgrade(&session);
+        let mut health = session.health();
+        // The test's, the monitor's, and the session's own for its siblings.
+        assert_eq!(Arc::strong_count(&credentials), 3, "the monitor holds no plan");
+
+        drop(session);
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+
+        assert!(weak.upgrade().is_none());
+        assert_eq!(Arc::strong_count(&credentials), 1, "the monitor outlived its session");
+        assert!(health.changed().await.is_err(), "the health sender is still alive");
+        assert_eq!(
+            CallCounters::get(&connection.counters().close),
+            0,
+            "dropping is not closing; that is begin_shutdown's job"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn session_start_without_entered_runtime() {
+        let mut script = ConnectionScript::default();
+        script.count_rows.always(FakeReply::ok(7));
+        let (pending, _) = FakeConnector::pending_session(FakeConnector::request().unwrap(), script);
+        let deps = deps(Arc::new(FakeCredentialSource::new()));
+
+        // A plain thread has no runtime entered, like the GTK thread.
+        let session = std::thread::spawn(move || Session::start(pending, deps))
+            .join()
+            .unwrap();
+
+        let count = session
+            .run(OperationKind::Count, |lease, options| async move {
+                let statement = tablepro_core::statement::StatementBuilder::new().finish();
+                Ok(lease.count_rows(&statement, options).await?)
+            })
+            .await
+            .unwrap();
+        assert_eq!(count, 7);
+    }
+
+    /// A window following a query tab to another database opens a sibling
+    /// session there: the same server and user, the other database, the
+    /// stored secret and no prompt.
+    #[tokio::test(start_paused = true)]
+    async fn a_sibling_session_opens_in_another_database() {
+        let connector = FakeConnector::new([]).always(FakeEstablish::Connect(ConnectionScript::default()));
+        let mut request = FakeConnector::network_request("db.example", 5432).unwrap();
+        if let RequestTarget::Network { database, .. } = &mut request.target {
+            *database = Some("shop".to_owned());
+        }
+        let (pending, _) = FakeConnector::pending_session(request, ConnectionScript::default());
+        let session = Session::start(
+            pending,
+            SessionDeps {
+                connector: Arc::new(connector.clone()),
+                ..deps(Arc::new(FakeCredentialSource::new()))
+            },
+        );
+
+        assert!(session.set_safe_mode(SafeModeLevel::ConfirmWrites));
+
+        let sibling = session
+            .open_in_database("analytics", CancellationToken::new())
+            .await
+            .expect("a session in analytics");
+
+        assert_eq!(
+            sibling.safe_mode(),
+            SafeModeLevel::ConfirmWrites,
+            "the sibling dropped the level"
+        );
+        assert_eq!(session.database(), Some("shop"));
+        assert_eq!(sibling.database(), Some("analytics"));
+        let call = connector.calls().pop().expect("an attempt");
+        assert!(!call.attended, "the sibling asked for a secret");
+        assert_eq!(call.request.metadata.id, session.id(), "another connection's request");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_file_has_no_other_database_to_open() {
+        let (session, _) = start(ConnectionScript::default());
+
+        let refused = session.open_in_database("analytics", CancellationToken::new()).await;
+
+        assert!(matches!(
+            refused,
+            Err(ConnectError::Driver(DriverError::Unsupported {
+                feature: UnsupportedFeature::NetworkConnection
+            }))
+        ));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn read_only_and_dialect_follow_the_current_connection() {
+        let (session, _) = start(ConnectionScript {
+            read_only: true,
+            ..ConnectionScript::default()
+        });
+
+        assert!(session.read_only());
+        assert_eq!(session.safe_mode(), SafeModeLevel::ReadOnly);
+        assert!(!session.set_safe_mode(SafeModeLevel::ConfirmWrites));
+        assert_eq!(session.safe_mode(), SafeModeLevel::ReadOnly);
+        assert!(session.current_dialect().is_some());
+        assert_eq!(session.reachability(), ReachabilityTarget::Local);
+        assert_eq!(*session.link_changes().borrow(), LinkGeneration::FIRST);
+        assert_eq!(session.metadata().name, "Fake");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_writable_connection_moves_between_the_levels_that_write() {
+        let (session, _) = start(ConnectionScript::default());
+
+        assert_eq!(session.safe_mode(), SafeModeLevel::Off);
+        assert!(session.set_safe_mode(SafeModeLevel::ConfirmWrites));
+        assert_eq!(session.safe_mode(), SafeModeLevel::ConfirmWrites);
+        assert!(!session.set_safe_mode(SafeModeLevel::ReadOnly));
+        assert_eq!(session.safe_mode(), SafeModeLevel::ConfirmWrites);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn open_editor_session_leases_the_current_connection() {
+        let editor: Arc<dyn EditorSession> = Arc::new(FakeEditorSession::new(Replies::default()));
+        let mut script = ConnectionScript::default();
+        script.open_editor_session.once(FakeReply::ok(editor.clone()));
+        script
+            .open_editor_session
+            .always(FakeReply::err(DriverError::server("one per test")));
+        let (session, connection) = start(script);
+
+        let opened = session
+            .open_editor_session(EditorSessionOptions::default(), &CancellationToken::new())
+            .await
+            .unwrap();
+
+        assert_eq!(opened.id(), editor.id());
+        assert_eq!(CallCounters::get(&connection.counters().open_editor_session), 1);
+    }
+
+    #[derive(Clone, Default)]
+    struct Seen(Arc<Mutex<Vec<ResultEvent>>>);
+
+    #[async_trait::async_trait]
+    impl ResultSink for Seen {
+        async fn accept(&mut self, event: ResultEvent) -> SinkFlow {
+            self.0.lock().unwrap().push(event);
+            SinkFlow::Continue
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_opened_editor_session_keeps_the_runs_byte_limit() {
+        let wide = |mark: &str| vec![Value::Text(mark.repeat(1_000))];
+        let columns: Arc<[ResultColumn]> = vec![ResultColumn::new("blob", ColumnType::untyped_text(""))].into();
+        let mut runs = Replies::default();
+        runs.always(FakeRun::completed(vec![
+            ResultEvent::ResultSetStarted { columns },
+            ResultEvent::Rows(vec![wide("a"), wide("b"), wide("c")]),
+            ResultEvent::ResultSetFinished {
+                retained: 3,
+                total_rows: Some(3),
+                truncation: Truncation::Complete,
+            },
+        ]));
+        let editor: Arc<dyn EditorSession> = Arc::new(FakeEditorSession::new(runs));
+        let mut script = ConnectionScript::default();
+        script.open_editor_session.once(FakeReply::ok(editor));
+        let (session, _) = start(script);
+        let opened = session
+            .open_editor_session(EditorSessionOptions::default(), &CancellationToken::new())
+            .await
+            .unwrap();
+        let seen = Seen::default();
+        let limit = ByteLimit::new(1_500).unwrap();
+
+        let summary = opened
+            .run(
+                UserSql::new("SELECT blob"),
+                RunOptions::new(CancellationToken::new()).with_byte_limit(limit),
+                Box::new(seen.clone()),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(summary.end, RunEnd::Completed);
+        let events = seen.0.lock().unwrap().clone();
+        assert_eq!(events[1], ResultEvent::Rows(vec![wide("a"), wide("b")]));
+        assert_eq!(events[2], ResultEvent::ByteLimitReached { retained: 2 });
+        assert_eq!(
+            events[3],
+            ResultEvent::ResultSetFinished {
+                retained: 2,
+                total_rows: Some(3),
+                truncation: Truncation::ByteLimit,
+            }
+        );
+    }
+}

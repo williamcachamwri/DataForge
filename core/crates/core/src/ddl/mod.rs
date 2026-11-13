@@ -1,0 +1,119 @@
+//! Structure changes: the definition of a table, a draft of it the user
+//! edits, the changes between the two, and the per-engine plans that
+//! turn them into DDL.
+
+mod build_ddl_error;
+mod catalog_capabilities;
+mod catalog_plans;
+mod change_review;
+mod changed_attributes;
+mod character_set;
+mod collation_name;
+mod column_alteration;
+mod column_attributes;
+mod column_capabilities;
+mod column_definition;
+mod column_key_roles;
+mod column_rename;
+mod column_storage;
+mod column_visibility;
+mod database_choices;
+mod database_draft;
+mod ddl_capabilities;
+mod ddl_dialect;
+mod ddl_operation;
+mod ddl_plan;
+mod ddl_precondition;
+pub mod ddl_sql;
+mod default_text;
+mod destructive_change;
+mod diff_table;
+mod draft_column;
+mod draft_problem;
+mod draft_table_options;
+mod draft_type;
+mod drop_table_options;
+mod generated_column;
+mod identity_seed;
+mod identity_style;
+mod inbound_foreign_key;
+mod order_renames;
+mod outbound_foreign_key;
+mod permission;
+mod primary_key_change;
+mod primary_key_constraint;
+mod referential_action;
+mod refusal_reason;
+mod schema_draft;
+mod schema_object_source;
+mod table_changes;
+mod table_definition;
+mod table_draft;
+mod table_options;
+mod table_options_change;
+mod table_rebuild;
+mod table_source;
+mod truncate_table_options;
+mod unmodeled_attribute;
+
+#[cfg(test)]
+mod catalog_tests;
+#[cfg(test)]
+mod tests;
+
+pub use build_ddl_error::BuildDdlError;
+pub use catalog_capabilities::{CatalogCapabilities, DatabaseFields, DatabaseNoun, NameLimit};
+pub use catalog_plans::{
+    bare_word, catalog_capabilities, catalog_name, check_database_draft, named, plan_create_database,
+    plan_create_schema, plan_drop_database, plan_drop_schema, plan_truncate_table, protects_database, protects_schema,
+    refuse_drop_options, refuse_options,
+};
+pub use change_review::ChangeReview;
+pub use changed_attributes::ChangedAttributes;
+pub use character_set::CharacterSet;
+pub use collation_name::CollationName;
+pub use column_alteration::ColumnAlteration;
+pub use column_attributes::ColumnAttributes;
+pub use column_capabilities::{ColumnCapabilities, primary_key_permission};
+pub use column_definition::ColumnDefinition;
+pub use column_key_roles::ColumnKeyRoles;
+pub use column_rename::ColumnRename;
+pub use column_storage::{ColumnCompression, ColumnStorage};
+pub use column_visibility::ColumnVisibility;
+pub use database_choices::{DatabaseChoices, DatabaseDefaults};
+pub use database_draft::{CatalogOption, DatabaseDraft, DropDatabaseOptions, KeyspaceReplication};
+pub use ddl_capabilities::DdlCapabilities;
+pub use ddl_dialect::DdlDialect;
+pub use ddl_operation::DdlOperation;
+pub use ddl_plan::DdlPlan;
+pub use ddl_precondition::DdlPrecondition;
+pub use default_text::{default_text, parse_default};
+pub use destructive_change::DestructiveChange;
+pub use diff_table::diff_table;
+pub use draft_column::DraftColumn;
+pub use draft_problem::DraftProblem;
+pub use draft_table_options::DraftTableOptions;
+pub use draft_type::{DraftType, ResolvedType};
+pub use drop_table_options::DropTableOptions;
+pub use generated_column::{GeneratedColumn, GeneratedStorage};
+pub use identity_seed::IdentitySeed;
+pub use identity_style::IdentityStyle;
+pub use inbound_foreign_key::InboundForeignKey;
+pub use order_renames::order_renames;
+pub use outbound_foreign_key::OutboundForeignKey;
+pub use permission::Permission;
+pub use primary_key_change::PrimaryKeyChange;
+pub use primary_key_constraint::PrimaryKeyConstraint;
+pub use referential_action::ReferentialAction;
+pub use refusal_reason::RefusalReason;
+pub use schema_draft::{DropSchemaOptions, SchemaDraft};
+pub use schema_object_source::{SchemaObjectKind, SchemaObjectSource};
+pub use table_changes::TableChanges;
+pub use table_definition::TableDefinition;
+pub use table_draft::TableDraft;
+pub use table_options::TableOptions;
+pub use table_options_change::{CharacterSetChoice, TableOptionsChange};
+pub use table_rebuild::{RecreatedObject, TableRebuild};
+pub use table_source::TableSource;
+pub use truncate_table_options::TruncateTableOptions;
+pub use unmodeled_attribute::UnmodeledAttribute;

@@ -1,0 +1,34 @@
+//! PostgreSQL against real servers. Every test that needs one starts
+//! its own container and is ignored without Docker.
+
+#![expect(
+    clippy::expect_used,
+    reason = "the setup helpers fail a test the way the test functions themselves do"
+)]
+
+mod cancellation;
+mod catalog_ddl;
+mod conformance_engine;
+mod copy_in;
+mod csv_import;
+mod ddl;
+mod decode;
+mod dump;
+mod editor_session;
+mod filter;
+mod flight;
+mod identity_insert;
+mod liveness;
+#[cfg(unix)]
+mod local_socket;
+mod metadata;
+mod paging;
+mod pgbouncer;
+mod read_only;
+mod round_trip;
+mod slow_route;
+mod support;
+mod tls;
+mod value_corpus;
+mod wire_round_trips;
+mod write_batch;

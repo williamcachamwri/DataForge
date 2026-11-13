@@ -1,0 +1,658 @@
+use std::sync::Arc;
+use std::time::Duration;
+
+use tablepro_core::column::ResultColumn;
+use tablepro_core::{
+    DriverError, ErrorCategory, LossPhase, ResultEvent, ResultSink, RowBatch, RowLimit, RunEnd, RunOptions, RunSummary,
+    SinkFlow, TimeoutPhase, TransactionState, Truncation, UserSql, Value,
+};
+use tokio::time::Instant;
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
+use crate::call_client::whole_seconds;
+use crate::cancel::{acknowledges_stop, kill_query, wait_until_ended};
+use crate::client_factory::{MAX_EXECUTION_TIME, TIMEOUT_OVERFLOW_MODE};
+use crate::errors::{code, server_code};
+use crate::lingering_query::LingeringQuery;
+use crate::result_origin::{TracedTable, source, traced_table, with_origins};
+use crate::result_reader::{ReadEvent, ResultReader};
+
+/// Why a run stopped before its statement did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Interrupt {
+    Cancelled,
+    DeadlineElapsed,
+    /// The sink said nobody is reading any more.
+    ConsumerGone,
+}
+
+/// One run of user SQL on an editor session's client.
+pub(crate) struct EditorRun {
+    pub(crate) session: clickhouse::Client,
+    pub(crate) control: clickhouse::Client,
+    pub(crate) statement_timeout: Option<Duration>,
+    // Whether the login may set the bound; the run's own deadline holds it to it either way.
+    pub(crate) bounds_on_server: bool,
+    pub(crate) grace: Duration,
+    pub(crate) shutdown: CancellationToken,
+    pub(crate) lingering: Arc<LingeringQuery>,
+}
+
+/// What a run ended with, or the session being gone.
+pub(crate) type RunOutcome = Result<RunSummary, DriverError>;
+
+impl EditorRun {
+    // A stop sends KILL QUERY and keeps reading, because the server answers the KILL by ending the response; only a
+    // server that has not answered within the grace is cut off.
+    pub(crate) async fn run(self, sql: UserSql, options: RunOptions, sink: Box<dyn ResultSink>) -> RunOutcome {
+        let started = Instant::now();
+        if sql.is_empty() {
+            return Ok(summary(started, RunEnd::Completed));
+        }
+        let bound = match (options.deadline, self.statement_timeout) {
+            (Some(run), Some(statement)) => Some(run.min(statement)),
+            (run, statement) => run.or(statement),
+        };
+        let deadline = bound.map(|bound| started + bound);
+        let mut stop = Stop::new(options.cancel, self.shutdown.clone(), deadline, self.grace);
+        let previous = self.lingering.take();
+        if let Some(previous) = previous {
+            // A run with no deadline gives up at the cancel grace, so a
+            // stopped query that never ends cannot hold it for good; a
+            // session still locked then refuses it with 373.
+            let give_up = deadline.is_none().then(|| started + self.grace);
+            if let Some(interrupt) = self.wait_for_stopped(previous, &stop, give_up).await {
+                return Ok(summary(started, unsent(interrupt)));
+            }
+        }
+        let traced = match self.trace(&sql, &mut stop).await {
+            Ok(traced) => traced,
+            Err(interrupt) => return Ok(summary(started, unsent(interrupt))),
+        };
+        let query_id = Uuid::new_v4();
+        let mut reader = match self.open(&sql, query_id, bound) {
+            Ok(reader) => reader,
+            Err(error) => return Ok(summary(started, RunEnd::Failed(error))),
+        };
+        let mut emitter = Emitter::new(sink, options.row_limit);
+        let end = loop {
+            let event = tokio::select! {
+                biased;
+                event = reader.next_event() => event,
+                interrupt = stop.triggered(), if stop.fired.is_none() => {
+                    self.fire(&mut stop, interrupt, query_id);
+                    continue;
+                }
+                () = stop.gave_up(), if stop.fired.is_some() => {
+                    break stop.end(None);
+                }
+            };
+            match event {
+                Ok(ReadEvent::Columns(columns)) => emitter.start(with_origins(traced.as_ref(), columns)).await,
+                Ok(ReadEvent::Row(row)) => {
+                    if emitter.row(row).await {
+                        emitter.limit_reached().await;
+                        // The rest of the result is not wanted, so the read
+                        // stops on the server before its body is dropped.
+                        self.kill(query_id).await;
+                        break stop.fired.map_or(RunEnd::Completed, |_| stop.end(None));
+                    }
+                }
+                Ok(ReadEvent::End) => {
+                    self.lingering.ended(query_id);
+                    emitter.finish(reader.has_result_set(), reader.written_rows()).await;
+                    break stop.fired.map_or(RunEnd::Completed, |_| stop.end(None));
+                }
+                // The server refused the query because the session still
+                // runs one it stopped, which the wait above did not see
+                // end, so this one never started.
+                Err(error) if server_code(&error) == Some(code::SESSION_IS_LOCKED) => {
+                    if let Some(previous) = previous {
+                        self.lingering.left(previous);
+                    }
+                    return Err(DriverError::EditorSessionBusy);
+                }
+                Err(error) if stop.fired.is_some() => {
+                    if ended_on_server(&error) {
+                        self.lingering.ended(query_id);
+                    }
+                    break stop.end(Some(&error));
+                }
+                Err(error) if lost(&error) => {
+                    return Err(DriverError::ConnectionLost {
+                        during: LossPhase::Statement,
+                    });
+                }
+                // The server let the session expire, and with it what the
+                // tab built up there; carrying on in a new one would hide
+                // that.
+                Err(error) if server_code(&error) == Some(code::SESSION_NOT_FOUND) => {
+                    return Err(DriverError::ConnectionLost {
+                        during: LossPhase::Idle,
+                    });
+                }
+                Err(DriverError::Timeout {
+                    phase: TimeoutPhase::Statement,
+                    server_cancelled,
+                }) => break RunEnd::TimedOut { server_cancelled },
+                Err(error) if unreadable(&error) => {
+                    // The server is still sending what the driver could not
+                    // read, so the query is stopped there before its body
+                    // is dropped.
+                    self.kill(query_id).await;
+                    break RunEnd::Failed(error);
+                }
+                Err(error) => break RunEnd::Failed(error),
+            }
+            if emitter.consumer_gone && stop.fired.is_none() {
+                self.fire(&mut stop, Interrupt::ConsumerGone, query_id);
+            }
+        };
+        Ok(summary(started, end))
+    }
+
+    /// Wait for the query an earlier run stopped to end. The wait is the
+    /// run's own, under its stop and its deadline, so it is as long as
+    /// the server takes and no longer than the user lets it. `Some` when
+    /// the run is stopped first.
+    async fn wait_for_stopped(&self, previous: Uuid, stop: &Stop, give_up: Option<Instant>) -> Option<Interrupt> {
+        tokio::select! {
+            interrupt = stop.triggered() => {
+                self.lingering.left(previous);
+                return Some(interrupt);
+            }
+            ended = wait_until_ended(&self.control, previous) => {
+                if let Err(error) = ended {
+                    tracing::debug!(%error, "waiting for a stopped editor query to end failed");
+                }
+            }
+            () = reached(give_up) => {
+                tracing::debug!("a stopped editor query did not end within the cancel grace");
+            }
+        }
+        None
+    }
+
+    // A lookup the stop cuts short may still hold the session, so the next run waits for it as for a stopped statement.
+    async fn trace(&self, sql: &UserSql, stop: &mut Stop) -> Result<Option<TracedTable>, Interrupt> {
+        let Some(statement) = source(sql.as_str()) else {
+            return Ok(None);
+        };
+        let lookup_id = Uuid::new_v4();
+        tokio::select! {
+            biased;
+            interrupt = stop.triggered() => {
+                self.fire(stop, interrupt, lookup_id);
+                Err(interrupt)
+            }
+            traced = traced_table(&self.session, statement, lookup_id) => Ok(traced),
+        }
+    }
+
+    fn open(&self, sql: &UserSql, query_id: Uuid, bound: Option<Duration>) -> Result<ResultReader, DriverError> {
+        let mut query = self
+            .session
+            .query_raw(sql.as_str())
+            .with_setting("query_id", query_id.to_string());
+        if bound.is_some() && self.bounds_on_server {
+            query = query
+                .with_setting(MAX_EXECUTION_TIME, whole_seconds(bound).to_string())
+                .with_setting(TIMEOUT_OVERFLOW_MODE, "throw");
+        }
+        ResultReader::open(query)
+    }
+
+    /// The server may still be ending a query told to stop when the run
+    /// gives up its response, so the next run waits for it unless the
+    /// response reached its end.
+    fn fire(&self, stop: &mut Stop, interrupt: Interrupt, query_id: Uuid) {
+        self.lingering.left(query_id);
+        stop.fire(interrupt, &self.control, query_id);
+    }
+
+    async fn kill(&self, query_id: Uuid) {
+        self.lingering.left(query_id);
+        kill_within(&self.control, query_id, self.grace).await;
+    }
+}
+
+/// How a run stopped before its query went out ends.
+fn unsent(interrupt: Interrupt) -> RunEnd {
+    match interrupt {
+        Interrupt::DeadlineElapsed => RunEnd::TimedOut {
+            server_cancelled: false,
+        },
+        Interrupt::Cancelled | Interrupt::ConsumerGone => RunEnd::Cancelled,
+    }
+}
+
+fn summary(started: Instant, end: RunEnd) -> RunSummary {
+    RunSummary {
+        elapsed: started.elapsed(),
+        end,
+        // ClickHouse has no transaction an editor statement can leave
+        // open.
+        transaction_state: TransactionState::Idle,
+    }
+}
+
+/// A failure of the route rather than of the statement.
+fn lost(error: &DriverError) -> bool {
+    matches!(
+        error.category(),
+        ErrorCategory::Network | ErrorCategory::ConnectionLost | ErrorCategory::Tls
+    )
+}
+
+/// An error the server answered with, which ends the query along with
+/// the response.
+fn ended_on_server(error: &DriverError) -> bool {
+    server_code(error).is_some()
+        || matches!(
+            error,
+            DriverError::Timeout {
+                server_cancelled: true,
+                ..
+            }
+        )
+}
+
+/// A body the driver gave up reading, while the server may still be
+/// producing it.
+fn unreadable(error: &DriverError) -> bool {
+    matches!(error, DriverError::Protocol(_) | DriverError::Decode { .. })
+}
+
+/// A KILL that gives up after `grace`: on a route that stopped
+/// answering, it would otherwise wait, and hold its connection, for good.
+async fn kill_within(control: &clickhouse::Client, query_id: Uuid, grace: Duration) {
+    match tokio::time::timeout(grace, kill_query(control, query_id)).await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::debug!(%error, "the KILL QUERY for an editor run failed"),
+        Err(_) => tracing::debug!("the KILL QUERY for an editor run got no answer"),
+    }
+}
+
+/// Ends at `at`, or never without one.
+async fn reached(at: Option<Instant>) {
+    match at {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
+    }
+}
+
+/// What stops a run, and when the stop was sent.
+struct Stop {
+    cancel: CancellationToken,
+    shutdown: CancellationToken,
+    deadline: Option<Instant>,
+    grace: Duration,
+    fired: Option<Interrupt>,
+    give_up: Option<Instant>,
+}
+
+impl Stop {
+    fn new(cancel: CancellationToken, shutdown: CancellationToken, deadline: Option<Instant>, grace: Duration) -> Self {
+        Self {
+            cancel,
+            shutdown,
+            deadline,
+            grace,
+            fired: None,
+            give_up: None,
+        }
+    }
+
+    async fn triggered(&self) -> Interrupt {
+        tokio::select! {
+            () = self.cancel.cancelled() => Interrupt::Cancelled,
+            () = self.shutdown.cancelled() => Interrupt::Cancelled,
+            () = reached(self.deadline) => Interrupt::DeadlineElapsed,
+        }
+    }
+
+    /// Record the stop and send the KILL on a task of its own, so the run
+    /// keeps reading the answer it brings.
+    fn fire(&mut self, interrupt: Interrupt, control: &clickhouse::Client, query_id: Uuid) {
+        self.fired = Some(interrupt);
+        self.give_up = Some(Instant::now() + self.grace);
+        let control = control.clone();
+        let grace = self.grace;
+        tokio::spawn(async move { kill_within(&control, query_id, grace).await });
+    }
+
+    async fn gave_up(&self) {
+        reached(self.give_up).await;
+    }
+
+    /// How a stopped run ends. The server's 394 or its own timeout is the
+    /// acknowledgement; anything else was the statement's own end.
+    fn end(&self, error: Option<&DriverError>) -> RunEnd {
+        match self.fired {
+            Some(Interrupt::DeadlineElapsed) => RunEnd::TimedOut {
+                server_cancelled: error.is_some_and(|error| {
+                    acknowledges_stop(error)
+                        || matches!(
+                            error,
+                            DriverError::Timeout {
+                                server_cancelled: true,
+                                ..
+                            }
+                        )
+                }),
+            },
+            Some(Interrupt::Cancelled | Interrupt::ConsumerGone) | None => RunEnd::Cancelled,
+        }
+    }
+}
+
+/// The run's events, batched, with the row limit applied.
+struct Emitter {
+    sink: Box<dyn ResultSink>,
+    limit: RowLimit,
+    batch: RowBatch,
+    retained: u64,
+    consumer_gone: bool,
+}
+
+impl Emitter {
+    fn new(sink: Box<dyn ResultSink>, limit: RowLimit) -> Self {
+        Self {
+            sink,
+            limit,
+            batch: RowBatch::new(),
+            retained: 0,
+            consumer_gone: false,
+        }
+    }
+
+    async fn start(&mut self, columns: Arc<[ResultColumn]>) {
+        self.send(ResultEvent::ResultSetStarted { columns }).await;
+    }
+
+    /// Keep a row, or say the limit was passed: the row past the limit is
+    /// the proof there were more.
+    async fn row(&mut self, row: Vec<Value>) -> bool {
+        if self.retained >= self.limit.get() {
+            return true;
+        }
+        let full = self.batch.push(row);
+        self.retained += 1;
+        if full {
+            self.flush().await;
+        }
+        false
+    }
+
+    async fn limit_reached(&mut self) {
+        self.flush().await;
+        self.send(ResultEvent::RowLimitReached {
+            retained: self.retained,
+        })
+        .await;
+        self.send(ResultEvent::ResultSetFinished {
+            retained: self.retained,
+            total_rows: None,
+            truncation: Truncation::ReadPastLimit,
+        })
+        .await;
+    }
+
+    async fn finish(&mut self, result_set: bool, written_rows: Option<u64>) {
+        if !result_set {
+            self.send(ResultEvent::CommandCompleted {
+                rows_affected: written_rows.filter(|rows| *rows > 0),
+            })
+            .await;
+            return;
+        }
+        self.flush().await;
+        self.send(ResultEvent::ResultSetFinished {
+            retained: self.retained,
+            total_rows: Some(self.retained),
+            truncation: Truncation::Complete,
+        })
+        .await;
+    }
+
+    async fn flush(&mut self) {
+        if self.batch.is_empty() {
+            return;
+        }
+        let rows = self.batch.take();
+        self.send(ResultEvent::Rows(rows)).await;
+    }
+
+    async fn send(&mut self, event: ResultEvent) {
+        if self.consumer_gone {
+            return;
+        }
+        if self.sink.accept(event).await == SinkFlow::ConsumerGone {
+            self.consumer_gone = true;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Mutex, PoisonError};
+
+    use async_trait::async_trait;
+    use tablepro_core::{ServerCode, ServerDiagnostics};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::task::JoinHandle;
+
+    use super::*;
+
+    // Answers each request with an empty result and keeps the request's head.
+    async fn recording_route() -> (String, Arc<Mutex<Vec<String>>>, JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("a listener");
+        let address = listener.local_addr().expect("an address");
+        let heads = Arc::new(Mutex::new(Vec::new()));
+        let kept = heads.clone();
+        let answering = tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut request = Vec::new();
+                let mut chunk = [0; 4096];
+                while !request.windows(4).any(|end| end == b"\r\n\r\n") {
+                    match socket.read(&mut chunk).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(read) => request.extend_from_slice(&chunk[..read]),
+                    }
+                }
+                kept.lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .push(String::from_utf8_lossy(&request).into_owned());
+                let answer = b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+                let _ = socket.write_all(answer).await;
+            }
+        });
+        (format!("http://{address}"), heads, answering)
+    }
+
+    /// A route that takes every request and never answers one.
+    async fn silent_route() -> (clickhouse::Client, JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("a listener");
+        let address = listener.local_addr().expect("an address");
+        let silent = tokio::spawn(async move {
+            let mut held = Vec::new();
+            while let Ok((socket, _)) = listener.accept().await {
+                held.push(socket);
+            }
+        });
+        (
+            clickhouse::Client::default().with_url(format!("http://{address}")),
+            silent,
+        )
+    }
+
+    /// A port nothing listens on, so a request is refused at once.
+    async fn closed_route() -> clickhouse::Client {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("a listener");
+        let address = listener.local_addr().expect("an address");
+        drop(listener);
+        clickhouse::Client::default().with_url(format!("http://{address}"))
+    }
+
+    struct Discard;
+
+    #[async_trait]
+    impl ResultSink for Discard {
+        async fn accept(&mut self, _event: ResultEvent) -> SinkFlow {
+            SinkFlow::Continue
+        }
+    }
+
+    #[tokio::test]
+    async fn a_kill_the_server_never_answers_gives_up_at_the_grace() {
+        let (control, silent) = silent_route().await;
+
+        let killing = kill_within(&control, Uuid::new_v4(), Duration::from_millis(200));
+
+        assert!(
+            tokio::time::timeout(Duration::from_secs(10), killing).await.is_ok(),
+            "the KILL waited on a server that never answered"
+        );
+        silent.abort();
+    }
+
+    /// The control route never answers the `KILL ... SYNC`, and the run has
+    /// no deadline, so only the grace ends the wait. The statement then
+    /// goes out, to a session route that refuses it.
+    #[tokio::test]
+    async fn a_run_without_a_deadline_stops_waiting_for_a_stopped_query_at_the_grace() {
+        let (control, silent) = silent_route().await;
+        let lingering = Arc::new(LingeringQuery::default());
+        lingering.left(Uuid::new_v4());
+        let run = EditorRun {
+            session: closed_route().await,
+            control,
+            statement_timeout: None,
+            bounds_on_server: true,
+            grace: Duration::from_millis(200),
+            shutdown: CancellationToken::new(),
+            lingering,
+        };
+
+        let running = run.run(
+            UserSql::new("SELECT 1"),
+            RunOptions::new(CancellationToken::new()),
+            Box::new(Discard),
+        );
+        let outcome = tokio::time::timeout(Duration::from_secs(10), running).await;
+
+        assert_eq!(
+            outcome.map(|ran| ran.map(|summary| summary.end)),
+            Ok(Err(DriverError::ConnectionLost {
+                during: LossPhase::Statement
+            })),
+            "the run waited past the grace for a query the server never ended"
+        );
+        silent.abort();
+    }
+
+    #[tokio::test]
+    async fn a_run_bound_the_login_may_not_set_goes_out_without_it() {
+        let (url, heads, answering) = recording_route().await;
+        for bounds_on_server in [false, true] {
+            let run = EditorRun {
+                session: clickhouse::Client::default().with_url(url.clone()),
+                control: closed_route().await,
+                statement_timeout: None,
+                bounds_on_server,
+                grace: Duration::from_millis(200),
+                shutdown: CancellationToken::new(),
+                lingering: Arc::new(LingeringQuery::default()),
+            };
+            let mut reader = run
+                .open(&UserSql::new("SELECT 1"), Uuid::new_v4(), Some(Duration::from_secs(3)))
+                .expect("a request");
+            assert!(matches!(reader.next_event().await, Ok(ReadEvent::End)));
+        }
+
+        let heads = heads.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        let bounded: Vec<bool> = heads
+            .iter()
+            .map(|head| head.contains("max_execution_time=") || head.contains("timeout_overflow_mode="))
+            .collect();
+        assert_eq!(bounded, vec![false, true]);
+        answering.abort();
+    }
+
+    #[test]
+    fn only_a_body_the_driver_could_not_read_is_killed_after_it_fails() {
+        let refused = DriverError::reported(ServerDiagnostics::new(
+            Some(ServerCode::ClickHouse { code: 62 }),
+            "Code: 62. DB::Exception: Syntax error",
+        ));
+
+        assert!(unreadable(&DriverError::Protocol("a row ran past 256 MiB".to_owned())));
+        assert!(unreadable(&DriverError::Decode {
+            column: "c".to_owned(),
+            detail: "not a number".to_owned(),
+        }));
+        assert!(!unreadable(&refused));
+    }
+
+    #[test]
+    fn only_an_answer_from_the_server_frees_the_session_of_a_stopped_query() {
+        let killed = DriverError::reported(ServerDiagnostics::new(
+            Some(ServerCode::ClickHouse { code: 394 }),
+            "Code: 394. DB::Exception: Query was cancelled",
+        ));
+
+        assert!(ended_on_server(&killed));
+        assert!(ended_on_server(&DriverError::Timeout {
+            phase: TimeoutPhase::Statement,
+            server_cancelled: true,
+        }));
+        assert!(!ended_on_server(&DriverError::Timeout {
+            phase: TimeoutPhase::Statement,
+            server_cancelled: false,
+        }));
+        assert!(!ended_on_server(&DriverError::Protocol(
+            "a row ran past 256 MiB".to_owned()
+        )));
+    }
+
+    fn stopped(interrupt: Interrupt) -> Stop {
+        let mut stop = Stop::new(
+            CancellationToken::new(),
+            CancellationToken::new(),
+            None,
+            Duration::from_secs(1),
+        );
+        stop.fired = Some(interrupt);
+        stop
+    }
+
+    #[test]
+    fn a_stopped_run_ends_by_what_stopped_it() {
+        let killed = DriverError::reported(ServerDiagnostics::new(
+            Some(ServerCode::ClickHouse { code: 394 }),
+            "Code: 394. DB::Exception: Query was cancelled",
+        ));
+        let timed_out = DriverError::Timeout {
+            phase: TimeoutPhase::Statement,
+            server_cancelled: true,
+        };
+
+        assert_eq!(stopped(Interrupt::Cancelled).end(Some(&killed)), RunEnd::Cancelled);
+        assert_eq!(stopped(Interrupt::ConsumerGone).end(None), RunEnd::Cancelled);
+        assert_eq!(
+            stopped(Interrupt::DeadlineElapsed).end(Some(&killed)),
+            RunEnd::TimedOut { server_cancelled: true }
+        );
+        assert_eq!(
+            stopped(Interrupt::DeadlineElapsed).end(Some(&timed_out)),
+            RunEnd::TimedOut { server_cancelled: true }
+        );
+        assert_eq!(
+            stopped(Interrupt::DeadlineElapsed).end(None),
+            RunEnd::TimedOut {
+                server_cancelled: false
+            }
+        );
+    }
+}

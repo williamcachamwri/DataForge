@@ -1,0 +1,541 @@
+//! Where an editor session stands with a transaction, asked of the
+//! server: MariaDB's @@in_transaction, MySQL's performance_schema. And
+//! what a run does when its reader goes away.
+
+use std::time::Duration;
+
+use tablepro_core::column::ColumnOrigin;
+use tablepro_core::{
+    CallOptions, EditorSession, EditorSessionState, ResultEvent, RowLimit, RunEnd, RunOptions, RunSummary, TableRef,
+    TransactionState, Truncation, UserSql,
+};
+use tablepro_test_fixtures::MysqlFlavour;
+use tokio_util::sync::CancellationToken;
+
+use crate::support::{
+    CALL, EventSink, Events, FLAVOURS, connect, connect_root, count, rows, run_ok, run_with, session, session_scalar,
+    setup, start, text, within,
+};
+
+/// A thousand rows, which the server has long finished sending when the
+/// reader leaves at the first of them, then a DELETE that must never
+/// reach it.
+const ROWS_THEN_DELETE: &str = "WITH d AS (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 \
+     UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 \
+     UNION ALL SELECT 9) \
+     SELECT a.n FROM d a, d b, d c; \
+     DELETE FROM t";
+
+async fn state_after(session: &dyn EditorSession, sql: &str) -> TransactionState {
+    let (summary, _) = crate::support::run(session, sql).await;
+    summary.transaction_state
+}
+
+fn options() -> CallOptions {
+    within(CALL)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn transaction_state_mariadb_in_transaction() {
+    let fixture = start(MysqlFlavour::Mariadb).await;
+    let connection = connect(&fixture, false).await;
+    let editor = session(connection.as_ref()).await;
+
+    assert_eq!(state_after(editor.as_ref(), "SELECT 1").await, TransactionState::Idle);
+    assert_eq!(
+        state_after(editor.as_ref(), "BEGIN").await,
+        TransactionState::InTransaction
+    );
+    assert_eq!(
+        editor.transaction_state(options()).await,
+        Ok(TransactionState::InTransaction)
+    );
+    assert_eq!(state_after(editor.as_ref(), "COMMIT").await, TransactionState::Idle);
+    editor.close().await;
+    connection.close().await.expect("a close");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn mysql_root_in_transaction() {
+    let fixture = start(MysqlFlavour::Mysql).await;
+    let connection = connect_root(&fixture).await;
+    let editor = session(connection.as_ref()).await;
+    run_ok(editor.as_ref(), "CREATE TABLE t (id int PRIMARY KEY)").await;
+
+    assert_eq!(state_after(editor.as_ref(), "SELECT 1").await, TransactionState::Idle);
+    assert_eq!(
+        state_after(editor.as_ref(), "BEGIN; INSERT INTO t VALUES (1)").await,
+        TransactionState::InTransaction
+    );
+    assert_eq!(
+        editor.transaction_state(options()).await,
+        Ok(TransactionState::InTransaction)
+    );
+    assert_eq!(state_after(editor.as_ref(), "ROLLBACK").await, TransactionState::Idle);
+    editor.close().await;
+    connection.close().await.expect("a close");
+}
+
+/// A login that cannot read performance_schema gets Unknown, never a
+/// guess, and its runs still complete.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn mysql_user_without_ps_select_unknown() {
+    let fixture = start(MysqlFlavour::Mysql).await;
+    let connection = connect(&fixture, false).await;
+    let editor = session(connection.as_ref()).await;
+
+    assert_eq!(state_after(editor.as_ref(), "BEGIN").await, TransactionState::Unknown);
+    assert_eq!(editor.transaction_state(options()).await, Ok(TransactionState::Unknown));
+    run_ok(editor.as_ref(), "COMMIT").await;
+    editor.close().await;
+    connection.close().await.expect("a close");
+}
+
+async fn until_gone(editor: &dyn EditorSession, options: RunOptions) -> RunSummary {
+    let events = Events::default();
+    editor
+        .run(
+            UserSql::new(ROWS_THEN_DELETE),
+            options,
+            Box::new(EventSink::new(&events).gone_after(1)),
+        )
+        .await
+        .expect("the run")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn consumer_gone_sends_nothing_after_the_running_statement() {
+    for flavour in FLAVOURS {
+        let fixture = start(flavour).await;
+        let connection = connect(&fixture, false).await;
+        setup(
+            connection.as_ref(),
+            &["CREATE TABLE t (id int PRIMARY KEY)", "INSERT INTO t VALUES (1)"],
+        )
+        .await;
+        let editor = session(connection.as_ref()).await;
+
+        let gone = until_gone(editor.as_ref(), RunOptions::new(CancellationToken::new())).await;
+        assert_eq!(editor.state(), EditorSessionState::Ready, "{flavour:?}");
+        // A killed SLEEP returns 1 with no error, so its statement ends
+        // as if nothing had stopped it.
+        let stopped = stopped_after(editor.as_ref(), "SELECT SLEEP(30); DELETE FROM t").await;
+
+        assert_eq!(gone.end, RunEnd::Cancelled, "{flavour:?}");
+        assert_eq!(stopped, RunEnd::Cancelled, "{flavour:?}");
+        assert_eq!(editor.state(), EditorSessionState::Ready, "{flavour:?}");
+        run_ok(editor.as_ref(), "SELECT 1").await;
+        assert_eq!(
+            count(connection.as_ref(), "SELECT COUNT(*) FROM t").await,
+            1,
+            "{flavour:?}"
+        );
+        editor.close().await;
+        connection.close().await.expect("a close");
+    }
+}
+
+/// Stop `sql` half a second in, as the Stop button does.
+async fn stopped_after(editor: &dyn EditorSession, sql: &str) -> RunEnd {
+    let cancel = CancellationToken::new();
+    let cancelling = {
+        let cancel = cancel.clone();
+        async move {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            cancel.cancel();
+        }
+    };
+    let ((summary, _), ()) = tokio::join!(run_with(editor, sql, RunOptions::new(cancel)), cancelling);
+    summary.end
+}
+
+/// The login is locked once the session is open, so the KILL's own
+/// connection is refused: only the statements left unsent keep the row.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn a_stop_whose_kill_is_refused_sends_nothing_after_the_running_statement() {
+    for flavour in FLAVOURS {
+        let fixture = start(flavour).await;
+        let root = connect_root(&fixture).await;
+        let admin = session(root.as_ref()).await;
+        let connection = connect(&fixture, false).await;
+        setup(
+            connection.as_ref(),
+            &["CREATE TABLE t (id int PRIMARY KEY)", "INSERT INTO t VALUES (1)"],
+        )
+        .await;
+        let gone = session(connection.as_ref()).await;
+        let late = session(connection.as_ref()).await;
+        run_ok(admin.as_ref(), "ALTER USER 'tablepro'@'%' ACCOUNT LOCK").await;
+
+        let summary = until_gone(gone.as_ref(), RunOptions::new(CancellationToken::new())).await;
+        let timed_out = run_with(
+            late.as_ref(),
+            "SELECT 1 FROM DUAL WHERE SLEEP(3) = 0; DELETE FROM t",
+            RunOptions::new(CancellationToken::new()).with_deadline(Some(Duration::from_millis(200))),
+        )
+        .await
+        .0;
+
+        assert_eq!(summary.end, RunEnd::Cancelled, "{flavour:?}");
+        assert_eq!(
+            timed_out.end,
+            RunEnd::TimedOut {
+                server_cancelled: false
+            },
+            "{flavour:?}"
+        );
+        assert_eq!(count(root.as_ref(), "SELECT COUNT(*) FROM t").await, 1, "{flavour:?}");
+        run_ok(admin.as_ref(), "ALTER USER 'tablepro'@'%' ACCOUNT UNLOCK").await;
+        for editor in [gone, late, admin] {
+            editor.close().await;
+        }
+        connection.close().await.expect("a close");
+        root.close().await.expect("a close");
+    }
+}
+
+/// The server closes the KILL's own connection between two stops, as its
+/// wait_timeout does to an idle one: the second stop still lands.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn a_stop_lands_after_the_server_closed_the_kill_connection() {
+    for flavour in FLAVOURS {
+        let fixture = start(flavour).await;
+        let root = connect_root(&fixture).await;
+        let admin = session(root.as_ref()).await;
+        let connection = connect(&fixture, false).await;
+        let editor = session(connection.as_ref()).await;
+        let editor_id = session_scalar(editor.as_ref(), "SELECT CONNECTION_ID()").await;
+        let sleeping = "SELECT 1 FROM DUAL WHERE SLEEP(30) = 0";
+        assert_eq!(stopped_after(editor.as_ref(), sleeping).await, RunEnd::Cancelled);
+        let others =
+            format!("SELECT ID FROM information_schema.PROCESSLIST WHERE USER = 'tablepro' AND ID <> {editor_id}");
+        for row in rows(root.as_ref(), &others).await {
+            let id = row.first().map(text).expect("an id");
+            run_ok(admin.as_ref(), &format!("KILL CONNECTION {id}")).await;
+        }
+
+        let end = stopped_after(editor.as_ref(), sleeping).await;
+
+        assert_eq!(end, RunEnd::Cancelled, "{flavour:?}");
+        assert_eq!(editor.state(), EditorSessionState::Ready, "{flavour:?}");
+        assert_eq!(session_scalar(editor.as_ref(), "SELECT 7").await, "7", "{flavour:?}");
+        for editor in [editor, admin] {
+            editor.close().await;
+        }
+        connection.close().await.expect("a close");
+        root.close().await.expect("a close");
+    }
+}
+
+/// A run's first statement is the row limit's SET, and a server that has
+/// stopped answering must not keep the run past its deadline there.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn a_deadline_reaches_a_run_still_setting_its_row_limit() {
+    let fixture = start(MysqlFlavour::Mysql).await;
+    let connection = connect(&fixture, false).await;
+    let editor = session(connection.as_ref()).await;
+    run_ok(editor.as_ref(), "SELECT 1").await;
+    fixture.container().pause().await.expect("a paused server");
+    let options = RunOptions::new(CancellationToken::new())
+        .with_row_limit(RowLimit::new(5).expect("a limit"))
+        .with_deadline(Some(Duration::from_millis(300)));
+
+    let returned = tokio::time::timeout(Duration::from_secs(10), run_with(editor.as_ref(), "SELECT 1", options)).await;
+    fixture.container().unpause().await.expect("a running server");
+
+    let (summary, _) = returned.expect("the run returned while the server was paused");
+    assert_eq!(
+        summary.end,
+        RunEnd::TimedOut {
+            server_cancelled: false
+        }
+    );
+    assert_eq!(editor.state(), EditorSessionState::Lost);
+    editor.close().await;
+    connection.close().await.expect("a close");
+}
+
+/// The session says where a `USE` left it, so the editor bar can follow.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn a_use_moves_the_session_and_it_says_where() {
+    for flavour in FLAVOURS {
+        let fixture = start(flavour).await;
+        let root = connect_root(&fixture).await;
+        let grant = format!(
+            "GRANT ALL ON analytics.* TO '{}'@'%'",
+            fixture.password_credentials().username
+        );
+        setup(
+            root.as_ref(),
+            &["CREATE DATABASE IF NOT EXISTS analytics", grant.as_str()],
+        )
+        .await;
+        root.close().await.expect("a close");
+        let connection = connect(&fixture, false).await;
+        let editor = session(connection.as_ref()).await;
+
+        run_ok(editor.as_ref(), "SELECT 1").await;
+        assert_eq!(editor.database(), None, "{flavour:?}: no USE ran");
+        run_ok(editor.as_ref(), "USE analytics").await;
+        assert_eq!(editor.database().as_deref(), Some("analytics"), "{flavour:?}");
+        editor.close().await;
+        connection.close().await.expect("a close");
+    }
+}
+
+fn started_columns(events: &Events) -> Vec<Vec<String>> {
+    events
+        .all()
+        .into_iter()
+        .filter_map(|event| match event {
+            ResultEvent::ResultSetStarted { columns } => {
+                Some(columns.iter().map(|column| column.name.clone()).collect())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+// sqlx gives an empty set as its OK alone, with no columns.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn a_read_that_finds_no_rows_is_a_set_with_its_columns() {
+    for flavour in FLAVOURS {
+        let fixture = start(flavour).await;
+        let connection = connect(&fixture, false).await;
+        setup(
+            connection.as_ref(),
+            &[
+                "CREATE TABLE t (id int PRIMARY KEY, name varchar(20))",
+                "INSERT INTO t VALUES (1, 'a')",
+            ],
+        )
+        .await;
+        let editor = session(connection.as_ref()).await;
+
+        let no_rows = (0, Some(0), Truncation::Complete);
+
+        let empty = run_ok(editor.as_ref(), "SELECT id, name FROM t WHERE id = -1").await;
+        assert_eq!(started_columns(&empty), [["id", "name"]], "{flavour:?}");
+        assert_eq!(empty.finished(), [no_rows], "{flavour:?}");
+        assert!(empty.affected().is_empty(), "{flavour:?}");
+
+        let both = run_ok(editor.as_ref(), "SELECT name FROM t WHERE id = -1; SELECT id FROM t").await;
+        assert_eq!(started_columns(&both), [["name"], ["id"]], "{flavour:?}");
+        assert_eq!(
+            both.finished(),
+            [no_rows, (1, Some(1), Truncation::Complete)],
+            "{flavour:?}"
+        );
+
+        let into = run_ok(editor.as_ref(), "SELECT COUNT(*) INTO @rows FROM t").await;
+        assert_eq!(into.started(), 0, "{flavour:?}: a statement that sends no rows");
+        assert_eq!(into.affected().len(), 1, "{flavour:?}");
+
+        let written = run_ok(editor.as_ref(), "INSERT INTO t VALUES (2, 'b')").await;
+        assert_eq!(written.started(), 0, "{flavour:?}");
+        assert_eq!(written.affected(), [Some(1)], "{flavour:?}");
+        editor.close().await;
+        connection.close().await.expect("a close");
+    }
+}
+
+fn warning_codes(events: &Events) -> Vec<String> {
+    events.rows().iter().filter_map(|row| row.get(1)).map(text).collect()
+}
+
+// Nothing goes between two statements of a run: a SET or a prepare there resets ROW_COUNT() or the warnings.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn a_run_keeps_row_count_and_warnings_between_its_statements() {
+    for flavour in FLAVOURS {
+        let fixture = start(flavour).await;
+        let connection = connect(&fixture, false).await;
+        setup(
+            connection.as_ref(),
+            &[
+                "CREATE TABLE w (id int PRIMARY KEY, code varchar(2))",
+                "INSERT INTO w VALUES (1, 'a'), (2, 'b'), (3, 'c')",
+            ],
+        )
+        .await;
+        let editor = session(connection.as_ref()).await;
+
+        let counted = run_ok(
+            editor.as_ref(),
+            "UPDATE w SET code = 'z' WHERE id < 3; SELECT ROW_COUNT()",
+        )
+        .await;
+        let truncated = run_ok(
+            editor.as_ref(),
+            "INSERT IGNORE INTO w VALUES (4, 'long'); SHOW WARNINGS",
+        )
+        .await;
+        let no_data = run_ok(editor.as_ref(), "SELECT id INTO @x FROM w WHERE id = -1; SHOW WARNINGS").await;
+
+        assert_eq!(
+            counted.rows().first().and_then(|row| row.first()).map(text),
+            Some("2".to_owned()),
+            "{flavour:?}"
+        );
+        assert!(warning_codes(&truncated).contains(&"1265".to_owned()), "{flavour:?}");
+        assert!(warning_codes(&no_data).contains(&"1329".to_owned()), "{flavour:?}");
+        editor.close().await;
+        connection.close().await.expect("a close");
+    }
+}
+
+fn traced(schema: &str, table: &str, column: &str) -> Option<ColumnOrigin> {
+    Some(ColumnOrigin::new(TableRef::new(Some(schema.to_owned()), table), column))
+}
+
+// The first set's columns, as the last `ColumnsResolved` left them.
+fn origins_in(events: &Events) -> Vec<Option<ColumnOrigin>> {
+    let mut columns = None;
+    for event in events.all() {
+        match event {
+            ResultEvent::ResultSetStarted { columns: started } if columns.is_none() => columns = Some(started),
+            ResultEvent::ColumnsResolved {
+                set_index: 0,
+                columns: resolved,
+            } => columns = Some(resolved),
+            _ => {}
+        }
+    }
+    columns
+        .expect("a result set")
+        .iter()
+        .map(|column| column.origin.clone())
+        .collect()
+}
+
+async fn origins(editor: &dyn EditorSession, sql: &str) -> Vec<Option<ColumnOrigin>> {
+    origins_in(&run_ok(editor, sql).await)
+}
+
+// Root, so MySQL's performance_schema says where the transaction stands.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn only_a_plain_read_of_a_permanent_table_traces_its_columns() {
+    for flavour in FLAVOURS {
+        let fixture = start(flavour).await;
+        let root = connect_root(&fixture).await;
+        setup(
+            root.as_ref(),
+            &[
+                "CREATE TABLE t (id int PRIMARY KEY, a varchar(10), b int)",
+                "INSERT INTO t VALUES (1, 'x', 2)",
+                "CREATE VIEW v AS SELECT * FROM t",
+                "CREATE ALGORITHM = TEMPTABLE VIEW vt AS SELECT * FROM t",
+                "CREATE DATABASE IF NOT EXISTS other",
+                "CREATE TABLE other.w (id int PRIMARY KEY, c int)",
+                "INSERT INTO other.w VALUES (1, 3)",
+            ],
+        )
+        .await;
+        let editor = session(root.as_ref()).await;
+        let database = fixture.database();
+        let table = |column: &str| traced(database, "t", column);
+        let editor = editor.as_ref();
+
+        let plain = run_ok(editor, "SELECT * FROM t").await;
+        assert_eq!(
+            plain.started(),
+            1,
+            "{flavour:?}: the lookup's own result reached the run"
+        );
+        assert_eq!(plain.rows().len(), 1, "{flavour:?}");
+        assert!(
+            !plain.all().iter().any(|event| matches!(event, ResultEvent::Notice(_))),
+            "{flavour:?}"
+        );
+        assert_eq!(origins_in(&plain), [table("id"), table("a"), table("b")], "{flavour:?}");
+        assert_eq!(
+            origins(editor, "SELECT a AS x, id FROM t").await,
+            [table("a"), table("id")],
+            "{flavour:?}"
+        );
+        assert_eq!(
+            origins(editor, "SELECT * FROM t WHERE id = -1").await,
+            [table("id"), table("a"), table("b")],
+            "{flavour:?}: a read that finds no rows"
+        );
+        assert_eq!(
+            origins(editor, "SELECT id, b + 1 AS c FROM t").await,
+            [table("id"), None],
+            "{flavour:?}"
+        );
+        assert_eq!(
+            origins(editor, "SELECT * FROM v").await,
+            [None, None, None],
+            "{flavour:?}"
+        );
+        assert_eq!(
+            origins(editor, "SELECT * FROM vt").await,
+            [None, None, None],
+            "{flavour:?}"
+        );
+        assert_eq!(
+            origins(editor, "SELECT * FROM other.w").await,
+            [traced("other", "w", "id"), traced("other", "w", "c")],
+            "{flavour:?}"
+        );
+        assert_eq!(
+            origins(editor, "SELECT * FROM t; SELECT 1").await,
+            [None, None, None],
+            "{flavour:?}: a run of two statements"
+        );
+
+        run_ok(editor, "START TRANSACTION; INSERT INTO t VALUES (2, 'y', 3)").await;
+        let (inside, events) = crate::support::run(editor, "SELECT * FROM t").await;
+        assert_eq!(inside.transaction_state, TransactionState::InTransaction, "{flavour:?}");
+        assert_eq!(origins_in(&events), [None, None, None], "{flavour:?}");
+        run_ok(editor, "ROLLBACK").await;
+
+        run_ok(editor, "CREATE TEMPORARY TABLE tt (id int PRIMARY KEY)").await;
+        run_ok(editor, "INSERT INTO tt VALUES (1)").await;
+        assert_eq!(origins(editor, "SELECT * FROM tt").await, [None], "{flavour:?}");
+        run_ok(
+            editor,
+            "CREATE TEMPORARY TABLE t (id int PRIMARY KEY, a varchar(10), b int)",
+        )
+        .await;
+        run_ok(editor, "INSERT INTO t VALUES (1, 'x', 2)").await;
+        assert_eq!(
+            origins(editor, "SELECT * FROM t").await,
+            [None, None, None],
+            "{flavour:?}: a temporary table over t"
+        );
+        editor.close().await;
+        root.close().await.expect("a close");
+    }
+}
+
+// The host edits only rows read outside a transaction, so a session that cannot say is not traced.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires docker"]
+async fn mysql_user_without_ps_select_is_not_traced() {
+    let fixture = start(MysqlFlavour::Mysql).await;
+    let connection = connect(&fixture, false).await;
+    setup(
+        connection.as_ref(),
+        &["CREATE TABLE t (id int PRIMARY KEY)", "INSERT INTO t VALUES (1)"],
+    )
+    .await;
+    let editor = session(connection.as_ref()).await;
+
+    let (summary, events) = crate::support::run(editor.as_ref(), "SELECT * FROM t").await;
+
+    assert_eq!(summary.transaction_state, TransactionState::Unknown);
+    assert_eq!(origins_in(&events), [None]);
+    editor.close().await;
+    connection.close().await.expect("a close");
+}
