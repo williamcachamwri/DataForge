@@ -17,3 +17,13 @@ DataForge coordinates single-instance GUI launches and file/URL forwarding via W
 - **Mutex (`SingleInstanceLock`)**: Acquires `Local\DataForge-SingleInstance-Mutex` (`DEFAULT_MUTEX_NAME`) via `CreateMutexW`. If `ERROR_ALREADY_EXISTS` is returned, the secondary process forwards its CLI target to the primary instance and exits cleanly.
 - **Named Pipe (`NamedPipeServer` / `send_to_existing_instance`)**: Uses `\\.\pipe\DataForge-SingleInstance-IPC` (`DEFAULT_PIPE_NAME`) with `PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT` (`PIPE_BUFFER_BYTES = 4096`) to transmit JSON-serialized `ForwardPayload` messages.
 - **Target Validation**: `is_forwardable_target` accepts database file paths (`.sqlite`, `.sqlite3`, `.db`, `.duckdb`, `.ddb`) and supported connection URL schemes so arbitrary arguments are not forwarded blindly.
+
+## 3. Windows Registry Seams (`theme_detect.rs`, `machine_id.rs`)
+
+Registry keys are opened with `RegOpenKeyExW` and closed deterministically via `RegistryKey` RAII `Drop` guards:
+
+- **Theme & High-Contrast Detection (`detect_theme`)**:
+  1. Queries `SystemParametersInfoW(SPI_GETHIGHCONTRAST)` for `HCF_HIGHCONTRASTON` -> `WindowsTheme::HighContrast`.
+  2. Reads `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` (`REG_DWORD`) -> `WindowsTheme::Light` (`1`) or `WindowsTheme::Dark` (`0`).
+- **Machine Identity (`read_machine_id`)**:
+  - Reads `HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid` (`KEY_READ | KEY_WOW64_64KEY`), strips braces/hyphens via `normalize_machine_guid`, and derives a `MachineId` (`derive_machine_id`) for account/device binding.
