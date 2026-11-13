@@ -786,3 +786,107 @@ fn draw_focus_border(
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_columns() -> Vec<GridColumn> {
+        vec![
+            GridColumn::new("id", 80.0),
+            GridColumn::new("name", 120.0),
+            GridColumn::new("org_id", 100.0),
+        ]
+    }
+
+    fn sample_rows() -> Vec<GridRow> {
+        vec![
+            GridRow {
+                row_number: 1,
+                state: RowState::Clean,
+                cells: vec![
+                    GridCell::text("1"),
+                    GridCell::text("Alice"),
+                    GridCell::foreign_key("42"),
+                ],
+            },
+            GridRow {
+                row_number: 2,
+                state: RowState::Modified,
+                cells: vec![
+                    GridCell::text("2"),
+                    GridCell::null(),
+                    GridCell::default_val(),
+                ],
+            },
+        ]
+    }
+
+    #[test]
+    fn visible_rows_virtualization() {
+        let layout = GridLayout {
+            viewport_height: 100.0,
+            header_height: 28.0,
+            row_height: 24.0,
+            scroll_y: 48.0,
+            ..GridLayout::default()
+        };
+        assert_eq!(layout.visible_rows(100), 2..6);
+        assert_eq!(layout.visible_rows(0), 0..0);
+    }
+
+    #[test]
+    fn hit_test_frozen_scrolled_headers_and_fk_badge() {
+        let cols = sample_columns();
+        let rows = sample_rows();
+        let layout = GridLayout {
+            gutter_width: 48.0,
+            header_height: 28.0,
+            row_height: 24.0,
+            frozen_columns: 1,
+            scroll_x: 20.0,
+            ..GridLayout::default()
+        };
+
+        // Row number gutter.
+        assert_eq!(
+            DataGridRenderer::hit_test(10.0, 35.0, &layout, &cols, rows.len()),
+            GridHitTest::RowNumber(0)
+        );
+        // Frozen column 0 cell (x in 48..128).
+        assert_eq!(
+            DataGridRenderer::hit_test(80.0, 35.0, &layout, &cols, rows.len()),
+            GridHitTest::Cell { row: 0, col: 0 }
+        );
+        // Header sort button on column 0 (rightmost 20px of 48..128 -> 108..128).
+        assert_eq!(
+            DataGridRenderer::hit_test(120.0, 10.0, &layout, &cols, rows.len()),
+            GridHitTest::Header {
+                col: 0,
+                is_sort_button: true
+            }
+        );
+        // Scrolled column 2 starts at 48 + 80 - 20 + 120 = 228, ends at 328.
+        // FK badge is in rightmost 18px (310..328).
+        assert_eq!(
+            DataGridRenderer::hit_test_rows(320.0, 35.0, &layout, &cols, &rows),
+            GridHitTest::FkBadge { row: 0, col: 2 }
+        );
+        // Out of bounds.
+        assert_eq!(
+            DataGridRenderer::hit_test(10.0, 500.0, &layout, &cols, rows.len()),
+            GridHitTest::None
+        );
+    }
+
+    #[test]
+    fn selection_rectangle_contains() {
+        let sel = GridSelection {
+            focused: Some((3, 2)),
+            anchor: Some((1, 0)),
+        };
+        assert!(sel.contains(2, 1));
+        assert!(!sel.contains(0, 1));
+        assert!(!sel.contains(2, 3));
+    }
+}
