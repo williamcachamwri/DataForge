@@ -606,3 +606,266 @@ impl TableEdits {
         std::mem::take(self)
     }
 }
+
+/// Structured filter bar state backed by `tablepro_core::filter::FilterSet`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilterBarState {
+    pub is_visible: bool,
+    pub filter_set: tablepro_core::filter::FilterSet,
+}
+
+impl Default for FilterBarState {
+    fn default() -> Self {
+        Self {
+            is_visible: false,
+            filter_set: tablepro_core::filter::FilterSet {
+                combinator: tablepro_core::filter::Combinator::And,
+                rules: Vec::new(),
+                extra_sql: None,
+            },
+        }
+    }
+}
+
+impl FilterBarState {
+    /// Adds a structured filter rule.
+    pub fn add_rule(&mut self, rule: tablepro_core::filter::FilterRule) {
+        self.filter_set.rules.push(rule);
+        self.is_visible = true;
+    }
+
+    /// Removes a rule at `index`.
+    pub fn remove_rule(&mut self, index: usize) -> bool {
+        if index < self.filter_set.rules.len() {
+            self.filter_set.rules.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Clears all filter rules.
+    pub fn clear(&mut self) {
+        self.filter_set.rules.clear();
+    }
+
+    /// Returns whether any filter rule is active.
+    #[must_use]
+    pub fn has_active_filters(&self) -> bool {
+        !self.filter_set.rules.is_empty()
+    }
+}
+
+/// Export formats supported by the grid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GridExportFormat {
+    Csv,
+    Json,
+    SqlInsert,
+}
+
+/// Errors from grid export formatting.
+#[derive(Debug, thiserror::Error)]
+pub enum GridExportError {
+    #[error(transparent)]
+    Encode(#[from] tablepro_core::export::EncodeError),
+    #[error(transparent)]
+    SqlInsert(#[from] tablepro_core::export::RenderInsertError),
+}
+
+/// Top-level `DataGridModel` (middle layer between owner adapter and view).
+///
+/// Holds column set, row order, selection, sort, filter bar, paging, layout
+/// scope, and pending edits, and emits [`DataGridChange`] deltas.
+#[derive(Debug, Clone)]
+pub struct DataGridModel {
+    pub layout_scope: DataGridLayoutScope,
+    pub columns: DataGridColumnSet,
+    pub row_order: DataGridRowOrder,
+    pub selection: GridSelection,
+    pub sort: HeaderSortCycle,
+    pub page: TableQueryPage,
+    pub filter_bar: FilterBarState,
+    pub edits: TableEdits,
+    result_columns: Vec<tablepro_core::column::ResultColumn>,
+    rows_by_id: std::collections::BTreeMap<RowID, Vec<tablepro_core::value::Value>>,
+    next_row_id: u64,
+    pending_changes: Vec<DataGridChange>,
+}
+
+impl DataGridModel {
+    /// Creates a new `DataGridModel` with the given `layout_scope` and page limit.
+    #[must_use]
+    pub fn new(layout_scope: DataGridLayoutScope, page_limit: u64) -> Self {
+        Self {
+            layout_scope,
+            columns: DataGridColumnSet::default(),
+            row_order: DataGridRowOrder::default(),
+            selection: GridSelection::default(),
+            sort: HeaderSortCycle::default(),
+            page: TableQueryPage::new(0, page_limit, None),
+            filter_bar: FilterBarState::default(),
+            edits: TableEdits::new(),
+            result_columns: Vec::new(),
+            rows_by_id: std::collections::BTreeMap::new(),
+            next_row_id: 1,
+            pending_changes: Vec::new(),
+        }
+    }
+
+    /// Replaces the grid's columns and rows (`reloadRows()`), preserving selection by identity.
+    pub fn reload_rows(
+        &mut self,
+        result_columns: Vec<tablepro_core::column::ResultColumn>,
+        rows: Vec<Vec<tablepro_core::value::Value>>,
+        total_row_count: Option<u64>,
+    ) {
+        let col_names: Vec<String> = result_columns.iter().map(|c| c.name.clone()).collect();
+        if self.columns.columns().len() != col_names.len()
+            || self
+                .columns
+                .columns()
+                .iter()
+                .zip(&col_names)
+                .any(|(existing, name)| &existing.name != name)
+        {
+            self.columns = DataGridColumnSet::from_names(&col_names, 140.0);
+        }
+        self.result_columns = result_columns;
+        self.rows_by_id.clear();
+        let mut order = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = RowID(self.next_row_id);
+            self.next_row_id = self.next_row_id.saturating_add(1);
+            self.rows_by_id.insert(id, row);
+            order.push(id);
+        }
+        self.row_order = DataGridRowOrder::new(order);
+        self.page.table_row_count = total_row_count;
+        self.pending_changes.push(DataGridChange::ReloadAll);
+    }
+
+    /// Dispatches a selection action through [`GridSelectionReducer`].
+    pub fn apply_selection(&mut self, action: GridSelectionAction) {
+        self.selection = GridSelectionReducer::reduce(&self.selection, action, &self.row_order, &self.columns);
+        self.pending_changes.push(DataGridChange::SelectionChanged);
+    }
+
+    /// Commits cell edits as one undo step and emits `RowsUpdated`.
+    pub fn commit(&mut self, edits: Vec<DataGridCellEdit>, action_name: impl Into<String>) {
+        let mut updated_rows = Vec::new();
+        for edit in &edits {
+            if let Some(row) = self.rows_by_id.get_mut(&edit.row_id)
+                && let Some(data_idx) = self.columns.data_index(edit.column_id)
+                && let Some(cell) = row.get_mut(data_idx)
+            {
+                *cell = edit.new_value.clone();
+                updated_rows.push(edit.row_id);
+            }
+        }
+        self.edits.commit_cells(edits, action_name);
+        if !updated_rows.is_empty() {
+            self.pending_changes.push(DataGridChange::RowsUpdated(updated_rows));
+        }
+    }
+
+    /// Sorts the currently loaded rows client-side according to `self.sort`.
+    pub fn sort_client_rows(&mut self) {
+        if self.sort.keys.is_empty() {
+            return;
+        }
+        let mut ids = self.row_order.as_slice().to_vec();
+        ids.sort_by(|a, b| {
+            for key in &self.sort.keys {
+                let Some(data_idx) = self.columns.data_index(key.column_id) else {
+                    continue;
+                };
+                let va = self.rows_by_id.get(a).and_then(|r| r.get(data_idx));
+                let vb = self.rows_by_id.get(b).and_then(|r| r.get(data_idx));
+                let ord = compare_opt_values(va, vb);
+                let ord = match key.direction {
+                    SortDirection::Ascending => ord,
+                    SortDirection::Descending => ord.reverse(),
+                };
+                if ord != std::cmp::Ordering::Equal {
+                    return ord;
+                }
+            }
+            a.cmp(b)
+        });
+        self.row_order = DataGridRowOrder::new(ids);
+        self.pending_changes.push(DataGridChange::ReloadAll);
+    }
+
+    /// Drains pending [`DataGridChange`] deltas for the mounted view.
+    pub fn take_changes(&mut self) -> Vec<DataGridChange> {
+        std::mem::take(&mut self.pending_changes)
+    }
+
+    /// Exports rows in display order as CSV.
+    ///
+    /// # Errors
+    /// Returns [`GridExportError`] if encoding fails.
+    pub fn export_csv(&self, opts: &tablepro_core::export::CsvOptions) -> Result<String, GridExportError> {
+        let rows = self.display_rows_vec();
+        Ok(tablepro_core::export::render_csv(&self.result_columns, &rows, opts)?)
+    }
+
+    /// Exports rows in display order as JSON.
+    ///
+    /// # Errors
+    /// Returns [`GridExportError`] if encoding fails.
+    pub fn export_json(&self) -> Result<String, GridExportError> {
+        let rows = self.display_rows_vec();
+        Ok(tablepro_core::export::render_json(&self.result_columns, &rows)?)
+    }
+
+    /// Exports rows in display order as SQL `INSERT` statements.
+    ///
+    /// # Errors
+    /// Returns [`GridExportError`] if rendering fails.
+    pub fn export_sql_inserts(
+        &self,
+        dialect: &dyn tablepro_core::dialect::SqlDialect,
+        table: &tablepro_core::meta::TableRef,
+        columns: &[tablepro_core::column::ColumnInfo],
+    ) -> Result<String, GridExportError> {
+        let rows: Vec<Vec<tablepro_core::edit::CellInput>> = self
+            .display_rows_vec()
+            .into_iter()
+            .map(|r| r.into_iter().map(tablepro_core::edit::CellInput::Value).collect())
+            .collect();
+        Ok(tablepro_core::export::render_inserts(dialect, table, columns, &rows)?)
+    }
+
+    fn display_rows_vec(&self) -> Vec<Vec<tablepro_core::value::Value>> {
+        self.row_order
+            .as_slice()
+            .iter()
+            .filter_map(|id| self.rows_by_id.get(id).cloned())
+            .collect()
+    }
+}
+
+fn compare_opt_values(
+    a: Option<&tablepro_core::value::Value>,
+    b: Option<&tablepro_core::value::Value>,
+) -> std::cmp::Ordering {
+    use tablepro_core::value::Value;
+    match (a, b) {
+        (None | Some(Value::Null), None | Some(Value::Null)) => std::cmp::Ordering::Equal,
+        (None | Some(Value::Null), _) => std::cmp::Ordering::Greater,
+        (_, None | Some(Value::Null)) => std::cmp::Ordering::Less,
+        (Some(Value::Int(x)), Some(Value::Int(y))) => x.cmp(y),
+        (Some(Value::Int32(x)), Some(Value::Int32(y))) => x.cmp(y),
+        (Some(Value::UInt(x)), Some(Value::UInt(y))) => x.cmp(y),
+        (Some(Value::Float32(x)), Some(Value::Float32(y))) => x.total_cmp(y),
+        (Some(Value::Float64(x)), Some(Value::Float64(y))) => x.total_cmp(y),
+        (Some(Value::Bool(x)), Some(Value::Bool(y))) => x.cmp(y),
+        (Some(va), Some(vb)) => {
+            let sa = tablepro_core::export::value_to_text(va).unwrap_or_default();
+            let sb = tablepro_core::export::value_to_text(vb).unwrap_or_default();
+            sa.cmp(&sb)
+        }
+    }
+}
