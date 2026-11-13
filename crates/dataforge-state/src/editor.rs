@@ -423,3 +423,165 @@ impl Rope {
         full.split('\n').nth(line_idx).map(str::to_owned)
     }
 }
+
+/// A single cursor/selection in `cursorPositions` (in `char` offsets).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct CursorPosition {
+    pub anchor: usize,
+    pub head: usize,
+}
+
+impl CursorPosition {
+    /// Creates a collapsed caret at `offset`.
+    #[must_use]
+    pub const fn caret(offset: usize) -> Self {
+        Self {
+            anchor: offset,
+            head: offset,
+        }
+    }
+
+    /// Returns `(start, end)` ordered ascending.
+    #[must_use]
+    pub const fn range(self) -> (usize, usize) {
+        if self.anchor <= self.head {
+            (self.anchor, self.head)
+        } else {
+            (self.head, self.anchor)
+        }
+    }
+}
+
+/// Atomic text replacement in `char` offsets.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextEdit {
+    pub start: usize,
+    pub end: usize,
+    pub deleted: String,
+    pub inserted: String,
+}
+
+/// One undoable step containing one or more edits (applied bottom-up) and cursor snapshots.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndoGroup {
+    pub edits: Vec<TextEdit>,
+    pub before_cursors: Vec<CursorPosition>,
+    pub after_cursors: Vec<CursorPosition>,
+}
+
+/// Undo/redo history for [`Rope`] with multi-caret bottom-up edit support.
+#[derive(Debug, Default, Clone)]
+pub struct UndoHistory {
+    undo_stack: Vec<UndoGroup>,
+    redo_stack: Vec<UndoGroup>,
+}
+
+impl UndoHistory {
+    /// Creates an empty undo history.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Applies `insert_text` at every cursor in `cursor_positions` bottom-up
+    /// (descending offset) so earlier offsets remain valid, and pushes one [`UndoGroup`].
+    pub fn apply_multi_caret_insert(
+        &mut self,
+        rope: &mut Rope,
+        cursor_positions: &mut Vec<CursorPosition>,
+        insert_text: &str,
+    ) {
+        let before_cursors = cursor_positions.clone();
+        let normalized = normalize_line_endings(insert_text);
+        let insert_chars = normalized.chars().count();
+
+        // Sort indices descending by range start so bottom-up application never shifts earlier offsets.
+        let mut ordered: Vec<(usize, CursorPosition)> = cursor_positions.iter().copied().enumerate().collect();
+        ordered.sort_by(|a, b| b.1.range().0.cmp(&a.1.range().0).then_with(|| b.0.cmp(&a.0)));
+
+        let mut edits = Vec::with_capacity(ordered.len());
+        for (_, cursor) in &ordered {
+            let (start, end) = cursor.range();
+            let deleted = rope.slice(start, end);
+            rope.delete(start, end);
+            rope.insert(start, &normalized);
+            edits.push(TextEdit {
+                start,
+                end,
+                deleted,
+                inserted: normalized.clone(),
+            });
+        }
+
+        // Recompute resulting cursor positions in ascending order.
+        let mut asc: Vec<(usize, CursorPosition)> = cursor_positions.iter().copied().enumerate().collect();
+        asc.sort_by(|a, b| a.1.range().0.cmp(&b.1.range().0).then_with(|| a.0.cmp(&b.0)));
+        let mut delta: isize = 0;
+        let mut updated = vec![CursorPosition::caret(0); cursor_positions.len()];
+        for (orig_idx, cursor) in asc {
+            let (start, end) = cursor.range();
+            let new_pos = usize::try_from(isize::try_from(start).unwrap_or(0) + delta).unwrap_or(0) + insert_chars;
+            updated[orig_idx] = CursorPosition::caret(new_pos);
+            let removed = isize::try_from(end - start).unwrap_or(0);
+            let added = isize::try_from(insert_chars).unwrap_or(0);
+            delta += added - removed;
+        }
+        *cursor_positions = updated.clone();
+
+        self.undo_stack.push(UndoGroup {
+            edits,
+            before_cursors,
+            after_cursors: updated,
+        });
+        self.redo_stack.clear();
+    }
+
+    /// Undoes the most recent [`UndoGroup`], restoring `rope` and `cursor_positions`.
+    pub fn undo(&mut self, rope: &mut Rope, cursor_positions: &mut Vec<CursorPosition>) -> bool {
+        let Some(group) = self.undo_stack.pop() else {
+            return false;
+        };
+        // Edits were recorded bottom-up; undo them in reverse (top-down) or re-index.
+        // Since each edit in `group.edits` was applied bottom-up, reversing the order
+        // (top-down) undoes at the exact `edit.start` offsets? Wait: undoing top-down
+        // shifts later offsets, whereas undoing in reverse of application?
+        // Actually, when `group.edits` was applied bottom-up, `edit[0]` had largest `start`.
+        // Undoing `edit` in reverse order (`rev()`, smallest `start` first) would shift larger `start`s!
+        // Undoing in the SAME order (`group.edits.iter()`, largest `start` first) restores
+        // each region from bottom to top without shifting any earlier offset!
+        for edit in &group.edits {
+            let ins_chars = edit.inserted.chars().count();
+            rope.delete(edit.start, edit.start + ins_chars);
+            rope.insert(edit.start, &edit.deleted);
+        }
+        *cursor_positions = group.before_cursors.clone();
+        self.redo_stack.push(group);
+        true
+    }
+
+    /// Redoes the most recently undone [`UndoGroup`].
+    pub fn redo(&mut self, rope: &mut Rope, cursor_positions: &mut Vec<CursorPosition>) -> bool {
+        let Some(group) = self.redo_stack.pop() else {
+            return false;
+        };
+        for edit in &group.edits {
+            rope.delete(edit.start, edit.end);
+            rope.insert(edit.start, &edit.inserted);
+        }
+        *cursor_positions = group.after_cursors.clone();
+        self.undo_stack.push(group);
+        true
+    }
+
+    /// Returns whether undo is available.
+    #[must_use]
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
+
+    /// Returns whether redo is available.
+    #[must_use]
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
+}
