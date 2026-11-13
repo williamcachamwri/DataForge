@@ -41,3 +41,10 @@ flowchart TD
 | `dataforge-services` | `AppRuntime`, `SessionManager`, `DriverRegistry`, atomic export, import bridge, MCP host, AI assistant, diagnostics |
 | `dataforge-windows-app` | Win32 window shell, Per-Monitor DPI v2, UIA baseline, keyboard shortcuts, workbench views, modal dialogs |
 | `dataforge-e2e` | End-to-end integration tests across drivers, SQLite/DuckDB, foreign import, state/gfx/platform, startup, and containers |
+
+## Core vs. Windows Shell Separation
+
+1. **`core/crates/*` (TablePro Engine)**: Remains strictly cross-platform and unmodified by DataForge UI changes. Exposes `DatabaseDriver`, `Session`, `DriverConnector`, `SecretVault`, `StoragePaths`, `ResultSink`, `ForeignImport`, `AiAssistant`, and `McpServer`.
+2. **`crates/dataforge-state`**: Mirrors UI-facing state machines in pure Rust with zero Win32 or GPU dependencies, enabling deterministic unit testing of every transition without creating an HWND.
+3. **`crates/dataforge-windows-platform`**: Implements TablePro platform traits (`SecretVault` via `WindowsCredentialStore`, `ForeignHost` via `ForeignPlatform`, `CliHost` via `WindowsCliHost`) and Windows-specific IPC/Registry seams.
+4. **`crates/dataforge-gfx`**: Owns Direct3D 11 / DXGI / Direct2D / DirectWrite device resources and translates `dataforge-state` models + `ThemePalette` into GPU draw calls.
