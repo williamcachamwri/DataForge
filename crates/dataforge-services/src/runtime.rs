@@ -156,3 +156,30 @@ impl AppRuntime {
         self.tasks.spawn_task(future)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn driver_registry_registers_all_nine_engines() {
+        let registry = build_driver_registry();
+        assert_eq!(registry.len(), 9);
+        for engine_id in REGISTERED_ENGINE_IDS {
+            assert!(
+                registry.get(engine_id).is_some(),
+                "missing driver for {engine_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn app_runtime_spawns_async_work_and_wires_ssh() -> Result<(), ServiceError> {
+        let runtime = AppRuntime::new(Some(2))?;
+        assert_eq!(runtime.drivers().len(), 9);
+        assert!(runtime.ssh().pageant == cfg!(windows));
+        let value = runtime.block_on(async { 40 + 2 });
+        assert_eq!(value, 42);
+        Ok(())
+    }
+}
