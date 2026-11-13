@@ -3,6 +3,7 @@
 pub mod accessibility;
 pub mod app;
 pub mod branding;
+pub mod cli_flags;
 pub mod controller_ai_mcp;
 pub mod controller_connection;
 pub mod controller_editor;

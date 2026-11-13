@@ -5,6 +5,7 @@ use std::io::Write;
 use std::process::ExitCode;
 
 use dataforge_windows_app::app::AppController;
+use dataforge_windows_app::cli_flags::{AppFlagOutcome, handle_app_flags};
 use dataforge_windows_app::crash::init_logging_and_crash_reports;
 use dataforge_windows_app::error::Result;
 use dataforge_windows_app::i18n::init_locale;
@@ -20,6 +21,12 @@ use tablepro_cli::{Dispatch, classify, run as run_cli};
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
+    {
+        let mut stdout = std::io::stdout().lock();
+        if let AppFlagOutcome::Exit(code) = handle_app_flags(&args, &mut stdout) {
+            return ExitCode::from(code);
+        }
+    }
     match classify(&args) {
         Dispatch::Command => run_cli_subcommand(args),
         Dispatch::Invalid(message) => {
