@@ -27,3 +27,10 @@ Registry keys are opened with `RegOpenKeyExW` and closed deterministically via `
   2. Reads `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme` (`REG_DWORD`) -> `WindowsTheme::Light` (`1`) or `WindowsTheme::Dark` (`0`).
 - **Machine Identity (`read_machine_id`)**:
   - Reads `HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid` (`KEY_READ | KEY_WOW64_64KEY`), strips braces/hyphens via `normalize_machine_guid`, and derives a `MachineId` (`derive_machine_id`) for account/device binding.
+
+## 4. Storage Paths, Settings, and Foreign Discovery (`paths.rs`, `settings.rs`, `foreign.rs`, `browser.rs`, `cli_host.rs`)
+
+- **Storage Paths (`storage_paths`, `storage_paths_for`)**: Resolves `APP_DIR_NAME` (`"DataForge"`) under Windows `%APPDATA%` / `%LOCALAPPDATA%` via `StoragePaths` for connections, saved queries, themes, logs, and crash reports.
+- **Settings (`AppSettings`)**: Persists `SETTINGS_FILENAME` (`settings.json`) atomically with `ThemePreference`, `EditorFont`, `WindowGeometry`, and `McpSettings`.
+- **Browser & CLI (`WindowsBrowserLauncher`, `WindowsCliHost`)**: `validate_http_url` restricts external browser launches to `http://` and `https://` before invoking `ShellExecuteW`.
+- **Foreign Import Discovery (`foreign_app_dirs`, `ForeignPlatform`)**: Locates configuration directories for TablePlus, DBeaver, Navicat, DataGrip, and Sequel Ace on Windows so `tablepro-foreign-import` can migrate saved connections.
