@@ -153,3 +153,41 @@ async fn redis_fake_session_and_keyvalue_capabilities() -> E2eResult<()> {
     assert!(session.is_shut_down());
     Ok(())
 }
+
+#[tokio::test]
+async fn mongodb_fake_session_and_document_capabilities() -> E2eResult<()> {
+    let driver = Arc::new(MongoDriver);
+    assert_eq!(driver.id(), "mongodb");
+    assert_eq!(driver.category(), EngineCategory::Document);
+    let caps = driver.capabilities();
+    assert_eq!(caps.data_model, DataModel::Document);
+
+    let (connector, session) = start_fake_engine_session(driver, "mongodb", 27017).await?;
+    assert_eq!(connector.calls().len(), 1);
+    assert_eq!(session.metadata().driver_id, "mongodb");
+
+    shutdown_session(&session).await?;
+    assert!(session.is_shut_down());
+    Ok(())
+}
+
+#[tokio::test]
+async fn fake_connector_reports_scripted_connection_failure() -> E2eResult<()> {
+    let connector = FakeConnector::new([FakeEstablish::Fail(
+        tablepro_session::ConnectError::Cancelled,
+    )]);
+    let mut request = FakeConnector::network_request("127.0.0.1", 5432)?;
+    request.driver = Arc::new(PgDriver);
+    request.metadata.driver_id = "postgres".to_owned();
+
+    let result = connector
+        .establish(
+            request,
+            CredentialInteraction::Unattended,
+            CancellationToken::new(),
+        )
+        .await;
+    assert!(result.is_err());
+    assert_eq!(connector.calls().len(), 1);
+    Ok(())
+}
