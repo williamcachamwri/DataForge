@@ -299,3 +299,143 @@ impl EditorTabLabelResolver {
         }
     }
 }
+
+/// Liveness state of an installed driver session.
+///
+/// An installed driver is a handle, not a live connection. Health is tracked
+/// exclusively through `mark_session_unreachable` and `mark_session_live`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SessionLiveness {
+    Live,
+    Unreachable {
+        started_with: u64,
+        info: String,
+    },
+}
+
+/// UI-facing connection status derived solely from [`SessionLiveness`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReportedStatus {
+    Connected,
+    Unreachable,
+    Disconnected,
+}
+
+/// Opaque handle representing an installed driver that stays non-null across outages.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DriverHandle {
+    pub driver_id: String,
+    pub generation: u64,
+}
+
+/// Tracks a connection session's driver handle, liveness, SafeMode, and transaction state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionSession {
+    driver: Option<DriverHandle>,
+    liveness: SessionLiveness,
+    pub safe_mode: tablepro_core::SafeModeLevel,
+    pub transaction_state: tablepro_core::TransactionState,
+}
+
+impl ConnectionSession {
+    /// Creates a new session with no driver installed yet.
+    #[must_use]
+    pub fn new(safe_mode: tablepro_core::SafeModeLevel) -> Self {
+        Self {
+            driver: None,
+            liveness: SessionLiveness::Live,
+            safe_mode,
+            transaction_state: tablepro_core::TransactionState::Idle,
+        }
+    }
+
+    /// Installs a driver handle and marks the session live.
+    pub fn install_driver(&mut self, driver: DriverHandle) {
+        self.driver = Some(driver);
+        self.liveness = SessionLiveness::Live;
+    }
+
+    /// Clears the driver handle only on explicit disconnect/teardown (never on outage).
+    pub fn clear_driver(&mut self) {
+        self.driver = None;
+        self.liveness = SessionLiveness::Live;
+        self.transaction_state = tablepro_core::TransactionState::Idle;
+    }
+
+    /// Returns a reference to the driver handle (remains `Some` even during outages).
+    #[must_use]
+    pub fn driver(&self) -> Option<&DriverHandle> {
+        self.driver.as_ref()
+    }
+
+    /// Marks the session unreachable without clearing the driver handle.
+    pub fn mark_session_unreachable(&mut self, started_with: u64, info: impl Into<String>) {
+        self.liveness = SessionLiveness::Unreachable {
+            started_with,
+            info: info.into(),
+        };
+    }
+
+    /// Marks the session live again.
+    pub fn mark_session_live(&mut self) {
+        self.liveness = SessionLiveness::Live;
+    }
+
+    /// Returns the raw liveness state.
+    #[must_use]
+    pub fn liveness(&self) -> &SessionLiveness {
+        &self.liveness
+    }
+
+    /// Returns the UI-facing status derived from `liveness` (and whether a driver is installed).
+    #[must_use]
+    pub fn reported_status(&self) -> ReportedStatus {
+        if self.driver.is_none() {
+            return ReportedStatus::Disconnected;
+        }
+        match self.liveness {
+            SessionLiveness::Live => ReportedStatus::Connected,
+            SessionLiveness::Unreachable { .. } => ReportedStatus::Unreachable,
+        }
+    }
+
+    /// Evaluates SafeMode gating for a statement access classification.
+    #[must_use]
+    pub fn gate_statement(&self, access: tablepro_core::sql_syntax::StatementAccess) -> tablepro_core::WriteGate {
+        self.safe_mode.gate(access)
+    }
+
+    /// Evaluates whether closing a tab or window requires an open-transaction warning.
+    #[must_use]
+    pub fn check_close_guard(&self) -> CloseDecision {
+        CloseDecision::for_transaction(self.transaction_state)
+    }
+}
+
+/// Decision produced by the open-transaction close guard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloseDecision {
+    Allow,
+    WarnOpenTransaction,
+    WarnFailedTransaction,
+    WarnUnknownTransaction,
+}
+
+impl CloseDecision {
+    /// Determines the close decision for a given [`tablepro_core::TransactionState`].
+    #[must_use]
+    pub const fn for_transaction(state: tablepro_core::TransactionState) -> Self {
+        match state {
+            tablepro_core::TransactionState::Idle => Self::Allow,
+            tablepro_core::TransactionState::InTransaction => Self::WarnOpenTransaction,
+            tablepro_core::TransactionState::Failed => Self::WarnFailedTransaction,
+            tablepro_core::TransactionState::Unknown => Self::WarnUnknownTransaction,
+        }
+    }
+
+    /// Whether the close requires user confirmation before proceeding.
+    #[must_use]
+    pub const fn requires_confirmation(self) -> bool {
+        !matches!(self, Self::Allow)
+    }
+}
