@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use dataforge_e2e::E2eResult;
 use dataforge_gfx::context::{D2dContext, DEFAULT_MEMORY_BUDGET_BYTES, MemoryBudget};
+use dataforge_state::connection_window::ConnectionWindowPhase;
 use dataforge_state::tabs::{
-    CrashSafeTabPersistence, RestoredConnectionEntry, SessionRestorePlanner, TabConnectionId,
-    TabKind, TabSessionEnvelope, TabStripModel,
+    CrashSafeTabPersistence, SessionRestorePlanner, TabConnectionId, TabKind, TabStripModel,
 };
 use dataforge_windows_platform::{AppSettings, is_forwardable_target, storage_paths_for};
 
@@ -99,7 +99,7 @@ fn crash_report_atomic_write_and_session_recovery() -> E2eResult<()> {
     let backup = temp.path().join("tabs-session.bak.json");
     let conn_id = TabConnectionId("conn-crash-1".to_owned());
     let mut strip = TabStripModel::new();
-    strip.open_query_tab(conn_id.clone(), "SELECT 1".to_owned());
+    strip.open_query_tab(conn_id.clone(), Some("SELECT 1"));
 
     let mut map = std::collections::BTreeMap::new();
     map.insert(conn_id.clone(), strip.tabs().to_vec());
@@ -120,16 +120,12 @@ fn crash_report_atomic_write_and_session_recovery() -> E2eResult<()> {
         .get(&conn_id)
         .ok_or("missing connection tabs in recovered backup")?;
     assert_eq!(restored_tabs.len(), 1);
-    assert_eq!(restored_tabs[0].kind, TabKind::Query);
+    assert!(matches!(restored_tabs[0].kind, TabKind::QueryEditor { .. }));
 
-    let planned = SessionRestorePlanner::plan(
-        true,
-        &[RestoredConnectionEntry {
-            id: conn_id,
-            was_connected_or_failed: true,
-        }],
-    );
+    let planned = SessionRestorePlanner::plan(&[(conn_id, ConnectionWindowPhase::Connected)], 0);
     assert_eq!(planned.len(), 1);
+    assert!(planned[0].should_dial);
+    assert!(planned[0].connect_immediately_on_launch);
     Ok(())
 }
 
@@ -145,13 +141,16 @@ fn tracing_logging_init_settings_and_d2d_budget_checks() -> E2eResult<()> {
     assert!(crash_src.contains("init_logging_and_crash_reports"));
     assert!(crash_src.contains("LOG_INIT.call_once"));
 
-    // Verify AppSettings + StoragePaths roundtrip in an isolated temp directory.
+    // Verify StoragePaths resolution and AppSettings roundtrip in an isolated temp directory.
+    let paths = storage_paths_for("DataForge-E2E-Test")?;
+    assert!(paths.config.ends_with("config"));
+    assert!(paths.state.ends_with("state"));
+    assert!(paths.data.ends_with("data"));
+
     let temp = tempfile::tempdir()?;
-    let paths = storage_paths_for(temp.path(), temp.path());
     let settings = AppSettings::default();
     let encoded = serde_json::to_vec_pretty(&settings)?;
-    let settings_file = paths.root_dir().join("settings.json");
-    fs::create_dir_all(paths.root_dir())?;
+    let settings_file = temp.path().join("settings.json");
     fs::write(&settings_file, encoded)?;
     let decoded: AppSettings = serde_json::from_slice(&fs::read(&settings_file)?)?;
     assert_eq!(decoded, settings);
