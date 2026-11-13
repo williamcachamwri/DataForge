@@ -9,3 +9,11 @@
 - **Target Naming**: Credentials are prefixed with `DEFAULT_CREDENTIAL_PREFIX` (`"DataForge"`).
 - **Multi-Part Chunking**: Windows Credential Manager caps `CredentialBlobSize` at `CRED_MAX_CREDENTIAL_BLOB_SIZE` (`2560` bytes, `PART_SIZE`). Secrets exceeding `PART_SIZE` (such as large SSH private keys or OAuth tokens) are split across numbered part entries tracked by the `DataForge_Parts` (`LAYOUT_KEYWORD`) credential attribute.
 - **Memory Hygiene**: Secret buffers are wrapped in `Zeroizing` / `SecretString` and explicitly zeroized on drop.
+
+## 2. Single-Instance Mutex & Named Pipe IPC (`single_instance.rs`)
+
+DataForge coordinates single-instance GUI launches and file/URL forwarding via Win32 kernel objects wrapped in RAII `OwnedHandle` guards:
+
+- **Mutex (`SingleInstanceLock`)**: Acquires `Local\DataForge-SingleInstance-Mutex` (`DEFAULT_MUTEX_NAME`) via `CreateMutexW`. If `ERROR_ALREADY_EXISTS` is returned, the secondary process forwards its CLI target to the primary instance and exits cleanly.
+- **Named Pipe (`NamedPipeServer` / `send_to_existing_instance`)**: Uses `\\.\pipe\DataForge-SingleInstance-IPC` (`DEFAULT_PIPE_NAME`) with `PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT` (`PIPE_BUFFER_BYTES = 4096`) to transmit JSON-serialized `ForwardPayload` messages.
+- **Target Validation**: `is_forwardable_target` accepts database file paths (`.sqlite`, `.sqlite3`, `.db`, `.duckdb`, `.ddb`) and supported connection URL schemes so arbitrary arguments are not forwarded blindly.
