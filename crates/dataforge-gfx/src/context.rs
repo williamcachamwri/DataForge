@@ -810,3 +810,28 @@ pub const fn rect_f(x: f32, y: f32, width: f32, height: f32) -> D2D_RECT_F {
 pub const fn point_f(x: f32, y: f32) -> Vector2 {
     Vector2 { X: x, Y: y }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn memory_budget_enforces_60mb_limit() {
+        let mut budget = MemoryBudget::new(DEFAULT_MEMORY_BUDGET_BYTES);
+        assert_eq!(budget.limit_bytes, 60 * 1024 * 1024);
+        budget.set_surface_dimensions(1920, 1080);
+        assert!(!budget.is_over_budget());
+
+        budget.set_surface_dimensions(4096, 2160);
+        assert!(budget.is_over_budget());
+    }
+
+    #[test]
+    fn text_format_spec_quantizes_size() {
+        let spec = TextFormatSpec::new("Cascadia Mono", 13.25)
+            .with_weight(FontWeight::SemiBold)
+            .with_italic(true);
+        assert_eq!(spec.size_tenths, 133);
+        assert!((spec.size_dip() - 13.3).abs() < 1e-4);
+    }
+}

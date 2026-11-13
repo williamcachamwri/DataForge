@@ -484,3 +484,46 @@ impl ThemePalette {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn light_chrome_tokens_match_spec() {
+        let p = ThemePalette::for_mode(ThemeMode::Light);
+        assert_eq!(p.chrome.sidebar_bg.to_packed_rgba(), 0xFAFA_FAFF);
+        assert_eq!(p.chrome.toolbar_bg.to_packed_rgba(), 0xF6F6_F6FF);
+        assert_eq!(p.chrome.tab_inactive_bg.to_packed_rgba(), 0xF1F1_F1FF);
+        assert_eq!(p.chrome.tab_active_bg.to_packed_rgba(), 0xFAFA_F9FF);
+        assert_eq!(p.chrome.status_bar_bg.to_packed_rgba(), 0xEDEF_F0FF);
+        assert!(!p.mode.is_dark());
+        assert!(!p.mode.is_high_contrast());
+    }
+
+    #[test]
+    fn dark_chrome_tokens_match_spec() {
+        let p = ThemePalette::for_mode(ThemeMode::Dark);
+        assert_eq!(p.chrome.sidebar_bg.to_packed_rgba(), 0x1C1C_24FF);
+        assert_eq!(p.chrome.toolbar_bg.to_packed_rgba(), 0x1F20_2BFF);
+        assert_eq!(p.chrome.tab_inactive_bg.to_packed_rgba(), 0x1E1F_2BFF);
+        assert_eq!(p.chrome.tab_active_bg.to_packed_rgba(), 0x1C1C_26FF);
+        assert_eq!(p.chrome.status_bar_bg.to_packed_rgba(), 0x272A_36FF);
+        assert!(p.mode.is_dark());
+        assert!(!p.mode.is_high_contrast());
+    }
+
+    #[test]
+    fn high_contrast_modes_and_colorref_conversion() {
+        let hc_light = ThemePalette::for_mode(ThemeMode::HighContrastLight);
+        let hc_dark = ThemePalette::for_mode(ThemeMode::HighContrastDark);
+        assert!(hc_light.mode.is_high_contrast());
+        assert!(hc_dark.mode.is_high_contrast());
+        assert!(hc_light.content.bg.relative_luminance() > 0.9);
+        assert!(hc_dark.content.bg.relative_luminance() < 0.1);
+
+        // Win32 COLORREF is 0x00BBGGRR.
+        let c = Color::from_colorref(0x00AA_5511);
+        assert_eq!(c.to_packed_rgba(), 0x1155_AAFF);
+    }
+}
