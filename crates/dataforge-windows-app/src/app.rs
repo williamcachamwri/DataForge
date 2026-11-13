@@ -1,0 +1,660 @@
+//! Central application controller coordinating state models, layout, theme,
+//! keyboard/mouse dispatch, and Direct2D frame rendering.
+
+use std::collections::BTreeMap;
+
+use dataforge_gfx::Result;
+use dataforge_gfx::context::{D2dContext, RenderSurface};
+use dataforge_gfx::editor_renderer::{
+    AutocompletePopup, CursorMode, EditorCursor, EditorLine, EditorSelection, SqlEditorRenderer,
+};
+use dataforge_gfx::glyphs::EngineKind;
+use dataforge_gfx::grid_renderer::{
+    DataGridRenderer, GridCell, GridColumn, GridRow, GridSelection, RowState,
+};
+use dataforge_gfx::palette::{ThemeMode, ThemePalette};
+use dataforge_state::connection_window::{
+    AttemptToken, ConnectionWindowPhase, ConnectionWindowPhaseMachine, WorkspaceId,
+};
+use dataforge_state::library::ConnectionsLibraryModel;
+use dataforge_state::tabs::{CloseActionResult, TabConnectionId, TabId, TabKind, TabStripModel};
+use dataforge_state::theme::{ThemeDefinition, ThemeSlot};
+use dataforge_windows_platform::{
+    AppSettings, ThemePreference, WindowsTheme, detect_theme_or_default,
+};
+
+use crate::accessibility::{FocusRegion, KeyCommand};
+use crate::i18n::{Locale, Strings};
+use crate::shell_layout::{ShellHitTarget, ShellLayout, ShellLayoutConfig};
+use crate::views::ai_drawer::{AiDrawerState, render_ai_drawer};
+use crate::views::content::{
+    StructureColumnRow, render_connecting_view, render_data_grid, render_sql_editor,
+    render_structure_view, render_unavailable_view,
+};
+use crate::views::inspector::{InspectorField, render_inspector};
+use crate::views::library::{ConnectionFormDraft, engine_from_driver_id, render_library_view};
+use crate::views::rail::{RailConnectionItem, render_rail};
+use crate::views::settings::{import_vscode_theme_bytes, render_settings_view};
+use crate::views::sidebar::{SidebarRow, SidebarSectionKind, render_sidebar};
+use crate::views::status_bar::{StatusBarSnapshot, TableViewMode, render_status_bar};
+use crate::views::tabs::render_tab_strip;
+use crate::views::toolbar::{ToolbarStatusPill, render_toolbar};
+
+/// Top-level screen mode shown in the content area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScreenMode {
+    #[default]
+    Workspace,
+    ConnectionsLibrary,
+    Settings,
+}
+
+/// Complete headless-testable and GPU-renderable application controller.
+pub struct AppController {
+    pub settings: AppSettings,
+    pub strings: Strings,
+    pub system_theme: WindowsTheme,
+    pub content_theme: ThemeDefinition,
+    pub last_theme_import: Option<String>,
+    pub screen_mode: ScreenMode,
+    pub layout_config: ShellLayoutConfig,
+    pub focus_region: FocusRegion,
+    pub connections: ConnectionWindowPhaseMachine,
+    pub active_workspace: WorkspaceId,
+    pub rail_items: Vec<RailConnectionItem>,
+    pub tabs: TabStripModel,
+    pub library: ConnectionsLibraryModel,
+    pub connection_form: ConnectionFormDraft,
+    pub sidebar_filter: String,
+    pub sidebar_favorites_only: bool,
+    pub sidebar_rows: Vec<SidebarRow>,
+    pub toolbar_status: ToolbarStatusPill,
+    pub status_bar: StatusBarSnapshot,
+    pub inspector_fields: Vec<InspectorField>,
+    pub ai_drawer: AiDrawerState,
+    pub grid_columns: Vec<GridColumn>,
+    pub grid_rows: Vec<GridRow>,
+    pub grid_selection: GridSelection,
+    pub structure_columns: Vec<StructureColumnRow>,
+    pub editor_lines: Vec<EditorLine>,
+    pub editor_cursors: Vec<EditorCursor>,
+    pub editor_selections: Vec<EditorSelection>,
+    pub editor_cursor_mode: CursorMode,
+    pub editor_autocomplete: Option<AutocompletePopup>,
+    pub open_transactions: BTreeMap<WorkspaceId, bool>,
+    pub safe_mode_enabled: bool,
+    pub last_width_dip: f32,
+    pub last_height_dip: f32,
+    grid_renderer: DataGridRenderer,
+    editor_renderer: SqlEditorRenderer,
+}
+
+impl AppController {
+    /// Creates a new [`AppController`] initialized with `settings` and `system_theme`.
+    #[must_use]
+    pub fn new(settings: AppSettings, system_theme: WindowsTheme, locale: Locale) -> Self {
+        let mut connections = ConnectionWindowPhaseMachine::new();
+        let active_workspace = WorkspaceId(1);
+        connections.select_workspace(active_workspace);
+
+        let mut tabs = TabStripModel::new();
+        let conn_id = TabConnectionId("default".to_owned());
+        tabs.open_query_tab(conn_id, Some("Query 1"));
+
+        let content_theme = if system_theme.is_dark() {
+            ThemeDefinition::builtin_dark()
+        } else {
+            ThemeDefinition::builtin_light()
+        };
+
+        let mut controller = Self {
+            strings: Strings::for_locale(locale),
+            system_theme,
+            content_theme,
+            last_theme_import: None,
+            screen_mode: ScreenMode::Workspace,
+            layout_config: ShellLayoutConfig {
+                tab_count: tabs.tabs().len(),
+                ..ShellLayoutConfig::default()
+            },
+            focus_region: FocusRegion::ContentArea,
+            connections,
+            active_workspace,
+            rail_items: Vec::new(),
+            tabs,
+            library: ConnectionsLibraryModel::new(),
+            connection_form: ConnectionFormDraft::default(),
+            sidebar_filter: String::new(),
+            sidebar_favorites_only: false,
+            sidebar_rows: Vec::new(),
+            toolbar_status: ToolbarStatusPill::default(),
+            status_bar: StatusBarSnapshot::default(),
+            inspector_fields: Vec::new(),
+            ai_drawer: AiDrawerState::default(),
+            grid_columns: vec![
+                GridColumn::new("id", 80.0),
+                GridColumn::new("name", 180.0),
+                GridColumn::new("status", 120.0),
+            ],
+            grid_rows: vec![GridRow {
+                row_number: 1,
+                state: RowState::Clean,
+                cells: vec![
+                    GridCell::text("1"),
+                    GridCell::text("Ready"),
+                    GridCell::text("OK"),
+                ],
+            }],
+            grid_selection: GridSelection::default(),
+            structure_columns: Vec::new(),
+            editor_lines: vec![EditorLine::new("SELECT 1;", 1)],
+            editor_cursors: vec![EditorCursor {
+                line: 0,
+                col: 9,
+                is_primary: true,
+            }],
+            editor_selections: Vec::new(),
+            editor_cursor_mode: CursorMode::Bar,
+            editor_autocomplete: None,
+            open_transactions: BTreeMap::new(),
+            safe_mode_enabled: false,
+            last_width_dip: 1280.0,
+            last_height_dip: 800.0,
+            grid_renderer: DataGridRenderer::new(settings.editor_font.family.clone()),
+            editor_renderer: SqlEditorRenderer::new(settings.editor_font.family.clone()),
+            settings,
+        };
+        controller.sync_layout_counts();
+        controller
+    }
+
+    /// Creates a controller using live Windows system theme detection.
+    #[must_use]
+    pub fn with_detected_theme(settings: AppSettings) -> Self {
+        let system_theme = detect_theme_or_default();
+        Self::new(settings, system_theme, Locale::EnUs)
+    }
+
+    /// Resolves the effective [`ThemeMode`] from user preference and live OS theme.
+    #[must_use]
+    pub const fn effective_theme_mode(&self) -> ThemeMode {
+        match self.settings.theme {
+            ThemePreference::Light => ThemeMode::Light,
+            ThemePreference::Dark => ThemeMode::Dark,
+            ThemePreference::HighContrast => ThemeMode::HighContrastDark,
+            ThemePreference::System => match self.system_theme {
+                WindowsTheme::Light => ThemeMode::Light,
+                WindowsTheme::Dark => ThemeMode::Dark,
+                WindowsTheme::HighContrast => ThemeMode::HighContrastDark,
+            },
+        }
+    }
+
+    /// Returns `true` when the Win32 DWM titlebar should use dark mode.
+    #[must_use]
+    pub const fn uses_dark_titlebar(&self) -> bool {
+        matches!(self.effective_theme_mode(), ThemeMode::Dark)
+    }
+
+    /// Resolves the active [`ThemePalette`] combining chrome tokens and content overrides.
+    #[must_use]
+    pub fn resolve_palette(&self) -> ThemePalette {
+        let mut palette = ThemePalette::for_mode(self.effective_theme_mode());
+        if let Some(bg) = self.content_theme.colors.get(&ThemeSlot::EditorBackground) {
+            palette.content.bg = dataforge_gfx::palette::Color::from_rgba_hex(
+                ((u32::from(bg.r)) << 24)
+                    | ((u32::from(bg.g)) << 16)
+                    | ((u32::from(bg.b)) << 8)
+                    | u32::from(bg.a),
+            );
+        }
+        palette
+    }
+
+    /// Updates the live system theme (called on `WM_SETTINGCHANGE` / `WM_THEMECHANGED`).
+    pub fn on_system_theme_changed(&mut self, system_theme: WindowsTheme) {
+        self.system_theme = system_theme;
+        if self.content_theme.is_builtin {
+            self.content_theme = if self.uses_dark_titlebar() {
+                ThemeDefinition::builtin_dark()
+            } else {
+                ThemeDefinition::builtin_light()
+            };
+        }
+    }
+
+    /// Imports a VS Code or DataForge theme JSON payload.
+    pub fn import_vscode_theme(&mut self, bytes: &[u8]) -> std::result::Result<(), String> {
+        let (def, outcome) = import_vscode_theme_bytes(bytes)?;
+        self.content_theme = def;
+        self.last_theme_import = Some(format!(
+            "{} ({} slots)",
+            outcome.theme_name, outcome.slot_count
+        ));
+        Ok(())
+    }
+
+    /// Handles targets forwarded from CLI or Named Pipe IPC (`.sqlite`, `.duckdb`, URLs).
+    pub fn open_forwarded_targets(&mut self, targets: &[String]) {
+        for target in targets {
+            let trimmed = target.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok(conn) = self.connection_form.apply_url(trimmed) {
+                let engine = engine_from_driver_id(&conn.driver_id);
+                let label = conn.name.clone();
+                self.library.upsert_connection(conn);
+                self.add_rail_connection(trimmed, &label, engine, true);
+            } else {
+                let engine = if trimmed.to_ascii_lowercase().ends_with(".duckdb") {
+                    EngineKind::Duckdb
+                } else {
+                    EngineKind::Sqlite
+                };
+                self.add_rail_connection(trimmed, trimmed, engine, true);
+            }
+            self.screen_mode = ScreenMode::Workspace;
+        }
+        self.sync_layout_counts();
+    }
+
+    /// Adds or activates an open connection in the Connection Rail.
+    pub fn add_rail_connection(
+        &mut self,
+        id: &str,
+        label: &str,
+        engine: EngineKind,
+        connected: bool,
+    ) {
+        for item in &mut self.rail_items {
+            item.active = false;
+        }
+        self.rail_items.push(RailConnectionItem {
+            id: id.to_owned(),
+            label: label.to_owned(),
+            engine,
+            active: true,
+            connected,
+        });
+        self.toolbar_status.engine_version = engine.display_name().to_owned();
+        self.toolbar_status.database = label.to_owned();
+        self.sync_layout_counts();
+    }
+
+    /// Computes the current [`ShellLayout`] for `width x height` DIPs.
+    #[must_use]
+    pub fn compute_layout(&mut self, width_dip: f32, height_dip: f32) -> ShellLayout {
+        self.last_width_dip = width_dip;
+        self.last_height_dip = height_dip;
+        self.sync_layout_counts();
+        ShellLayout::compute(width_dip, height_dip, self.layout_config)
+    }
+
+    /// Returns `true` if closing the window requires a Safe Mode or open-transaction prompt.
+    #[must_use]
+    pub fn needs_close_guard(&self) -> bool {
+        let has_open_tx = self.open_transactions.values().any(|open| *open);
+        has_open_tx
+            || (self.safe_mode_enabled && self.tabs.tabs().iter().any(|t| t.has_unsaved_edits))
+    }
+
+    /// Executes `Ctrl+W` (`CloseTabOrWindow`): closes the active tab first, or requests window close.
+    pub fn close_frontmost_tab_or_window(&mut self) -> CloseActionResult {
+        let res = self.tabs.perform_close();
+        self.sync_layout_counts();
+        res
+    }
+
+    /// Executes `Ctrl+Shift+T` (`ReopenClosedTab`).
+    pub fn reopen_closed_tab(&mut self) -> Option<TabId> {
+        let reopened = self.tabs.reopen_closed_tab();
+        self.sync_layout_counts();
+        reopened
+    }
+
+    /// Dispatches a keyboard command; returns `true` if the window should close.
+    pub fn handle_key_command(&mut self, cmd: KeyCommand) -> bool {
+        match cmd {
+            KeyCommand::FocusNextRegion => {
+                self.focus_region = self.focus_region.step(
+                    false,
+                    self.layout_config.sidebar_visible,
+                    self.layout_config.inspector_visible,
+                    self.layout_config.ai_drawer_visible,
+                );
+            }
+            KeyCommand::FocusPrevRegion => {
+                self.focus_region = self.focus_region.step(
+                    true,
+                    self.layout_config.sidebar_visible,
+                    self.layout_config.inspector_visible,
+                    self.layout_config.ai_drawer_visible,
+                );
+            }
+            KeyCommand::NextTab => self.cycle_tab(1),
+            KeyCommand::PrevTab => self.cycle_tab(-1),
+            KeyCommand::CloseTabOrWindow => {
+                return matches!(
+                    self.close_frontmost_tab_or_window(),
+                    CloseActionResult::CloseWindow
+                );
+            }
+            KeyCommand::ReopenClosedTab => {
+                let _ = self.reopen_closed_tab();
+            }
+            KeyCommand::NewQueryTab => {
+                let n = self.tabs.tabs().len() + 1;
+                let conn_id = TabConnectionId("default".to_owned());
+                self.tabs
+                    .open_query_tab(conn_id, Some(&format!("Query {n}")));
+                self.screen_mode = ScreenMode::Workspace;
+                self.sync_layout_counts();
+            }
+            KeyCommand::ToggleSidebar => {
+                self.layout_config.sidebar_visible = !self.layout_config.sidebar_visible;
+            }
+            KeyCommand::ToggleInspector => {
+                self.layout_config.inspector_visible = !self.layout_config.inspector_visible;
+                self.toolbar_status.inspector_open = self.layout_config.inspector_visible;
+            }
+            KeyCommand::ToggleAiDrawer => {
+                self.layout_config.ai_drawer_visible = !self.layout_config.ai_drawer_visible;
+                self.toolbar_status.ai_open = self.layout_config.ai_drawer_visible;
+            }
+            KeyCommand::FocusFilter => {
+                self.layout_config.sidebar_visible = true;
+                self.focus_region = FocusRegion::ObjectSidebar;
+            }
+            KeyCommand::OpenSettings => {
+                self.screen_mode = ScreenMode::Settings;
+            }
+            KeyCommand::OpenConnectionsLibrary => {
+                self.screen_mode = ScreenMode::ConnectionsLibrary;
+            }
+            KeyCommand::ExecuteQuery => {
+                self.toolbar_status.latency_label = "<1ms".to_owned();
+            }
+        }
+        false
+    }
+
+    /// Handles a left-click at `(px, py)` DIPs and returns the hit target.
+    pub fn handle_click(&mut self, px: f32, py: f32) -> ShellHitTarget {
+        let layout = self.compute_layout(self.last_width_dip, self.last_height_dip);
+        let target = layout.hit_test(px, py);
+        match target {
+            ShellHitTarget::RailLibraryButton => {
+                self.screen_mode = if self.screen_mode == ScreenMode::ConnectionsLibrary {
+                    ScreenMode::Workspace
+                } else {
+                    ScreenMode::ConnectionsLibrary
+                };
+            }
+            ShellHitTarget::RailCollapseButton => {
+                self.layout_config.rail_expanded = !self.layout_config.rail_expanded;
+            }
+            ShellHitTarget::RailSettingsButton | ShellHitTarget::StatusSettingsButton => {
+                self.screen_mode = if self.screen_mode == ScreenMode::Settings {
+                    ScreenMode::Workspace
+                } else {
+                    ScreenMode::Settings
+                };
+            }
+            ShellHitTarget::RailConnection(idx) => {
+                for (i, item) in self.rail_items.iter_mut().enumerate() {
+                    item.active = i == idx;
+                }
+                self.screen_mode = ScreenMode::Workspace;
+            }
+            ShellHitTarget::SidebarFavoritesToggle => {
+                self.sidebar_favorites_only = !self.sidebar_favorites_only;
+            }
+            ShellHitTarget::ToolbarInspectorButton => {
+                let _ = self.handle_key_command(KeyCommand::ToggleInspector);
+            }
+            ShellHitTarget::ToolbarAiButton => {
+                let _ = self.handle_key_command(KeyCommand::ToggleAiDrawer);
+            }
+            ShellHitTarget::Tab(idx) => {
+                if let Some(tab) = self.tabs.tabs().get(idx) {
+                    let id = tab.id;
+                    self.tabs.select(id);
+                    self.screen_mode = ScreenMode::Workspace;
+                }
+            }
+            ShellHitTarget::TabClose(idx) => {
+                if let Some(tab) = self.tabs.tabs().get(idx) {
+                    let id = tab.id;
+                    let _ = self.tabs.close_tab_by_user(id);
+                    self.sync_layout_counts();
+                }
+            }
+            ShellHitTarget::TabNewButton => {
+                let _ = self.handle_key_command(KeyCommand::NewQueryTab);
+            }
+            ShellHitTarget::StatusDataToggle => {
+                self.status_bar.view_mode = TableViewMode::Data;
+            }
+            ShellHitTarget::StatusStructureToggle => {
+                self.status_bar.view_mode = TableViewMode::Structure;
+            }
+            ShellHitTarget::StatusPrevPage if self.status_bar.current_page > 1 => {
+                self.status_bar.current_page -= 1;
+            }
+            ShellHitTarget::StatusNextPage
+                if self.status_bar.current_page < self.status_bar.total_pages =>
+            {
+                self.status_bar.current_page += 1;
+            }
+            _ => {}
+        }
+        target
+    }
+
+    /// Renders the complete DataForge shell into `surface`.
+    pub fn render_frame(&mut self, ctx: &D2dContext, surface: &mut RenderSurface) -> Result<()> {
+        let width = surface.width_dip();
+        let height = surface.height_dip();
+        let layout = self.compute_layout(width, height);
+        let palette = self.resolve_palette();
+
+        surface.begin_draw();
+        surface.clear(palette.content.bg);
+
+        render_rail(
+            ctx,
+            surface,
+            &layout,
+            &palette,
+            &self.rail_items,
+            self.layout_config.rail_expanded,
+            self.screen_mode == ScreenMode::ConnectionsLibrary,
+        )?;
+        render_sidebar(
+            surface,
+            &layout,
+            &palette,
+            &self.sidebar_filter,
+            self.strings.filter_placeholder,
+            self.sidebar_favorites_only,
+            &self.sidebar_rows,
+        )?;
+        let has_pending_edits = self.tabs.tabs().iter().any(|t| t.has_unsaved_edits);
+        render_toolbar(
+            surface,
+            &layout,
+            &palette,
+            &self.toolbar_status,
+            has_pending_edits,
+        )?;
+        render_tab_strip(
+            surface,
+            &layout,
+            &palette,
+            self.tabs.tabs(),
+            self.tabs.active_tab(),
+        )?;
+        self.render_content_area(surface, &layout, &palette)?;
+        render_inspector(
+            surface,
+            &layout,
+            &palette,
+            self.strings.row_inspector_title,
+            self.strings.no_selection,
+            &self.inspector_fields,
+        )?;
+        render_ai_drawer(
+            surface,
+            &layout,
+            &palette,
+            self.strings.ai_assistant_title,
+            &self.ai_drawer,
+        )?;
+        render_status_bar(surface, &layout, &palette, &self.status_bar)?;
+
+        surface.end_draw()
+    }
+
+    fn render_content_area(
+        &mut self,
+        surface: &mut RenderSurface,
+        layout: &ShellLayout,
+        palette: &ThemePalette,
+    ) -> Result<()> {
+        match self.screen_mode {
+            ScreenMode::ConnectionsLibrary => {
+                return render_library_view(
+                    surface,
+                    layout,
+                    palette,
+                    &self.library,
+                    &self.connection_form,
+                );
+            }
+            ScreenMode::Settings => {
+                return render_settings_view(
+                    surface,
+                    layout,
+                    palette,
+                    &self.settings,
+                    &self.content_theme.name,
+                    self.last_theme_import.as_deref(),
+                );
+            }
+            ScreenMode::Workspace => {}
+        }
+
+        if let Some(phase) = self.connections.phase(self.active_workspace) {
+            match phase {
+                ConnectionWindowPhase::Unavailable(unavail) => {
+                    return render_unavailable_view(
+                        surface,
+                        layout,
+                        palette,
+                        unavail,
+                        self.strings.retry_connection,
+                    );
+                }
+                ConnectionWindowPhase::Connecting { .. }
+                | ConnectionWindowPhase::Reconnecting { .. } => {
+                    return render_connecting_view(
+                        surface,
+                        layout,
+                        palette,
+                        &self.toolbar_status.database,
+                    );
+                }
+                ConnectionWindowPhase::Disconnected | ConnectionWindowPhase::Connected => {}
+            }
+        }
+
+        let active_kind = self
+            .tabs
+            .active_tab()
+            .and_then(|id| self.tabs.tabs().iter().find(|t| t.id == id))
+            .map(|t| t.kind.clone());
+        match active_kind.as_ref() {
+            Some(TabKind::TableData { table_name }) => {
+                if self.status_bar.view_mode == TableViewMode::Structure {
+                    render_structure_view(
+                        surface,
+                        layout,
+                        palette,
+                        table_name,
+                        &self.structure_columns,
+                    )
+                } else {
+                    render_data_grid(
+                        surface,
+                        layout,
+                        palette,
+                        &self.grid_renderer,
+                        &self.grid_columns,
+                        &self.grid_rows,
+                        &self.grid_selection,
+                        0,
+                    )
+                }
+            }
+            Some(TabKind::Structure { table_name }) => render_structure_view(
+                surface,
+                layout,
+                palette,
+                table_name,
+                &self.structure_columns,
+            ),
+            Some(TabKind::QueryEditor { .. }) | None => render_sql_editor(
+                surface,
+                layout,
+                palette,
+                &mut self.editor_renderer,
+                &self.editor_lines,
+                &self.editor_cursors,
+                &self.editor_selections,
+                self.editor_cursor_mode,
+                self.editor_autocomplete.as_ref(),
+            ),
+        }
+    }
+
+    fn cycle_tab(&mut self, delta: isize) {
+        let tabs = self.tabs.tabs();
+        if tabs.is_empty() {
+            return;
+        }
+        let current = self
+            .tabs
+            .active_tab()
+            .and_then(|id| tabs.iter().position(|t| t.id == id))
+            .unwrap_or(0);
+        let len = tabs.len() as isize;
+        let next = (current as isize + delta).rem_euclid(len) as usize;
+        if let Some(tab) = tabs.get(next) {
+            let id = tab.id;
+            self.tabs.select(id);
+        }
+    }
+
+    fn sync_layout_counts(&mut self) {
+        self.layout_config.open_connection_count = self.rail_items.len();
+        self.layout_config.tab_count = self.tabs.tabs().len();
+        self.layout_config.sidebar_item_count = self.sidebar_rows.len();
+    }
+
+    /// Marks an active workspace as connecting with a new `AttemptToken`.
+    pub fn begin_workspace_connect(&mut self, id: WorkspaceId) -> Option<AttemptToken> {
+        self.connections.begin_connect(id)
+    }
+}
+
+/// Helper to build a sample [`SidebarSectionKind`] header row.
+#[must_use]
+pub fn make_sidebar_section(kind: SidebarSectionKind, title: &str, count: usize) -> SidebarRow {
+    SidebarRow::SectionHeader {
+        kind,
+        title: title.to_owned(),
+        expanded: true,
+        count,
+    }
+}
