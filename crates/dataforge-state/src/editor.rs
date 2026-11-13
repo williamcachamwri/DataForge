@@ -541,15 +541,10 @@ impl UndoHistory {
         let Some(group) = self.undo_stack.pop() else {
             return false;
         };
-        // Edits were recorded bottom-up; undo them in reverse (top-down) or re-index.
-        // Since each edit in `group.edits` was applied bottom-up, reversing the order
-        // (top-down) undoes at the exact `edit.start` offsets? Wait: undoing top-down
-        // shifts later offsets, whereas undoing in reverse of application?
-        // Actually, when `group.edits` was applied bottom-up, `edit[0]` had largest `start`.
-        // Undoing `edit` in reverse order (`rev()`, smallest `start` first) would shift larger `start`s!
-        // Undoing in the SAME order (`group.edits.iter()`, largest `start` first) restores
-        // each region from bottom to top without shifting any earlier offset!
-        for edit in &group.edits {
+        // `group.edits` were applied bottom-up (descending `start`). Undoing in reverse
+        // order (top-down, ascending `start`) restores each earlier region so all
+        // subsequent `edit.start` offsets match the document again.
+        for edit in group.edits.iter().rev() {
             let ins_chars = edit.inserted.chars().count();
             rope.delete(edit.start, edit.start + ins_chars);
             rope.insert(edit.start, &edit.deleted);
@@ -1253,5 +1248,156 @@ impl RunEventAccumulator {
     /// Finalizes the accumulator with [`tablepro_core::RunSummary`].
     pub fn finish(&mut self, summary: tablepro_core::RunSummary) {
         self.summary = Some(summary);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use proptest::prelude::*;
+    use tablepro_core::column::{ColumnType, ResultColumn};
+    use tablepro_core::sql_syntax::{SqlGrammar, SyntaxKind};
+    use tablepro_core::value::Value;
+    use tablepro_core::{ResultEvent, RunEnd, RunSummary, TransactionState, Truncation};
+
+    use super::*;
+
+    #[test]
+    fn rope_normalizes_crlf_and_handles_large_text_and_utf16() {
+        let big = "a".repeat(5000);
+        let mut rope = Rope::from_text(&format!("hello\r\nworld\r{big}"));
+        assert_eq!(rope.line_count(), 3);
+        assert_eq!(rope.line(0).as_deref(), Some("hello"));
+        assert_eq!(rope.line(1).as_deref(), Some("world"));
+        assert!(rope.height() >= 2);
+
+        // Surrogate-pair emoji takes 1 char, 2 UTF-16 code units.
+        rope.insert(0, "🚀");
+        assert_eq!(rope.char_to_utf16(1), 2);
+        assert_eq!(rope.utf16_to_char(2), 1);
+    }
+
+    #[test]
+    fn multi_caret_bottom_up_edits_and_undo_redo_roundtrip() {
+        let mut rope = Rope::from_text("aa\nbb\ncc");
+        let mut cursors = vec![CursorPosition::caret(0), CursorPosition::caret(3), CursorPosition::caret(6)];
+        let mut history = UndoHistory::new();
+
+        history.apply_multi_caret_insert(&mut rope, &mut cursors, "-- ");
+        assert_eq!(rope.text(), "-- aa\n-- bb\n-- cc");
+        assert_eq!(
+            cursors,
+            vec![CursorPosition::caret(3), CursorPosition::caret(9), CursorPosition::caret(15)]
+        );
+
+        assert!(history.undo(&mut rope, &mut cursors));
+        assert_eq!(rope.text(), "aa\nbb\ncc");
+        assert_eq!(
+            cursors,
+            vec![CursorPosition::caret(0), CursorPosition::caret(3), CursorPosition::caret(6)]
+        );
+
+        assert!(history.redo(&mut rope, &mut cursors));
+        assert_eq!(rope.text(), "-- aa\n-- bb\n-- cc");
+    }
+
+    #[test]
+    fn incremental_highlighter_emits_utf16_spans() {
+        let rope = Rope::from_text("SELECT '🚀' FROM users");
+        let mut hl = IncrementalLineHighlighter::new(SqlGrammar::PostgreSql);
+        let spans = hl.highlight_line(&rope, 0);
+        assert!(spans.iter().any(|s| s.kind == SyntaxKind::Keyword && s.start_utf16 == 0 && s.end_utf16 == 6));
+        // '🚀' is 4 UTF-16 units (' + 2 + ')
+        assert!(spans.iter().any(|s| s.kind == SyntaxKind::String && (s.end_utf16 - s.start_utf16) == 4));
+    }
+
+    #[test]
+    fn autocomplete_vim_splits_and_run_event_accumulator() {
+        let mut ac = AutocompleteState::with_catalog(vec![
+            SchemaCompletionItem {
+                label: "users".to_owned(),
+                kind: SchemaCompletionKind::Table,
+                detail: Some("public.users".to_owned()),
+                insert_text: "users".to_owned(),
+            },
+            SchemaCompletionItem {
+                label: "user_id".to_owned(),
+                kind: SchemaCompletionKind::Column,
+                detail: None,
+                insert_text: "user_id".to_owned(),
+            },
+        ]);
+        ac.update_prefix("us");
+        assert!(ac.is_open);
+        assert_eq!(ac.items().len(), 2);
+        assert_eq!(ac.accept().map(|i| i.label), Some("users".to_owned()));
+
+        let mut vim = VimState::new(true);
+        assert_eq!(vim.handle_key("2"), VimAction::None);
+        assert_eq!(vim.handle_key("w"), VimAction::Move(VimMotion::WordForward, 2));
+        assert_eq!(vim.handle_key("d"), VimAction::None);
+        assert_eq!(vim.handle_key("d"), VimAction::LineOperator(VimOperator::Delete, 1));
+        assert_eq!(vim.handle_key(":"), VimAction::None);
+        assert_eq!(vim.mode, VimMode::Command);
+        vim.handle_key("w");
+        assert_eq!(vim.handle_key("Enter"), VimAction::ExecuteCommand("w".to_owned()));
+        assert_eq!(vim.mode, VimMode::Normal);
+
+        let mut split = EditorSplitNode::single(EditorPaneId(1));
+        assert!(split.split_pane(EditorPaneId(1), EditorPaneId(2), SplitAxis::Horizontal));
+        assert_eq!(split.leaf_ids(), vec![EditorPaneId(1), EditorPaneId(2)]);
+        assert!(SplitPaneLayoutPolicy::default().holding_priority < 490);
+        assert!(SplitPaneLayoutPolicy::default().sizing_options_empty);
+
+        let mut acc = RunEventAccumulator::new();
+        acc.push_event(ResultEvent::ResultSetStarted {
+            columns: Arc::from([ResultColumn::new("id", ColumnType::unknown())]),
+        });
+        acc.push_event(ResultEvent::Rows(vec![vec![Value::Int(1)]]));
+        acc.push_event(ResultEvent::ResultSetFinished {
+            retained: 1,
+            total_rows: Some(1),
+            truncation: Truncation::Complete,
+        });
+        acc.finish(RunSummary {
+            elapsed: Duration::from_millis(12),
+            end: RunEnd::Completed,
+            transaction_state: TransactionState::Idle,
+        });
+        assert_eq!(acc.result_sets.len(), 1);
+        assert_eq!(acc.result_sets[0].rows.len(), 1);
+    }
+
+    proptest! {
+        #[test]
+        fn prop_rope_matches_string_oracle(
+            initial in "[a-z\n]{0,120}",
+            ops in prop::collection::vec((0usize..200, "[a-z]{0,20}", 0usize..20), 0..30),
+        ) {
+            let mut rope = Rope::from_text(&initial);
+            let mut oracle = normalize_line_endings(&initial);
+
+            for (pos, ins, del_len) in ops {
+                let char_len = oracle.chars().count();
+                let idx = pos % (char_len + 1);
+                rope.insert(idx, &ins);
+                let byte_idx = oracle.char_indices().nth(idx).map_or(oracle.len(), |(b, _)| b);
+                oracle.insert_str(byte_idx, &ins);
+
+                let new_char_len = oracle.chars().count();
+                if new_char_len > 0 && del_len > 0 {
+                    let s = pos % new_char_len;
+                    let e = (s + del_len).min(new_char_len);
+                    rope.delete(s, e);
+                    let bs = oracle.char_indices().nth(s).map_or(oracle.len(), |(b, _)| b);
+                    let be = oracle.char_indices().nth(e).map_or(oracle.len(), |(b, _)| b);
+                    oracle.replace_range(bs..be, "");
+                }
+
+                prop_assert_eq!(rope.text(), oracle.clone());
+                prop_assert_eq!(rope.len_chars(), oracle.chars().count());
+            }
+        }
     }
 }
