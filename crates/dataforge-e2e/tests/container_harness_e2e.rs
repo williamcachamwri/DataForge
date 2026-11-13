@@ -85,3 +85,32 @@ async fn testcontainers_docker_harness_skips_cleanly_without_daemon() -> E2eResu
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn postgres_fake_session_capabilities_and_dialect() -> E2eResult<()> {
+    let driver = Arc::new(PgDriver);
+    assert_eq!(driver.id(), "postgres");
+    assert_eq!(driver.category(), EngineCategory::Relational);
+    let caps = driver.capabilities();
+    assert_eq!(caps.data_model, DataModel::Relational);
+    assert!(caps.has_schemas);
+    assert!(caps.sql_grammar.is_some());
+
+    let (connector, session) = start_fake_engine_session(driver, "postgres", 5432).await?;
+    assert_eq!(connector.calls().len(), 1);
+    assert_eq!(session.metadata().driver_id, "postgres");
+    assert!(!session.read_only());
+    assert_eq!(session.safe_mode(), SafeModeLevel::Off);
+    assert!(session.set_safe_mode(SafeModeLevel::Strict));
+    assert_eq!(session.safe_mode(), SafeModeLevel::Strict);
+
+    let dialect = session
+        .current_dialect()
+        .ok_or("expected active dialect on postgres fake session")?;
+    assert_eq!(dialect.quote_identifier("users"), "\"users\"");
+    assert_ne!(session.grammar(), SqlGrammar::Standard);
+
+    shutdown_session(&session).await?;
+    assert!(session.is_shut_down());
+    Ok(())
+}
