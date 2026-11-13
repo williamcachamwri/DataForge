@@ -52,6 +52,31 @@ impl Default for EditorFont {
     }
 }
 
+/// Tabular value/UI font configuration.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FontSpec {
+    /// Font family name.
+    pub family: String,
+    /// Font size in logical points.
+    pub size: f32,
+    /// Line height multiplier.
+    pub line_height: f32,
+    /// Whether programming ligatures or OpenType stylistic features are enabled.
+    pub ligatures: bool,
+}
+
+impl Default for FontSpec {
+    fn default() -> Self {
+        Self {
+            family: "Segoe UI".to_owned(),
+            size: 12.0,
+            line_height: 1.35,
+            ligatures: false,
+        }
+    }
+}
+
 /// Persisted main window position and dimensions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -107,6 +132,9 @@ pub struct AppSettings {
     pub theme: ThemePreference,
     /// SQL editor font configuration.
     pub editor_font: EditorFont,
+    /// Tabular value/grid font configuration.
+    #[serde(default)]
+    pub value_font: FontSpec,
     /// Main window geometry.
     pub window: WindowGeometry,
     /// Local MCP server configuration.
@@ -120,6 +148,7 @@ impl Default for AppSettings {
         Self {
             theme: ThemePreference::default(),
             editor_font: EditorFont::default(),
+            value_font: FontSpec::default(),
             window: WindowGeometry::default(),
             mcp: McpSettings::default(),
             restore_session: true,

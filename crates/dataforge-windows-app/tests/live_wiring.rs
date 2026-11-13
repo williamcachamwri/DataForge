@@ -203,3 +203,75 @@ fn ipc_file_open_theme_json_import_library_and_safe_mode_guard() {
     app.insert_grid_row(vec![Value::Int(99)]);
     assert!(app.needs_close_guard());
 }
+
+#[test]
+fn startup_state_has_no_mock_rows_columns_or_fake_status() {
+    let app = AppController::new(AppSettings::default(), WindowsTheme::Dark, Locale::EnUs);
+    assert!(app.grid_columns.is_empty());
+    assert!(app.grid_rows.is_empty());
+    assert_eq!(app.editor_sql_text(), "");
+    assert_eq!(app.toolbar_status.host, "");
+    assert_eq!(app.toolbar_status.engine_version, "Not connected");
+    assert_eq!(app.toolbar_status.database, "—");
+    assert_eq!(app.toolbar_status.latency_label, "—");
+    assert_eq!(
+        app.toolbar_status.format_pill_text(),
+        "Not connected | — | —"
+    );
+}
+
+#[test]
+fn connect_library_item_hydrates_actual_saved_connection_fields()
+-> Result<(), Box<dyn std::error::Error>> {
+    use dataforge_gfx::glyphs::EngineKind;
+    use dataforge_state::library::{LibraryConnection, LibraryConnectionId};
+
+    let tmp = TempDir::new()?;
+    let db_path = tmp.path().join("library_target.sqlite");
+    std::fs::File::create(&db_path)?;
+
+    let mut app = AppController::new(AppSettings::default(), WindowsTheme::Dark, Locale::EnUs);
+    app.library.upsert_connection(LibraryConnection {
+        id: LibraryConnectionId("remote-pg".to_owned()),
+        name: "Analytics PG".to_owned(),
+        driver_id: "postgres".to_owned(),
+        host: "db.internal".to_owned(),
+        port: Some(5433),
+        database: "analytics".to_owned(),
+        username: "analyst".to_owned(),
+        group_id: None,
+        tags: BTreeSet::new(),
+        is_favorite: false,
+        order: 0,
+    });
+    app.library.upsert_connection(LibraryConnection {
+        id: LibraryConnectionId("local-sqlite".to_owned()),
+        name: "Local SQLite".to_owned(),
+        driver_id: "sqlite".to_owned(),
+        host: String::new(),
+        port: None,
+        database: db_path.to_string_lossy().into_owned(),
+        username: String::new(),
+        group_id: None,
+        tags: BTreeSet::new(),
+        is_favorite: true,
+        order: 1,
+    });
+
+    app.hydrate_connection_form_from_library("remote-pg")?;
+    assert_eq!(app.connection_form.name, "Analytics PG");
+    assert_eq!(app.connection_form.engine, EngineKind::Postgresql);
+    assert_eq!(app.connection_form.host, "db.internal");
+    assert_eq!(app.connection_form.port, 5433);
+    assert_eq!(app.connection_form.database, "analytics");
+    assert_eq!(app.connection_form.username, "analyst");
+
+    // Connecting the SQLite library entry must replace the remote-pg draft with SQLite
+    // and open the actual SQLite file instead of dialing Postgres defaults.
+    app.connect_library_item_blocking("local-sqlite")?;
+    assert_eq!(app.screen_mode, ScreenMode::Workspace);
+    assert_eq!(app.connection_form.engine, EngineKind::Sqlite);
+    assert_eq!(app.toolbar_status.engine_version, "SQLite");
+    assert_eq!(app.toolbar_status.host, "local");
+    Ok(())
+}

@@ -10,9 +10,7 @@ use dataforge_gfx::editor_renderer::{
     AutocompletePopup, CursorMode, EditorCursor, EditorLine, EditorSelection, SqlEditorRenderer,
 };
 use dataforge_gfx::glyphs::EngineKind;
-use dataforge_gfx::grid_renderer::{
-    DataGridRenderer, GridCell, GridColumn, GridRow, GridSelection, RowState,
-};
+use dataforge_gfx::grid_renderer::{DataGridRenderer, GridColumn, GridRow, GridSelection};
 use dataforge_gfx::palette::{ThemeMode, ThemePalette};
 use dataforge_state::connection_window::{
     AttemptToken, ConnectionWindowPhase, ConnectionWindowPhaseMachine, WorkspaceId,
@@ -161,26 +159,14 @@ impl AppController {
             status_bar: StatusBarSnapshot::default(),
             inspector_fields: Vec::new(),
             ai_drawer: AiDrawerState::default(),
-            grid_columns: vec![
-                GridColumn::new("id", 80.0),
-                GridColumn::new("name", 180.0),
-                GridColumn::new("status", 120.0),
-            ],
-            grid_rows: vec![GridRow {
-                row_number: 1,
-                state: RowState::Clean,
-                cells: vec![
-                    GridCell::text("1"),
-                    GridCell::text("Ready"),
-                    GridCell::text("OK"),
-                ],
-            }],
+            grid_columns: Vec::new(),
+            grid_rows: Vec::new(),
             grid_selection: GridSelection::default(),
             structure_columns: Vec::new(),
-            editor_lines: vec![EditorLine::new("SELECT 1;", 1)],
+            editor_lines: vec![EditorLine::new("", 1)],
             editor_cursors: vec![EditorCursor {
                 line: 0,
-                col: 9,
+                col: 0,
                 is_primary: true,
             }],
             editor_selections: Vec::new(),
@@ -211,7 +197,7 @@ impl AppController {
             last_export_status: None,
             last_width_dip: 1280.0,
             last_height_dip: 800.0,
-            grid_renderer: DataGridRenderer::new(settings.editor_font.family.clone()),
+            grid_renderer: DataGridRenderer::new(settings.value_font.family.clone()),
             editor_renderer: SqlEditorRenderer::new(settings.editor_font.family.clone()),
             settings,
         };
@@ -436,9 +422,7 @@ impl AppController {
                 self.screen_mode = ScreenMode::ConnectionsLibrary;
             }
             KeyCommand::ExecuteQuery => {
-                if self.execute_active_sql_blocking().is_err() {
-                    self.toolbar_status.latency_label = "<1ms".to_owned();
-                }
+                let _ = self.execute_active_sql_blocking();
             }
         }
         false

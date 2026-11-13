@@ -151,6 +151,19 @@ impl AppController {
         label: String,
         engine: EngineKind,
     ) -> Result<AttemptToken> {
+        let creds: Arc<dyn CredentialSource> = Arc::new(NoStoredCredentials);
+        self.connect_blocking_inner_with_creds(services, ws, request, label, engine, creds)
+    }
+
+    pub(crate) fn connect_blocking_inner_with_creds(
+        &mut self,
+        services: Arc<crate::services::ServiceHub>,
+        ws: dataforge_state::connection_window::WorkspaceId,
+        request: ConnectRequest,
+        label: String,
+        engine: EngineKind,
+        creds: Arc<dyn CredentialSource>,
+    ) -> Result<AttemptToken> {
         if self.connections.phase(ws).is_none() {
             self.connections.add_workspace(ws);
         }
@@ -164,7 +177,6 @@ impl AppController {
         let headless = self.headless;
 
         let res = services.runtime.block_on(async {
-            let creds: Arc<dyn CredentialSource> = Arc::new(NoStoredCredentials);
             let prompter = Arc::new(DialogCredentialPrompter::new(headless));
             let mut guard = services.sessions.write().await;
             if guard.phase_machine().phase(ws).is_none() {
@@ -212,6 +224,11 @@ impl AppController {
         self.cached_schemas.clear();
         self.cached_objects.clear();
         self.sidebar_rows.clear();
+        let disconnected = crate::views::toolbar::ToolbarStatusPill::default();
+        self.toolbar_status.host = disconnected.host;
+        self.toolbar_status.engine_version = disconnected.engine_version;
+        self.toolbar_status.database = disconnected.database;
+        self.toolbar_status.latency_label = disconnected.latency_label;
         self.sync_layout_counts();
         Ok(())
     }
@@ -486,6 +503,16 @@ impl AppController {
         self.active_attempt = None;
         let conn_id = format!("ws-{}", ws.0);
         self.add_rail_connection(&conn_id, label, engine, true);
+        self.toolbar_status.engine_version = engine.display_name().to_owned();
+        self.toolbar_status.host = if matches!(engine, EngineKind::Sqlite | EngineKind::Duckdb) {
+            "local".to_owned()
+        } else {
+            self.connection_form.host.clone()
+        };
+        if !self.connection_form.database.trim().is_empty() {
+            self.toolbar_status.database = self.connection_form.database.clone();
+        }
+        self.toolbar_status.safe_mode = self.safe_mode_enabled;
         self.screen_mode = ScreenMode::Workspace;
     }
 

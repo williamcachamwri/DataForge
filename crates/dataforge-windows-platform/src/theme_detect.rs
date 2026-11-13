@@ -6,7 +6,8 @@ use windows::Win32::System::Registry::{
 };
 use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
 use windows::Win32::UI::WindowsAndMessaging::{
-    SPI_GETHIGHCONTRAST, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
+    SPI_GETCLIENTAREAANIMATION, SPI_GETHIGHCONTRAST, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    SystemParametersInfoW,
 };
 use windows::core::PCWSTR;
 
@@ -154,6 +155,27 @@ pub fn detect_theme() -> Result<WindowsTheme, PlatformError> {
 /// Detects the current Windows theme, falling back to [`WindowsTheme::Light`] on error.
 pub fn detect_theme_or_default() -> WindowsTheme {
     detect_theme().unwrap_or(WindowsTheme::Light)
+}
+
+/// Queries `SPI_GETCLIENTAREAANIMATION` via `SystemParametersInfoW`.
+///
+/// Returns `true` when Windows "Show animations" is disabled (reduced motion requested),
+/// defaulting to `false` if the query fails.
+pub fn detect_reduced_motion() -> bool {
+    let mut client_area_animation: i32 = 1;
+    // SAFETY: `client_area_animation` is a valid stack `BOOL` (`i32`) writable by `SystemParametersInfoW`.
+    let result = unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&raw mut client_area_animation).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    };
+    if result.is_err() {
+        return false;
+    }
+    client_area_animation == 0
 }
 
 fn is_not_found(status: WIN32_ERROR) -> bool {

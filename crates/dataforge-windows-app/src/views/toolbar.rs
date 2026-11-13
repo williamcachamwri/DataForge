@@ -1,5 +1,5 @@
 //! Top Toolbar view (connection/DB/refresh/apply icons, central
-//! `HOST | Engine Version | db | <1ms` pill, and right action icons).
+//! status pill, and right action icons).
 
 use dataforge_gfx::Result;
 use dataforge_gfx::context::{
@@ -24,10 +24,10 @@ pub struct ToolbarStatusPill {
 impl Default for ToolbarStatusPill {
     fn default() -> Self {
         Self {
-            host: "localhost".to_owned(),
-            engine_version: "Disconnected".to_owned(),
-            database: "-".to_owned(),
-            latency_label: "<1ms".to_owned(),
+            host: String::new(),
+            engine_version: "Not connected".to_owned(),
+            database: "—".to_owned(),
+            latency_label: "—".to_owned(),
             safe_mode: false,
             inspector_open: false,
             ai_open: false,
@@ -36,13 +36,21 @@ impl Default for ToolbarStatusPill {
 }
 
 impl ToolbarStatusPill {
-    /// Formats the canonical `HOST | Engine Version | db | <1ms` status pill text.
+    /// Formats the status pill summary (`HOST | Engine Version | db | latency`),
+    /// omitting the host segment when disconnected/empty.
     #[must_use]
     pub fn format_pill_text(&self) -> String {
-        format!(
-            "{} | {} | {} | {}",
-            self.host, self.engine_version, self.database, self.latency_label
-        )
+        if self.host.trim().is_empty() {
+            format!(
+                "{} | {} | {}",
+                self.engine_version, self.database, self.latency_label
+            )
+        } else {
+            format!(
+                "{} | {} | {} | {}",
+                self.host, self.engine_version, self.database, self.latency_label
+            )
+        }
     }
 }
 

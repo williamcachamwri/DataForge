@@ -40,6 +40,7 @@ use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
 use crate::dialogs::{DialogKind, DialogOutcome, show_native_dialog};
 use crate::i18n::{Locale, Strings};
+use crate::ipc::WakeupSignal;
 use crate::views::library::{AuthMode, ConnectionFormDraft, TlsMode};
 
 /// Custom Win32 message posted when background service tasks push [`ServiceEvent`]s.
@@ -167,6 +168,7 @@ pub struct ServiceHub {
     pub ai_config: AiEndpointConfig,
     events: Arc<Mutex<Vec<ServiceEvent>>>,
     notify_hwnd: Arc<AtomicIsize>,
+    wakeup: Arc<WakeupSignal>,
     active_cancels: Mutex<HashMap<WorkspaceId, (AttemptToken, CancellationToken)>>,
 }
 
@@ -198,8 +200,27 @@ impl ServiceHub {
             ai_config: AiEndpointConfig::ollama("llama3.2"),
             events: Arc::new(Mutex::new(Vec::new())),
             notify_hwnd: Arc::new(AtomicIsize::new(0)),
+            wakeup: Arc::new(WakeupSignal::default()),
             active_cancels: Mutex::new(HashMap::new()),
         })
+    }
+
+    /// Returns the shared async wakeup sender for testing or manual nudges.
+    #[must_use]
+    pub fn notify_sender(&self) -> async_channel::Sender<()> {
+        self.wakeup.sender()
+    }
+
+    /// Returns a clone of the shared async wakeup receiver.
+    #[must_use]
+    pub fn notify_receiver(&self) -> async_channel::Receiver<()> {
+        self.wakeup.receiver()
+    }
+
+    /// Creates an independent coalescing receiver notified whenever [`ServiceEvent`]s arrive.
+    #[must_use]
+    pub fn subscribe(&self) -> async_channel::Receiver<()> {
+        self.wakeup.subscribe()
     }
 
     /// Attaches the Win32 `HWND` so background tasks wake the message loop via `WM_APP_SERVICE_EVENT`.
@@ -217,6 +238,7 @@ impl ServiceHub {
         if let Ok(mut guard) = self.events.lock() {
             guard.push(event);
         }
+        self.wakeup.notify();
         let raw = self.notify_hwnd.load(Ordering::Acquire);
         if raw != 0 {
             let hwnd = HWND(raw as *mut std::ffi::c_void);
@@ -427,6 +449,21 @@ pub fn build_connect_request(
     })
 }
 
+/// Returns the standard TCP port for `engine` (`0` for embedded file engines).
+#[must_use]
+pub const fn default_port_for_engine(engine: EngineKind) -> u16 {
+    match engine {
+        EngineKind::Postgresql => 5432,
+        EngineKind::Mysql | EngineKind::Mariadb => 3306,
+        EngineKind::Mssql => 1433,
+        EngineKind::Clickhouse => 8123,
+        EngineKind::Cassandra | EngineKind::Scylladb => 9042,
+        EngineKind::Mongodb => 27017,
+        EngineKind::Redis => 6379,
+        EngineKind::Sqlite | EngineKind::Duckdb => 0,
+    }
+}
+
 /// Builds a [`ConnectRequest`] from a [`LibraryConnection`].
 pub fn build_connect_request_from_library(
     runtime: &AppRuntime,
@@ -438,10 +475,28 @@ pub fn build_connect_request_from_library(
         name: conn.name.clone(),
         engine,
         host: conn.host.clone(),
-        port: conn.port.unwrap_or(5432),
+        port: conn.port.unwrap_or_else(|| default_port_for_engine(engine)),
         database: conn.database.clone(),
         username: conn.username.clone(),
         ..ConnectionFormDraft::default()
     };
     build_connect_request(runtime, &draft, None, safe_mode)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn service_hub_wakes_async_subscribers_on_push_event() -> Result<(), ServiceError> {
+        let hub = ServiceHub::new(Some(1))?;
+        let rx = hub.subscribe();
+        let shared = hub.notify_receiver();
+
+        hub.push_event(ServiceEvent::AiFinished { error: None });
+        assert_eq!(rx.try_recv(), Ok(()));
+        assert_eq!(shared.try_recv(), Ok(()));
+        assert_eq!(hub.drain_events().len(), 1);
+        Ok(())
+    }
 }

@@ -1,7 +1,7 @@
 use dataforge_windows_platform::{
-    AppSettings, EditorFont, McpSettings, ThemePreference, WindowGeometry, WindowsTheme,
-    apps_use_light_theme, detect_theme, detect_theme_or_default, is_high_contrast,
-    theme_from_flags,
+    AppSettings, EditorFont, FontSpec, McpSettings, ThemePreference, WindowGeometry, WindowsTheme,
+    apps_use_light_theme, detect_reduced_motion, detect_theme, detect_theme_or_default,
+    is_high_contrast, theme_from_flags,
 };
 use tempfile::TempDir;
 
@@ -28,6 +28,12 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
             family: "JetBrains Mono".to_owned(),
             size: 14.5,
             line_height: 1.5,
+            ligatures: false,
+        },
+        value_font: FontSpec {
+            family: "Segoe UI".to_owned(),
+            size: 12.5,
+            line_height: 1.4,
             ligatures: false,
         },
         window: WindowGeometry {
@@ -69,9 +75,29 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
 }
 
 #[test]
+fn settings_load_backcompat_defaults_missing_value_font() -> TestResult {
+    let dir = TempDir::new()?;
+    let path = dir.path().join("legacy_settings.json");
+    let legacy_json = r#"{
+        "theme": "dark",
+        "editor_font": { "family": "Consolas", "size": 12.0, "line_height": 1.3, "ligatures": false },
+        "restore_session": false
+    }"#;
+    std::fs::write(&path, legacy_json)?;
+
+    let loaded = AppSettings::load(&path)?;
+    assert_eq!(loaded.theme, ThemePreference::Dark);
+    assert_eq!(loaded.editor_font.family, "Consolas");
+    assert_eq!(loaded.value_font, FontSpec::default());
+    assert!(!loaded.restore_session);
+    Ok(())
+}
+
+#[test]
 fn theme_detection_succeeds_and_flags_map_deterministically() -> TestResult {
     let _high_contrast = is_high_contrast()?;
     let _apps_light = apps_use_light_theme()?;
+    let _reduced_motion = detect_reduced_motion();
     let detected = detect_theme()?;
     assert_eq!(detect_theme_or_default(), detected);
 

@@ -47,12 +47,70 @@ pub fn acquire_or_forward(
     Ok(None)
 }
 
+/// Thread-safe wakeup bridge combining a coalesced primary `async_channel` and
+/// independent subscriber receivers for GPUI `cx.spawn` event loops.
+#[derive(Debug)]
+pub(crate) struct WakeupSignal {
+    tx: async_channel::Sender<()>,
+    rx: async_channel::Receiver<()>,
+    subscribers: Mutex<Vec<async_channel::Sender<()>>>,
+}
+
+impl Default for WakeupSignal {
+    fn default() -> Self {
+        let (tx, rx) = async_channel::bounded(1);
+        Self {
+            tx,
+            rx,
+            subscribers: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl WakeupSignal {
+    pub(crate) fn sender(&self) -> async_channel::Sender<()> {
+        self.tx.clone()
+    }
+
+    pub(crate) fn receiver(&self) -> async_channel::Receiver<()> {
+        self.rx.clone()
+    }
+
+    pub(crate) fn subscribe(&self) -> async_channel::Receiver<()> {
+        let (tx, rx) = async_channel::bounded(1);
+        if let Ok(mut guard) = self.subscribers.lock() {
+            guard.push(tx);
+        }
+        rx
+    }
+
+    pub(crate) fn notify(&self) {
+        let _ = self.tx.try_send(());
+        if let Ok(mut guard) = self.subscribers.lock() {
+            guard.retain(|tx| match tx.try_send(()) {
+                Ok(()) | Err(async_channel::TrySendError::Full(())) => true,
+                Err(async_channel::TrySendError::Closed(())) => false,
+            });
+        }
+    }
+
+    pub(crate) fn close(&self) {
+        self.tx.close();
+        if let Ok(mut guard) = self.subscribers.lock() {
+            for tx in guard.drain(..) {
+                tx.close();
+            }
+        }
+    }
+}
+
 /// Thread-safe inbox for targets received from secondary launches.
 #[derive(Debug, Default)]
 pub struct IpcInbox {
     targets: Mutex<Vec<String>>,
     notify_hwnd: AtomicIsize,
     stopped: AtomicBool,
+    wakeup: WakeupSignal,
 }
 
 impl IpcInbox {
@@ -60,6 +118,30 @@ impl IpcInbox {
     #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    /// Returns the shared async wakeup sender for testing or manual nudges.
+    #[must_use]
+    pub fn notify_sender(&self) -> async_channel::Sender<()> {
+        self.wakeup.sender()
+    }
+
+    /// Returns a clone of the shared async wakeup receiver.
+    #[must_use]
+    pub fn notify_receiver(&self) -> async_channel::Receiver<()> {
+        self.wakeup.receiver()
+    }
+
+    /// Creates an independent coalescing receiver notified whenever targets arrive.
+    #[must_use]
+    pub fn subscribe(&self) -> async_channel::Receiver<()> {
+        self.wakeup.subscribe()
+    }
+
+    /// Marks the inbox closed and terminates all async wakeup channels.
+    pub fn close(&self) {
+        self.stopped.store(true, Ordering::Release);
+        self.wakeup.close();
     }
 
     /// Registers the main window `HWND` to wake via `WM_APP_IPC_TARGETS`.
@@ -96,6 +178,7 @@ impl IpcInbox {
     }
 
     fn post_wakeup(&self) {
+        self.wakeup.notify();
         let raw = self.notify_hwnd.load(Ordering::Acquire);
         if raw != 0 {
             let hwnd = HWND(raw as *mut std::ffi::c_void);
@@ -121,4 +204,28 @@ pub fn spawn_ipc_listener(pipe_name: &str, inbox: Arc<IpcInbox>) -> Result<JoinH
             }
         })?;
     Ok(handle)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ipc_inbox_wakes_async_subscribers_and_drains_targets() {
+        let inbox = IpcInbox::new();
+        let sub_a = inbox.subscribe();
+        let sub_b = inbox.subscribe();
+        let shared = inbox.notify_receiver();
+
+        inbox.push_targets(vec!["/tmp/demo.sqlite".to_owned()]);
+        assert_eq!(sub_a.try_recv(), Ok(()));
+        assert_eq!(sub_b.try_recv(), Ok(()));
+        assert_eq!(shared.try_recv(), Ok(()));
+        assert_eq!(inbox.drain_targets(), vec!["/tmp/demo.sqlite".to_owned()]);
+
+        // Empty push still notifies foreground activation without queueing targets.
+        inbox.push_targets(Vec::new());
+        assert_eq!(sub_a.try_recv(), Ok(()));
+        assert!(inbox.drain_targets().is_empty());
+    }
 }
