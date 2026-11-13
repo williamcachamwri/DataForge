@@ -439,3 +439,134 @@ impl CloseDecision {
         !matches!(self, Self::Allow)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use tablepro_core::sql_syntax::StatementAccess;
+    use tablepro_core::{SafeModeLevel, TransactionState, WriteGate};
+
+    use super::*;
+
+    #[test]
+    fn cancel_fences_late_driver_completion_and_failure() {
+        let mut machine = ConnectionWindowPhaseMachine::new();
+        let ws = WorkspaceId(1);
+        machine.add_workspace(ws);
+
+        let token1 = machine.begin_connect(ws);
+        assert!(token1.is_some());
+        if let Some(t1) = token1 {
+            machine.cancel_connect(ws);
+            assert_eq!(machine.phase(ws), Some(&ConnectionWindowPhase::Disconnected));
+
+            // Late completion or failure with t1 must be ignored.
+            assert!(!machine.complete_connect(ws, t1));
+            assert!(!machine.fail_connect(
+                ws,
+                t1,
+                ConnectionUnavailableView {
+                    summary: "late".to_owned(),
+                    detail: None,
+                    can_retry: true,
+                    is_auth_failure: false,
+                }
+            ));
+            assert_eq!(machine.phase(ws), Some(&ConnectionWindowPhase::Disconnected));
+        }
+    }
+
+    #[test]
+    fn close_window_cancels_all_workspaces() {
+        let mut machine = ConnectionWindowPhaseMachine::new();
+        let w1 = WorkspaceId(1);
+        let w2 = WorkspaceId(2);
+        machine.add_workspace(w1);
+        machine.add_workspace(w2);
+
+        let t1 = machine.begin_connect(w1);
+        let t2 = machine.begin_connect(w2);
+        machine.close_window();
+
+        assert_eq!(machine.phase(w1), Some(&ConnectionWindowPhase::Disconnected));
+        assert_eq!(machine.phase(w2), Some(&ConnectionWindowPhase::Disconnected));
+        if let (Some(t1), Some(t2)) = (t1, t2) {
+            assert!(!machine.complete_connect(w1, t1));
+            assert!(!machine.complete_connect(w2, t2));
+        }
+    }
+
+    #[test]
+    fn session_keeps_driver_handle_across_outages_and_gates_safemode() {
+        let mut session = ConnectionSession::new(SafeModeLevel::ConfirmWrites);
+        assert_eq!(session.reported_status(), ReportedStatus::Disconnected);
+
+        session.install_driver(DriverHandle {
+            driver_id: "postgres".to_owned(),
+            generation: 1,
+        });
+        assert_eq!(session.reported_status(), ReportedStatus::Connected);
+
+        session.mark_session_unreachable(1, "network reset");
+        assert_eq!(session.reported_status(), ReportedStatus::Unreachable);
+        assert!(session.driver().is_some(), "driver handle must not be cleared on outage");
+
+        session.mark_session_live();
+        assert_eq!(session.reported_status(), ReportedStatus::Connected);
+
+        assert_eq!(session.gate_statement(StatementAccess::Read), WriteGate::Run);
+        assert_eq!(session.gate_statement(StatementAccess::Write), WriteGate::Confirm);
+
+        session.transaction_state = TransactionState::InTransaction;
+        assert!(session.check_close_guard().requires_confirmation());
+    }
+
+    #[test]
+    fn title_and_tab_label_resolvers_never_return_blank() {
+        let title = WindowTitleResolver::resolve("   ", Some(""), &ConnectionWindowPhase::Disconnected);
+        assert!(!title.trim().is_empty());
+
+        let label = EditorTabLabelResolver::resolve(Some("   "), 0, true);
+        assert_eq!(label, "Query 1 •");
+    }
+
+    proptest! {
+        #[test]
+        fn prop_stale_tokens_never_mutate_phase(ops in prop::collection::vec(0u8..4, 1..40)) {
+            let mut machine = ConnectionWindowPhaseMachine::new();
+            let ws = WorkspaceId(7);
+            machine.add_workspace(ws);
+            let mut stale_tokens = Vec::new();
+            let mut active_token: Option<AttemptToken> = None;
+
+            for op in ops {
+                match op {
+                    0 => {
+                        if let Some(prev) = active_token {
+                            stale_tokens.push(prev);
+                        }
+                        active_token = machine.begin_connect(ws);
+                    }
+                    1 => {
+                        if let Some(prev) = active_token.take() {
+                            stale_tokens.push(prev);
+                        }
+                        machine.cancel_connect(ws);
+                    }
+                    2 => {
+                        if let Some(tok) = active_token.take() {
+                            prop_assert!(machine.complete_connect(ws, tok));
+                        }
+                    }
+                    _ => {
+                        for &stale in &stale_tokens {
+                            let before = machine.phase(ws).cloned();
+                            prop_assert!(!machine.complete_connect(ws, stale));
+                            prop_assert_eq!(machine.phase(ws).cloned(), before);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
