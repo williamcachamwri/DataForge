@@ -23,9 +23,11 @@ use windows::core::PCWSTR;
 
 use crate::accessibility::{Modifiers, handle_wm_getobject, translate_key};
 use crate::app::AppController;
+use crate::branding::apply_window_icons;
 use crate::dialogs::{DialogKind, DialogOutcome, show_native_dialog};
 use crate::error::{AppError, Result};
 use crate::ipc::{IpcInbox, WM_APP_IPC_TARGETS};
+use crate::services::WM_APP_SERVICE_EVENT;
 
 const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
 
@@ -120,7 +122,14 @@ impl MainWindow {
 
         let dark_titlebar = controller.uses_dark_titlebar();
         apply_dwm_dark_mode(hwnd, dark_titlebar);
+        apply_window_icons(hwnd);
         ipc_inbox.attach_hwnd(hwnd);
+        if let Some(services) = &controller.services {
+            services.attach_hwnd(hwnd);
+        }
+
+        let mut controller = controller;
+        controller.headless = false;
 
         let mut state = Box::new(WindowState {
             controller,
@@ -263,12 +272,20 @@ fn dispatch_message(
             handle_ipc_targets(hwnd, state);
             LRESULT(0)
         }
+        WM_APP_SERVICE_EVENT => {
+            state.controller.drain_service_events();
+            invalidate(hwnd);
+            LRESULT(0)
+        }
         WM_CLOSE => {
             request_close(hwnd, state);
             LRESULT(0)
         }
         WM_DESTROY => {
             state.ipc_inbox.detach_hwnd();
+            if let Some(services) = &state.controller.services {
+                services.detach_hwnd();
+            }
             // SAFETY: Clear `GWLP_USERDATA` and quit message loop on window destruction.
             unsafe {
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);

@@ -1,11 +1,13 @@
-//! Startup tracing initialization and panic/crash report persistence.
+//! Startup tracing initialization and panic/crash report persistence
+//! backed by `dataforge_services::diagnostics`.
 
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
-use tracing_subscriber::EnvFilter;
+use dataforge_services::diagnostics::{
+    CrashReport, init_logging, write_crash_report as write_service_crash_report,
+};
 
 use crate::error::Result;
 
@@ -19,14 +21,7 @@ pub fn init_logging_and_crash_reports(log_dir: &Path) -> Result<()> {
     let crash_dir = log_dir.to_path_buf();
 
     LOG_INIT.call_once(|| {
-        let filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new("dataforge=info,warn"));
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter(filter)
-            .with_target(false)
-            .with_ansi(false)
-            .try_init();
-
+        init_logging("dataforge=info,warn");
         install_panic_hook(crash_dir);
     });
 
@@ -41,15 +36,15 @@ fn install_panic_hook(log_dir: PathBuf) {
     }));
 }
 
-/// Writes a crash report file into `log_dir` and returns its path.
+/// Writes an atomic crash report file into `log_dir` and returns its path.
 pub fn write_crash_report(log_dir: &Path, message: &str) -> Result<PathBuf> {
-    fs::create_dir_all(log_dir)?;
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
-    let path = log_dir.join(format!("crash-{timestamp}.log"));
-    let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
-    writeln!(file, "DataForge crash report ({timestamp})")?;
-    writeln!(file, "{message}")?;
+    let report = CrashReport {
+        app_version: env!("CARGO_PKG_VERSION").to_owned(),
+        os_version: std::env::consts::OS.to_owned(),
+        message: message.to_owned(),
+        location: None,
+        backtrace: None,
+    };
+    let path = write_service_crash_report(log_dir, &report)?;
     Ok(path)
 }

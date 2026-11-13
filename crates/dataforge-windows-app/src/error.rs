@@ -3,6 +3,7 @@
 use std::fmt;
 
 use dataforge_gfx::GfxError;
+use dataforge_services::ServiceError;
 use dataforge_windows_platform::PlatformError;
 
 /// Unified result type for `dataforge-windows-app`.
@@ -26,6 +27,8 @@ pub enum AppError {
     Io(std::io::Error),
     /// CLI argument or dispatch error.
     Cli(String),
+    /// Service layer error (runtime, session, AI, MCP, export, import).
+    Service(ServiceError),
     /// Invalid configuration or state transition.
     InvalidState(String),
 }
@@ -38,6 +41,7 @@ impl fmt::Display for AppError {
             Self::Win32 { operation, source } => write!(f, "Win32 {operation} failed: {source}"),
             Self::Io(err) => write!(f, "I/O error: {err}"),
             Self::Cli(msg) => write!(f, "CLI error: {msg}"),
+            Self::Service(err) => write!(f, "service error: {err}"),
             Self::InvalidState(msg) => write!(f, "invalid state: {msg}"),
         }
     }
@@ -50,6 +54,7 @@ impl std::error::Error for AppError {
             Self::Gfx(err) => Some(err),
             Self::Win32 { source, .. } => Some(source),
             Self::Io(err) => Some(err),
+            Self::Service(err) => Some(err),
             Self::Cli(_) | Self::InvalidState(_) => None,
         }
     }
@@ -70,5 +75,11 @@ impl From<GfxError> for AppError {
 impl From<std::io::Error> for AppError {
     fn from(err: std::io::Error) -> Self {
         Self::Io(err)
+    }
+}
+
+impl From<ServiceError> for AppError {
+    fn from(err: ServiceError) -> Self {
+        Self::Service(err)
     }
 }

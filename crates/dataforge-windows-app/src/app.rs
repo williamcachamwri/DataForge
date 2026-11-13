@@ -1,7 +1,8 @@
 //! Central application controller coordinating state models, layout, theme,
 //! keyboard/mouse dispatch, and Direct2D frame rendering.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use dataforge_gfx::Result;
 use dataforge_gfx::context::{D2dContext, RenderSurface};
@@ -16,15 +17,22 @@ use dataforge_gfx::palette::{ThemeMode, ThemePalette};
 use dataforge_state::connection_window::{
     AttemptToken, ConnectionWindowPhase, ConnectionWindowPhaseMachine, WorkspaceId,
 };
+use dataforge_state::data_grid::{DataGridLayoutScope, DataGridModel, RowID};
 use dataforge_state::library::ConnectionsLibraryModel;
 use dataforge_state::tabs::{CloseActionResult, TabConnectionId, TabId, TabKind, TabStripModel};
 use dataforge_state::theme::{ThemeDefinition, ThemeSlot};
 use dataforge_windows_platform::{
     AppSettings, ThemePreference, WindowsTheme, detect_theme_or_default,
 };
+use tablepro_core::column::ResultColumn;
+use tablepro_core::meta::{ObjectInfo, PagePosition, SchemaInfo, TableRef};
+use tablepro_core::value::Value;
 
 use crate::accessibility::{FocusRegion, KeyCommand};
+use crate::controller_types::{QueryHistoryEntry, SavedQueryEntry, SplitPaneMode, VimMode};
+use crate::error::AppError;
 use crate::i18n::{Locale, Strings};
+use crate::services::ServiceHub;
 use crate::shell_layout::{ShellHitTarget, ShellLayout, ShellLayoutConfig};
 use crate::views::ai_drawer::{AiDrawerState, render_ai_drawer};
 use crate::views::content::{
@@ -83,6 +91,27 @@ pub struct AppController {
     pub editor_autocomplete: Option<AutocompletePopup>,
     pub open_transactions: BTreeMap<WorkspaceId, bool>,
     pub safe_mode_enabled: bool,
+    pub services: Option<Arc<ServiceHub>>,
+    pub headless: bool,
+    pub active_attempt: Option<AttemptToken>,
+    pub active_table: Option<TableRef>,
+    pub grid_model: DataGridModel,
+    pub grid_raw_columns: Vec<ResultColumn>,
+    pub grid_raw_rows: Vec<Vec<Value>>,
+    pub grid_row_keys: BTreeMap<RowID, Vec<Value>>,
+    pub grid_page_prev: Option<PagePosition>,
+    pub grid_page_next: Option<PagePosition>,
+    pub cached_schemas: Vec<SchemaInfo>,
+    pub cached_objects: Vec<ObjectInfo>,
+    pub favorite_objects: BTreeSet<String>,
+    pub query_history: Vec<QueryHistoryEntry>,
+    pub saved_queries: Vec<SavedQueryEntry>,
+    pub query_notices: Vec<String>,
+    pub vim_mode: Option<VimMode>,
+    pub split_pane: SplitPaneMode,
+    pub split_editor_lines: Vec<EditorLine>,
+    pub last_test_status: Option<String>,
+    pub last_export_status: Option<String>,
     pub last_width_dip: f32,
     pub last_height_dip: f32,
     grid_renderer: DataGridRenderer,
@@ -95,6 +124,7 @@ impl AppController {
     pub fn new(settings: AppSettings, system_theme: WindowsTheme, locale: Locale) -> Self {
         let mut connections = ConnectionWindowPhaseMachine::new();
         let active_workspace = WorkspaceId(1);
+        connections.add_workspace(active_workspace);
         connections.select_workspace(active_workspace);
 
         let mut tabs = TabStripModel::new();
@@ -158,6 +188,27 @@ impl AppController {
             editor_autocomplete: None,
             open_transactions: BTreeMap::new(),
             safe_mode_enabled: false,
+            services: ServiceHub::new(Some(2)).ok().map(Arc::new),
+            headless: true,
+            active_attempt: None,
+            active_table: None,
+            grid_model: DataGridModel::new(DataGridLayoutScope::Ephemeral, 100),
+            grid_raw_columns: Vec::new(),
+            grid_raw_rows: Vec::new(),
+            grid_row_keys: BTreeMap::new(),
+            grid_page_prev: None,
+            grid_page_next: None,
+            cached_schemas: Vec::new(),
+            cached_objects: Vec::new(),
+            favorite_objects: BTreeSet::new(),
+            query_history: Vec::new(),
+            saved_queries: Vec::new(),
+            query_notices: Vec::new(),
+            vim_mode: None,
+            split_pane: SplitPaneMode::Single,
+            split_editor_lines: Vec::new(),
+            last_test_status: None,
+            last_export_status: None,
             last_width_dip: 1280.0,
             last_height_dip: 800.0,
             grid_renderer: DataGridRenderer::new(settings.editor_font.family.clone()),
@@ -241,18 +292,29 @@ impl AppController {
             if trimmed.is_empty() {
                 continue;
             }
-            if let Ok(conn) = self.connection_form.apply_url(trimmed) {
+            if let Ok(conn) = self.parse_and_apply_connection_url(trimmed) {
                 let engine = engine_from_driver_id(&conn.driver_id);
                 let label = conn.name.clone();
                 self.library.upsert_connection(conn);
                 self.add_rail_connection(trimmed, &label, engine, true);
+                if matches!(engine, EngineKind::Sqlite | EngineKind::Duckdb) {
+                    let path = std::path::Path::new(&self.connection_form.database).to_path_buf();
+                    if path.exists() {
+                        let _ = self.connect_local_file_blocking(&path);
+                    }
+                }
             } else {
+                let path = std::path::Path::new(trimmed);
                 let engine = if trimmed.to_ascii_lowercase().ends_with(".duckdb") {
                     EngineKind::Duckdb
                 } else {
                     EngineKind::Sqlite
                 };
-                self.add_rail_connection(trimmed, trimmed, engine, true);
+                if path.exists() {
+                    let _ = self.connect_local_file_blocking(path);
+                } else {
+                    self.add_rail_connection(trimmed, trimmed, engine, true);
+                }
             }
             self.screen_mode = ScreenMode::Workspace;
         }
@@ -295,8 +357,9 @@ impl AppController {
     #[must_use]
     pub fn needs_close_guard(&self) -> bool {
         let has_open_tx = self.open_transactions.values().any(|open| *open);
-        has_open_tx
-            || (self.safe_mode_enabled && self.tabs.tabs().iter().any(|t| t.has_unsaved_edits))
+        let has_unsaved = self.grid_model.edits.has_pending_edits()
+            || self.tabs.tabs().iter().any(|t| t.has_unsaved_edits);
+        has_open_tx || (self.safe_mode_enabled && has_unsaved)
     }
 
     /// Executes `Ctrl+W` (`CloseTabOrWindow`): closes the active tab first, or requests window close.
@@ -373,7 +436,9 @@ impl AppController {
                 self.screen_mode = ScreenMode::ConnectionsLibrary;
             }
             KeyCommand::ExecuteQuery => {
-                self.toolbar_status.latency_label = "<1ms".to_owned();
+                if self.execute_active_sql_blocking().is_err() {
+                    self.toolbar_status.latency_label = "<1ms".to_owned();
+                }
             }
         }
         false
@@ -438,14 +503,25 @@ impl AppController {
             }
             ShellHitTarget::StatusStructureToggle => {
                 self.status_bar.view_mode = TableViewMode::Structure;
+                if let Some(table) = self.active_table.clone() {
+                    let _ = self.load_table_structure_blocking(&table);
+                }
             }
             ShellHitTarget::StatusPrevPage if self.status_bar.current_page > 1 => {
-                self.status_bar.current_page -= 1;
+                if self.active_table.is_some() {
+                    let _ = self.prev_grid_page_blocking();
+                } else {
+                    self.status_bar.current_page -= 1;
+                }
             }
             ShellHitTarget::StatusNextPage
                 if self.status_bar.current_page < self.status_bar.total_pages =>
             {
-                self.status_bar.current_page += 1;
+                if self.active_table.is_some() {
+                    let _ = self.next_grid_page_blocking();
+                } else {
+                    self.status_bar.current_page += 1;
+                }
             }
             _ => {}
         }
@@ -480,7 +556,8 @@ impl AppController {
             self.sidebar_favorites_only,
             &self.sidebar_rows,
         )?;
-        let has_pending_edits = self.tabs.tabs().iter().any(|t| t.has_unsaved_edits);
+        let has_pending_edits = self.grid_model.edits.has_pending_edits()
+            || self.tabs.tabs().iter().any(|t| t.has_unsaved_edits);
         render_toolbar(
             surface,
             &layout,
@@ -636,7 +713,7 @@ impl AppController {
         }
     }
 
-    fn sync_layout_counts(&mut self) {
+    pub(crate) fn sync_layout_counts(&mut self) {
         self.layout_config.open_connection_count = self.rail_items.len();
         self.layout_config.tab_count = self.tabs.tabs().len();
         self.layout_config.sidebar_item_count = self.sidebar_rows.len();
@@ -645,6 +722,13 @@ impl AppController {
     /// Marks an active workspace as connecting with a new `AttemptToken`.
     pub fn begin_workspace_connect(&mut self, id: WorkspaceId) -> Option<AttemptToken> {
         self.connections.begin_connect(id)
+    }
+
+    /// Returns the initialized [`ServiceHub`] or [`AppError::InvalidState`].
+    pub fn require_services(&self) -> std::result::Result<&Arc<ServiceHub>, AppError> {
+        self.services
+            .as_ref()
+            .ok_or_else(|| AppError::InvalidState("service hub is not initialized".to_owned()))
     }
 }
 

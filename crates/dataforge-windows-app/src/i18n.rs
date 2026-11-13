@@ -1,5 +1,7 @@
 //! Lightweight localization catalog for DataForge UI strings.
 
+use dataforge_services::diagnostics::LocaleTable;
+
 /// Supported UI locales.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Locale {
@@ -81,4 +83,12 @@ impl Strings {
 pub fn init_locale(preferred: Option<&str>) -> Locale {
     let _ = preferred;
     Locale::EnUs
+}
+
+/// Returns the backing `dataforge-services` [`LocaleTable`] for `locale`.
+#[must_use]
+pub fn diagnostics_locale_table(locale: Locale) -> LocaleTable {
+    match locale {
+        Locale::EnUs => LocaleTable::en_us(),
+    }
 }
