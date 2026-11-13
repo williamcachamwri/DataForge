@@ -7,13 +7,14 @@ use async_trait::async_trait;
 use dataforge_state::editor::RunEventAccumulator;
 use tablepro_core::credentials::CredentialInteraction;
 use tablepro_core::{
-    ConnectEnvironment, DatabaseDriver, EditorSession, EditorSessionOptions, FileEndpoint, LivenessPolicy, ResultEvent,
-    ResultSink, RunOptions, RunSummary, SafeModeLevel, SinkFlow, UserSql, WorkspaceSettings,
+    ConnectEnvironment, DatabaseDriver, EditorSession, EditorSessionOptions, FileEndpoint,
+    LivenessPolicy, ResultEvent, ResultSink, RunOptions, RunSummary, SafeModeLevel, SinkFlow,
+    UserSql, WorkspaceSettings,
 };
 use tablepro_session::runtime::Tasks;
 use tablepro_session::{
-    ConnectRequest, ConnectServices, ConnectionMetadata, Connector, DefaultDeadlines, DriverConnector,
-    NoStoredCredentials, RequestTarget, Session, SessionDeps,
+    ConnectRequest, ConnectServices, ConnectionMetadata, Connector, DefaultDeadlines,
+    DriverConnector, NoStoredCredentials, RequestTarget, Session, SessionDeps,
 };
 use tablepro_ssh::InProcessSsh;
 use tokio_util::sync::CancellationToken;
@@ -63,7 +64,11 @@ pub async fn open_file_session(
     };
 
     let pending = connector
-        .establish(request, CredentialInteraction::Unattended, CancellationToken::new())
+        .establish(
+            request,
+            CredentialInteraction::Unattended,
+            CancellationToken::new(),
+        )
         .await?;
 
     let session = Session::start(

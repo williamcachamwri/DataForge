@@ -5,11 +5,11 @@
 use std::sync::Arc;
 
 use dataforge_e2e::{E2eResult, open_file_session, shutdown_session};
-use tablepro_core::{
-    ConnectEnvironment, DataModel, DatabaseDriver, DriverRegistry, EndpointKind, EngineCategory, LivenessPolicy,
-    NetworkEndpoint, SafeModeLevel, TlsConfig, WorkspaceSettings,
-};
 use tablepro_core::credentials::{CredentialInteraction, Credentials};
+use tablepro_core::{
+    ConnectEnvironment, DataModel, DatabaseDriver, DriverRegistry, EndpointKind, EngineCategory,
+    LivenessPolicy, NetworkEndpoint, SafeModeLevel, TlsConfig, WorkspaceSettings,
+};
 use tablepro_driver_cassandra::CassandraDriver;
 use tablepro_driver_clickhouse::ClickhouseDriver;
 use tablepro_driver_duckdb::DuckDbDriver;
@@ -20,8 +20,8 @@ use tablepro_driver_postgres::PgDriver;
 use tablepro_driver_redis::RedisDriver;
 use tablepro_driver_sqlite::SqliteDriver;
 use tablepro_session::{
-    ConnectRequest, ConnectServices, ConnectionMetadata, Connector, DefaultDeadlines, DriverConnector, RequestTarget,
-    SessionKey, SessionRegistry,
+    ConnectRequest, ConnectServices, ConnectionMetadata, Connector, DefaultDeadlines,
+    DriverConnector, RequestTarget, SessionKey, SessionRegistry,
 };
 use tablepro_ssh::InProcessSsh;
 use tokio_util::sync::CancellationToken;
@@ -50,15 +50,60 @@ fn all_nine_drivers_register_and_report_capabilities() {
     assert_eq!(registry.len(), 9);
 
     let expected = [
-        ("postgres", EngineCategory::Relational, DataModel::Relational, false),
-        ("mysql", EngineCategory::Relational, DataModel::Relational, false),
-        ("sqlite", EngineCategory::Relational, DataModel::Relational, true),
-        ("duckdb", EngineCategory::Analytical, DataModel::Relational, true),
-        ("mssql", EngineCategory::Relational, DataModel::Relational, false),
-        ("clickhouse", EngineCategory::Analytical, DataModel::Relational, false),
-        ("cassandra", EngineCategory::WideColumn, DataModel::Relational, false),
-        ("mongodb", EngineCategory::Document, DataModel::Document, false),
-        ("redis", EngineCategory::KeyValue, DataModel::KeyValue, false),
+        (
+            "postgres",
+            EngineCategory::Relational,
+            DataModel::Relational,
+            false,
+        ),
+        (
+            "mysql",
+            EngineCategory::Relational,
+            DataModel::Relational,
+            false,
+        ),
+        (
+            "sqlite",
+            EngineCategory::Relational,
+            DataModel::Relational,
+            true,
+        ),
+        (
+            "duckdb",
+            EngineCategory::Analytical,
+            DataModel::Relational,
+            true,
+        ),
+        (
+            "mssql",
+            EngineCategory::Relational,
+            DataModel::Relational,
+            false,
+        ),
+        (
+            "clickhouse",
+            EngineCategory::Analytical,
+            DataModel::Relational,
+            false,
+        ),
+        (
+            "cassandra",
+            EngineCategory::WideColumn,
+            DataModel::Relational,
+            false,
+        ),
+        (
+            "mongodb",
+            EngineCategory::Document,
+            DataModel::Document,
+            false,
+        ),
+        (
+            "redis",
+            EngineCategory::KeyValue,
+            DataModel::KeyValue,
+            false,
+        ),
     ];
 
     for (id, cat, model, is_file) in expected {

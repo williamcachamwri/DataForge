@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 
 use dataforge_e2e::E2eResult;
 use dataforge_gfx::editor_renderer::{
-    AutocompleteItem, AutocompletePopup, CompletionKind, EditorLayout, EditorLine, SqlEditorRenderer,
-    SqlTokenKind, tokenize_sql_line,
+    AutocompleteItem, AutocompletePopup, CompletionKind, EditorLayout, EditorLine,
+    SqlEditorRenderer, SqlTokenKind, tokenize_sql_line,
 };
 use dataforge_gfx::grid_renderer::{DataGridRenderer, GridColumn, GridHitTest, GridLayout};
 use dataforge_gfx::palette::{Color, ThemePalette};
@@ -16,10 +16,12 @@ use dataforge_state::connection_window::{
     ConnectionUnavailableView, ConnectionWindowPhase, ConnectionWindowPhaseMachine, WorkspaceId,
 };
 use dataforge_state::tabs::{
-    CrashSafeTabPersistence, RestoredTabMerge, SessionRestorePlanner, TabConnectionId, TabStripModel,
+    CrashSafeTabPersistence, RestoredTabMerge, SessionRestorePlanner, TabConnectionId,
+    TabStripModel,
 };
 use dataforge_state::theme::{
-    Rgba, ThemeAppearance, ThemeFileFormat, ThemeResolver, ThemeScope, ThemeSlot, VsCodeThemeImporter,
+    Rgba, ThemeAppearance, ThemeFileFormat, ThemeResolver, ThemeScope, ThemeSlot,
+    VsCodeThemeImporter,
 };
 use dataforge_windows_platform::{WindowsCredentialStore, storage_paths_for};
 use secrecy::{ExposeSecret, SecretString};
@@ -123,7 +125,8 @@ fn theme_import_resolve_and_gfx_renderer_layout() -> E2eResult<()> {
     };
     let (_x, _y, w, h) = editor_layout.popup_rect(&popup);
     assert!(w > 0.0 && h > 0.0);
-    let _editor_hit = SqlEditorRenderer::hit_test(100.0, 12.0, &editor_layout, &lines, Some(&popup));
+    let _editor_hit =
+        SqlEditorRenderer::hit_test(100.0, 12.0, &editor_layout, &lines, Some(&popup));
 
     Ok(())
 }
@@ -204,10 +207,7 @@ fn connection_window_phase_and_tab_strip_crash_recovery() -> E2eResult<()> {
         .ok_or("expected recovered tabs for connection")?;
     assert_eq!(restored_tabs.len(), 2);
 
-    let plan = SessionRestorePlanner::plan(
-        &[(conn_id, ConnectionWindowPhase::Connected)],
-        0,
-    );
+    let plan = SessionRestorePlanner::plan(&[(conn_id, ConnectionWindowPhase::Connected)], 0);
     assert_eq!(plan.len(), 1);
     assert!(plan[0].connect_immediately_on_launch);
 

@@ -69,7 +69,10 @@ async fn duckdb_connect_and_browse_schema() -> E2eResult<()> {
         .await
         .map_err(|e| format!("objects failed: {e}"))?;
     let names: Vec<&str> = objects.iter().map(|o| o.name.as_str()).collect();
-    assert!(names.contains(&"events"), "expected events table in {names:?}");
+    assert!(
+        names.contains(&"events"),
+        "expected events table in {names:?}"
+    );
 
     let cols = session
         .columns(TableRef::unqualified("events"))
@@ -158,10 +161,7 @@ async fn duckdb_page_rows_and_analytical_queries() -> E2eResult<()> {
         .first()
         .ok_or("expected result set")?;
     assert_eq!(rs.rows.len(), 3);
-    assert_eq!(
-        rs.rows[0].first(),
-        Some(&Value::Text("eu-west".to_owned()))
-    );
+    assert_eq!(rs.rows[0].first(), Some(&Value::Text("eu-west".to_owned())));
 
     shutdown_session(&session).await?;
     Ok(())

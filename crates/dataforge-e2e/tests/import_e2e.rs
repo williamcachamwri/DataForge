@@ -31,9 +31,15 @@ fn run_import(
     if let Some(path) = picked_file {
         importer = importer.with_file(path);
     }
-    assert!(importer.is_available_blocking(), "{app:?} should be available");
+    assert!(
+        importer.is_available_blocking(),
+        "{app:?} should be available"
+    );
     let inv = importer.inventory_blocking();
-    assert!(inv.connections >= 1, "{app:?} inventory should find >= 1 connection");
+    assert!(
+        inv.connections >= 1,
+        "{app:?} inventory should find >= 1 connection"
+    );
     Ok(importer.collect_blocking(&default_request(), &CancellationToken::new())?)
 }
 
@@ -46,12 +52,21 @@ fn import_tableplus_into_library() -> E2eResult<()> {
 
     let mut entry = plist::Dictionary::new();
     entry.insert("ID".into(), plist::Value::String("tp-pg-1".into()));
-    entry.insert("ConnectionName".into(), plist::Value::String("TP Prod PG".into()));
+    entry.insert(
+        "ConnectionName".into(),
+        plist::Value::String("TP Prod PG".into()),
+    );
     entry.insert("Driver".into(), plist::Value::String("PostgreSQL".into()));
-    entry.insert("DatabaseHost".into(), plist::Value::String("pg.example.com".into()));
+    entry.insert(
+        "DatabaseHost".into(),
+        plist::Value::String("pg.example.com".into()),
+    );
     entry.insert("DatabasePort".into(), plist::Value::String("5432".into()));
     entry.insert("DatabaseName".into(), plist::Value::String("app".into()));
-    entry.insert("DatabaseUser".into(), plist::Value::String("postgres".into()));
+    entry.insert(
+        "DatabaseUser".into(),
+        plist::Value::String("postgres".into()),
+    );
     plist::Value::Array(vec![plist::Value::Dictionary(entry)])
         .to_file_binary(data_dir.join("Connections.plist"))?;
 
@@ -82,7 +97,7 @@ fn import_dbeaver_into_library() -> E2eResult<()> {
         .join(".dbeaver");
     fs::create_dir_all(&dbeaver_dir)?;
 
-    let json = serde_json::json!({
+    let json = r#"{
         "connections": {
             "mysql-1": {
                 "provider": "mysql",
@@ -96,11 +111,8 @@ fn import_dbeaver_into_library() -> E2eResult<()> {
                 }
             }
         }
-    });
-    fs::write(
-        dbeaver_dir.join("data-sources.json"),
-        serde_json::to_vec_pretty(&json)?,
-    )?;
+    }"#;
+    fs::write(dbeaver_dir.join("data-sources.json"), json)?;
 
     let collected = run_import(ForeignApp::DBeaver, dirs, None)?;
     assert_eq!(collected.connections.len(), 1);
@@ -232,11 +244,23 @@ fn import_sequel_ace_into_library() -> E2eResult<()> {
 #[test]
 fn parse_connection_urls_into_library() -> E2eResult<()> {
     let cases = [
-        ("postgres://alice@pg.local:5432/analytics", "PG Analytics", "postgres"),
+        (
+            "postgres://alice@pg.local:5432/analytics",
+            "PG Analytics",
+            "postgres",
+        ),
         ("mysql://bob@mysql.local:3306/shop", "MySQL Shop", "mysql"),
         ("redis://redis.local:6379/0", "Redis Cache", "redis"),
-        ("mongodb://mongo.local:27017/events", "Mongo Events", "mongodb"),
-        ("clickhouse://ch.local:8123/logs", "ClickHouse Logs", "clickhouse"),
+        (
+            "mongodb://mongo.local:27017/events",
+            "Mongo Events",
+            "mongodb",
+        ),
+        (
+            "clickhouse://ch.local:8123/logs",
+            "ClickHouse Logs",
+            "clickhouse",
+        ),
     ];
 
     let mut library = ConnectionsLibraryModel::new();

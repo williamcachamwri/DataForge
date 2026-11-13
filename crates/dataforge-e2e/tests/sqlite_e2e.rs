@@ -68,15 +68,24 @@ async fn sqlite_connect_and_browse_schema_catalog() -> E2eResult<()> {
         .schemas()
         .await
         .map_err(|e| format!("schemas failed: {e}"))?;
-    assert!(!schemas.is_empty(), "SQLite should report at least main schema");
+    assert!(
+        !schemas.is_empty(),
+        "SQLite should report at least main schema"
+    );
 
     let objects = session
         .refresh_objects(ObjectScope::DefaultSchema)
         .await
         .map_err(|e| format!("objects failed: {e}"))?;
     let names: Vec<&str> = objects.iter().map(|o| o.name.as_str()).collect();
-    assert!(names.contains(&"users"), "expected users table in {names:?}");
-    assert!(names.contains(&"orders"), "expected orders table in {names:?}");
+    assert!(
+        names.contains(&"users"),
+        "expected users table in {names:?}"
+    );
+    assert!(
+        names.contains(&"orders"),
+        "expected orders table in {names:?}"
+    );
 
     let cols = session
         .columns(TableRef::unqualified("users"))
@@ -155,15 +164,87 @@ async fn sqlite_page_rows_and_row_count() -> E2eResult<()> {
     assert_eq!(page2.result.rows.len(), 2);
 
     let mut grid = DataGridModel::new(DataGridLayoutScope::Table("users".to_owned()), 2);
-    grid.reload_rows(page1.result.columns.to_vec(), page1.result.rows, Some(total_count));
+    grid.reload_rows(
+        page1.result.columns.to_vec(),
+        page1.result.rows,
+        Some(total_count),
+    );
     assert_eq!(grid.page.page_info(), (1, Some(3)));
     assert!(grid.page.next_page());
-    grid.reload_rows(page2.result.columns.to_vec(), page2.result.rows, Some(total_count));
+    grid.reload_rows(
+        page2.result.columns.to_vec(),
+        page2.result.rows,
+        Some(total_count),
+    );
     assert_eq!(grid.page.page_info(), (2, Some(3)));
     assert!(grid.page.prev_page());
 
     shutdown_session(&session).await?;
     Ok(())
+}
+
+async fn apply_table_edits(
+    session: &Session,
+    table: &TableRef,
+    cols: &[tablepro_core::ColumnInfo],
+    committed: TableEdits,
+) -> E2eResult<Option<u64>> {
+    let report = session
+        .run(OperationKind::Save(WriteKind::RowChanges), |lease, opts| {
+            let table = table.clone();
+            let cols = cols.to_vec();
+            let committed = committed.clone();
+            async move {
+                let conn = lease.connection();
+                let dialect = conn.dialect();
+                let identity = conn.row_identity(&table, opts.clone()).await?;
+                let mut steps = Vec::new();
+
+                for ((row_id, col_id), new_val) in &committed.modified_cells {
+                    let stmt = build_update(
+                        dialect.as_ref(),
+                        &table,
+                        &cols,
+                        &identity,
+                        &[Value::Int(i64::try_from(row_id.0).unwrap_or(0))],
+                        &[(
+                            usize::try_from(col_id.0).unwrap_or(1),
+                            CellInput::Value(new_val.clone()),
+                        )],
+                        &[],
+                    )?;
+                    steps.push(GuardedStatement::affecting_exactly(stmt, 1));
+                }
+
+                for values in committed.inserted_rows.values() {
+                    let cells: Vec<CellInput> =
+                        values.iter().cloned().map(CellInput::Value).collect();
+                    let stmt = build_insert(dialect.as_ref(), &table, &cols, &cells)?;
+                    steps.push(GuardedStatement::affecting_exactly(stmt, 1));
+                }
+
+                for row_id in &committed.deleted_rows {
+                    let stmt = build_delete(
+                        dialect.as_ref(),
+                        &table,
+                        &cols,
+                        &identity,
+                        &[Value::Int(i64::try_from(row_id.0).unwrap_or(0))],
+                    )?;
+                    steps.push(GuardedStatement::affecting_exactly(stmt, 1));
+                }
+
+                let batch = WriteBatch::new(
+                    WriteKind::RowChanges,
+                    table,
+                    steps,
+                    ForeignKeyMode::Enforced,
+                );
+                Ok(conn.write_batch(&batch, opts).await?)
+            }
+        })
+        .await?;
+    Ok(report.total_rows())
 }
 
 #[tokio::test]
@@ -229,55 +310,8 @@ async fn sqlite_edit_insert_delete_commit_and_rollback() -> E2eResult<()> {
         .columns(table.clone())
         .await
         .map_err(|e| format!("columns failed: {e}"))?;
-
-    let report = session
-        .run(OperationKind::Save(WriteKind::RowChanges), |lease, opts| {
-            let table = table.clone();
-            let cols = cols.clone();
-            let committed = committed.clone();
-            async move {
-                let conn = lease.connection();
-                let dialect = conn.dialect();
-                let identity = conn.row_identity(&table, opts.clone()).await?;
-                let mut steps = Vec::new();
-
-                for ((row_id, col_id), new_val) in &committed.modified_cells {
-                    let stmt = build_update(
-                        dialect.as_ref(),
-                        &table,
-                        &cols,
-                        &identity,
-                        &[Value::Int(i64::try_from(row_id.0).unwrap_or(0))],
-                        &[(usize::try_from(col_id.0).unwrap_or(1), CellInput::Value(new_val.clone()))],
-                        &[],
-                    )?;
-                    steps.push(GuardedStatement::affecting_exactly(stmt, 1));
-                }
-
-                for values in committed.inserted_rows.values() {
-                    let cells: Vec<CellInput> = values.iter().cloned().map(CellInput::Value).collect();
-                    let stmt = build_insert(dialect.as_ref(), &table, &cols, &cells)?;
-                    steps.push(GuardedStatement::affecting_exactly(stmt, 1));
-                }
-
-                for row_id in &committed.deleted_rows {
-                    let stmt = build_delete(
-                        dialect.as_ref(),
-                        &table,
-                        &cols,
-                        &identity,
-                        &[Value::Int(i64::try_from(row_id.0).unwrap_or(0))],
-                    )?;
-                    steps.push(GuardedStatement::affecting_exactly(stmt, 1));
-                }
-
-                let batch = WriteBatch::new(WriteKind::RowChanges, table, steps, ForeignKeyMode::Enforced);
-                Ok(conn.write_batch(&batch, opts).await?)
-            }
-        })
-        .await?;
-
-    assert_eq!(report.total_rows(), Some(3));
+    let total_rows = apply_table_edits(&session, &table, &cols, committed).await?;
+    assert_eq!(total_rows, Some(3));
 
     let verify = run_sql(&session, "SELECT id, name FROM users ORDER BY id").await?;
     let rs = verify
