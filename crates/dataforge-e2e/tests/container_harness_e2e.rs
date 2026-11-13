@@ -15,9 +15,7 @@ use tablepro_driver_postgres::PgDriver;
 use tablepro_driver_redis::RedisDriver;
 use tablepro_session::fakes::{FakeConnector, FakeEstablish};
 use tablepro_session::runtime::Tasks;
-use tablepro_session::{
-    Connector, DefaultDeadlines, NoStoredCredentials, Session, SessionDeps,
-};
+use tablepro_session::{Connector, DefaultDeadlines, NoStoredCredentials, Session, SessionDeps};
 use tokio_util::sync::CancellationToken;
 
 async fn start_fake_engine_session(

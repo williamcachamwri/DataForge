@@ -11,9 +11,7 @@ use dataforge_state::tabs::{
     CrashSafeTabPersistence, RestoredConnectionEntry, SessionRestorePlanner, TabConnectionId,
     TabKind, TabSessionEnvelope, TabStripModel,
 };
-use dataforge_windows_platform::{
-    AppSettings, is_forwardable_target, storage_paths_for,
-};
+use dataforge_windows_platform::{AppSettings, is_forwardable_target, storage_paths_for};
 
 fn workspace_root() -> E2eResult<PathBuf> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
