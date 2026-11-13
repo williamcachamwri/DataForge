@@ -18,7 +18,9 @@ use tablepro_core::dialect::SqlDialect;
 use tablepro_core::dml::{build_delete, build_insert, build_update};
 use tablepro_core::edit::CellInput;
 use tablepro_core::filter::FilterSet;
-use tablepro_core::meta::{ObjectInfo, ObjectScope, PagePosition, RowIdentity, SchemaInfo, TableRef};
+use tablepro_core::meta::{
+    ObjectInfo, ObjectScope, PagePosition, RowIdentity, SchemaInfo, TableRef,
+};
 use tablepro_core::statement::{GuardedStatement, RowGuard, StatementBuilder};
 use tablepro_core::value::Value;
 use tablepro_core::{
@@ -114,7 +116,9 @@ impl SessionManager {
         let token = self
             .phase_machine
             .begin_connect(workspace_id)
-            .ok_or_else(|| ServiceError::Session(format!("workspace {workspace_id:?} is already connecting")))?;
+            .ok_or_else(|| {
+                ServiceError::Session(format!("workspace {workspace_id:?} is already connecting"))
+            })?;
 
         let connector = self.runtime.connector();
         let refreshed = credentials
@@ -529,10 +533,7 @@ fn build_row_key_layout(identity: &RowIdentity, columns: &[ColumnInfo]) -> RowKe
     }
 }
 
-fn map_row_keys(
-    grid: &DataGridModel,
-    keys: &[Option<Vec<Value>>],
-) -> BTreeMap<RowID, Vec<Value>> {
+fn map_row_keys(grid: &DataGridModel, keys: &[Option<Vec<Value>>]) -> BTreeMap<RowID, Vec<Value>> {
     let mut map = BTreeMap::new();
     for (row_id, key_opt) in grid.row_order.as_slice().iter().zip(keys.iter()) {
         if let Some(key) = key_opt {
@@ -567,9 +568,9 @@ fn build_write_steps(
     }
 
     for (row_id, assignments) in updates_by_row {
-        let key = row_keys
-            .get(&row_id)
-            .ok_or_else(|| ServiceError::Session(format!("row {row_id:?} has no key for update")))?;
+        let key = row_keys.get(&row_id).ok_or_else(|| {
+            ServiceError::Session(format!("row {row_id:?} has no key for update"))
+        })?;
         let stmt = build_update(dialect, table, columns, identity, key, &assignments, &[])
             .map_err(|err| ServiceError::Session(err.to_string()))?;
         steps.push(GuardedStatement {
@@ -589,9 +590,9 @@ fn build_write_steps(
     }
 
     for row_id in &grid.edits.deleted_rows {
-        let key = row_keys
-            .get(row_id)
-            .ok_or_else(|| ServiceError::Session(format!("row {row_id:?} has no key for delete")))?;
+        let key = row_keys.get(row_id).ok_or_else(|| {
+            ServiceError::Session(format!("row {row_id:?} has no key for delete"))
+        })?;
         let stmt = build_delete(dialect, table, columns, identity, key)
             .map_err(|err| ServiceError::Session(err.to_string()))?;
         steps.push(GuardedStatement {
@@ -626,5 +627,113 @@ impl BrowseOperationError {
             Self::Browse(err) => OperationError::Driver(DriverError::Protocol(err.to_string())),
             Self::Driver(err) => OperationError::Driver(err),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dataforge_state::connection_window::ConnectionWindowPhase;
+    use dataforge_state::data_grid::{DataGridColumnID, DataGridLayoutScope};
+    use dataforge_state::tabs::TabKind;
+    use tablepro_core::column::{ColumnDefault, ColumnType, ResultColumn};
+
+    #[tokio::test]
+    async fn channel_result_sink_forwards_and_detects_closed_receiver() {
+        let (tx, mut rx) = mpsc::channel(4);
+        let mut sink = ChannelResultSink::new(tx);
+
+        let flow = sink
+            .accept(ResultEvent::CommandCompleted {
+                rows_affected: Some(3),
+            })
+            .await;
+        assert_eq!(flow, SinkFlow::Continue);
+        assert!(matches!(
+            rx.recv().await,
+            Some(ResultEvent::CommandCompleted {
+                rows_affected: Some(3)
+            })
+        ));
+
+        drop(rx);
+        let closed = sink
+            .accept(ResultEvent::CommandCompleted {
+                rows_affected: None,
+            })
+            .await;
+        assert_eq!(closed, SinkFlow::ConsumerGone);
+    }
+
+    #[test]
+    fn session_manager_manages_tabs_and_rollback() -> Result<(), ServiceError> {
+        let runtime = Arc::new(AppRuntime::new(Some(1))?);
+        let mut manager = SessionManager::new(runtime);
+        let ws = WorkspaceId(1);
+
+        assert_eq!(manager.phase_machine().phase(ws), None);
+        assert!(manager.disconnect_workspace(ws).is_err());
+
+        let strip = manager.tab_strip_mut(ws);
+        let _tab = strip.open_query_tab(
+            dataforge_state::tabs::TabConnectionId("local".to_owned()),
+            Some("SELECT 1"),
+        );
+        assert_eq!(strip.tabs().len(), 1);
+        assert!(matches!(strip.tabs()[0].kind, TabKind::QueryEditor { .. }));
+
+        let mut grid = DataGridModel::new(DataGridLayoutScope::Ephemeral, 100);
+        grid.reload_rows(
+            vec![ResultColumn::new("id", ColumnType::untyped_text("INTEGER"))],
+            vec![vec![Value::Int(1)]],
+            Some(1),
+        );
+        grid.edits.insert_row(vec![Value::Int(2)]);
+        assert!(grid.edits.has_pending_edits());
+        SessionManager::rollback_table_edits(&mut grid);
+        assert!(!grid.edits.has_pending_edits());
+        let _ = DataGridColumnID(1);
+        let _ = ConnectionWindowPhase::Disconnected;
+        Ok(())
+    }
+
+    #[test]
+    fn build_row_key_layout_maps_unique_key_and_unordered() {
+        let cols = vec![
+            ColumnInfo {
+                name: "id".to_owned(),
+                column_type: ColumnType::untyped_text("INTEGER"),
+                nullable: false,
+                primary_key: true,
+                is_auto_increment: true,
+                is_generated: false,
+                partition_scoped: false,
+                default: ColumnDefault::None,
+                comment: None,
+            },
+            ColumnInfo {
+                name: "title".to_owned(),
+                column_type: ColumnType::untyped_text("TEXT"),
+                nullable: false,
+                primary_key: false,
+                is_auto_increment: false,
+                is_generated: false,
+                partition_scoped: false,
+                default: ColumnDefault::None,
+                comment: None,
+            },
+        ];
+
+        let pk = RowIdentity::UniqueKey {
+            columns: vec!["id".to_owned()],
+        };
+        assert_eq!(
+            build_row_key_layout(&pk, &cols),
+            RowKeyLayout::Columns(vec![0])
+        );
+        assert_eq!(
+            build_row_key_layout(&RowIdentity::Unordered, &cols),
+            RowKeyLayout::ReadOnly
+        );
     }
 }
