@@ -16,6 +16,7 @@ dataforge-windows-platform.workspace = true
 duckdb.workspace = true
 futures.workspace = true
 plist.workspace = true
+secrecy.workspace = true
 serde_json.workspace = true
 tablepro-core.workspace = true
 tablepro-driver-cassandra.workspace = true
