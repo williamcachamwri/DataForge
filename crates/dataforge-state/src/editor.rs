@@ -997,3 +997,261 @@ impl VimState {
         })
     }
 }
+
+/// Default split item holding priority (< 490 so divider drags always win, per `split-views.md`).
+pub const SPLIT_PANE_HOLDING_PRIORITY: u16 = 260;
+
+/// Orientation of a split pane container.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SplitAxis {
+    Horizontal,
+    Vertical,
+}
+
+/// Identifier for an editor leaf pane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EditorPaneId(pub u64);
+
+/// Layout properties for a hosted split pane item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SplitPaneLayoutPolicy {
+    /// Must remain `< 490` (`dragThatCannotResizeWindow`).
+    pub holding_priority: u16,
+    /// Must be `true` (`sizingOptions = []`) so minimum width does not pin dividers.
+    pub sizing_options_empty: bool,
+    pub detail_minimum_thickness: Option<u32>,
+}
+
+impl Default for SplitPaneLayoutPolicy {
+    fn default() -> Self {
+        Self {
+            holding_priority: SPLIT_PANE_HOLDING_PRIORITY,
+            sizing_options_empty: true,
+            detail_minimum_thickness: None,
+        }
+    }
+}
+
+/// Recursive split pane tree for editor panes.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EditorSplitNode {
+    Leaf {
+        pane_id: EditorPaneId,
+        policy: SplitPaneLayoutPolicy,
+    },
+    Split {
+        axis: SplitAxis,
+        ratio: f64,
+        first: Box<EditorSplitNode>,
+        second: Box<EditorSplitNode>,
+    },
+}
+
+impl EditorSplitNode {
+    /// Creates a single-pane root.
+    #[must_use]
+    pub fn single(pane_id: EditorPaneId) -> Self {
+        Self::Leaf {
+            pane_id,
+            policy: SplitPaneLayoutPolicy::default(),
+        }
+    }
+
+    /// Splits `target_pane` into `target_pane` and `new_pane` along `axis`.
+    pub fn split_pane(&mut self, target_pane: EditorPaneId, new_pane: EditorPaneId, axis: SplitAxis) -> bool {
+        match self {
+            Self::Leaf { pane_id, policy } if *pane_id == target_pane => {
+                let first = Box::new(Self::Leaf {
+                    pane_id: *pane_id,
+                    policy: *policy,
+                });
+                let second = Box::new(Self::single(new_pane));
+                *self = Self::Split {
+                    axis,
+                    ratio: 0.5,
+                    first,
+                    second,
+                };
+                true
+            }
+            Self::Leaf { .. } => false,
+            Self::Split { first, second, .. } => {
+                first.split_pane(target_pane, new_pane, axis) || second.split_pane(target_pane, new_pane, axis)
+            }
+        }
+    }
+
+    /// Returns all leaf pane ids in traversal order.
+    #[must_use]
+    pub fn leaf_ids(&self) -> Vec<EditorPaneId> {
+        let mut out = Vec::new();
+        self.collect_leaf_ids(&mut out);
+        out
+    }
+
+    fn collect_leaf_ids(&self, out: &mut Vec<EditorPaneId>) {
+        match self {
+            Self::Leaf { pane_id, .. } => out.push(*pane_id),
+            Self::Split { first, second, .. } => {
+                first.collect_leaf_ids(out);
+                second.collect_leaf_ids(out);
+            }
+        }
+    }
+}
+
+/// A saved query in the editor library.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedQueryEntry {
+    pub id: String,
+    pub name: String,
+    pub folder: Option<String>,
+    pub sql: String,
+}
+
+/// An executed query recorded in query history.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryHistoryEntry {
+    pub sql: String,
+    pub connection_id: String,
+    pub elapsed_ms: u64,
+    pub succeeded: bool,
+}
+
+/// Bounded query history model with substring search.
+#[derive(Debug, Clone)]
+pub struct QueryHistoryModel {
+    entries: Vec<QueryHistoryEntry>,
+    max_entries: usize,
+}
+
+impl QueryHistoryModel {
+    /// Creates a history buffer retaining at most `max_entries` items.
+    #[must_use]
+    pub fn new(max_entries: usize) -> Self {
+        Self {
+            entries: Vec::new(),
+            max_entries: max_entries.max(1),
+        }
+    }
+
+    /// Records a new execution at the front (most recent first).
+    pub fn record(&mut self, entry: QueryHistoryEntry) {
+        self.entries.insert(0, entry);
+        if self.entries.len() > self.max_entries {
+            self.entries.truncate(self.max_entries);
+        }
+    }
+
+    /// Searches history entries by case-insensitive SQL substring.
+    #[must_use]
+    pub fn search(&self, query: &str) -> Vec<&QueryHistoryEntry> {
+        let q = query.trim().to_lowercase();
+        self.entries
+            .iter()
+            .filter(|e| q.is_empty() || e.sql.to_lowercase().contains(&q))
+            .collect()
+    }
+
+    /// Returns all entries most-recent first.
+    #[must_use]
+    pub fn entries(&self) -> &[QueryHistoryEntry] {
+        &self.entries
+    }
+}
+
+/// Accumulated result set from a streaming query run.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccumulatedResultSet {
+    pub columns: Arc<[tablepro_core::column::ResultColumn]>,
+    pub rows: Vec<Vec<tablepro_core::value::Value>>,
+    pub retained: u64,
+    pub total_rows: Option<u64>,
+    pub truncation: Option<tablepro_core::Truncation>,
+    pub row_limit_reached: bool,
+    pub byte_limit_reached: bool,
+}
+
+/// Streaming accumulator consuming `tablepro_core::ResultEvent` and `RunSummary`.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct RunEventAccumulator {
+    pub result_sets: Vec<AccumulatedResultSet>,
+    pub notices: Vec<tablepro_core::ServerNotice>,
+    pub notice_limit_reached: Option<u64>,
+    pub commands_completed: Vec<Option<u64>>,
+    pub summary: Option<tablepro_core::RunSummary>,
+}
+
+impl RunEventAccumulator {
+    /// Creates an empty accumulator for a new query run.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Applies one streaming [`tablepro_core::ResultEvent`].
+    pub fn push_event(&mut self, event: tablepro_core::ResultEvent) {
+        use tablepro_core::ResultEvent;
+        match event {
+            ResultEvent::ResultSetStarted { columns } => {
+                self.result_sets.push(AccumulatedResultSet {
+                    columns,
+                    rows: Vec::new(),
+                    retained: 0,
+                    total_rows: None,
+                    truncation: None,
+                    row_limit_reached: false,
+                    byte_limit_reached: false,
+                });
+            }
+            ResultEvent::ColumnsResolved { set_index, columns } => {
+                if let Some(set) = self.result_sets.get_mut(set_index) {
+                    set.columns = columns;
+                }
+            }
+            ResultEvent::Rows(batch) => {
+                if let Some(set) = self.result_sets.last_mut() {
+                    set.retained = set.retained.saturating_add(batch.len() as u64);
+                    set.rows.extend(batch);
+                }
+            }
+            ResultEvent::RowLimitReached { retained } => {
+                if let Some(set) = self.result_sets.last_mut() {
+                    set.row_limit_reached = true;
+                    set.retained = retained;
+                }
+            }
+            ResultEvent::ByteLimitReached { retained } => {
+                if let Some(set) = self.result_sets.last_mut() {
+                    set.byte_limit_reached = true;
+                    set.retained = retained;
+                }
+            }
+            ResultEvent::ResultSetFinished {
+                retained,
+                total_rows,
+                truncation,
+            } => {
+                if let Some(set) = self.result_sets.last_mut() {
+                    set.retained = retained;
+                    set.total_rows = total_rows;
+                    set.truncation = Some(truncation);
+                }
+            }
+            ResultEvent::CommandCompleted { rows_affected } => {
+                self.commands_completed.push(rows_affected);
+            }
+            ResultEvent::Notice(notice) => {
+                self.notices.push(notice);
+            }
+            ResultEvent::NoticeLimitReached { retained } => {
+                self.notice_limit_reached = Some(retained);
+            }
+        }
+    }
+
+    /// Finalizes the accumulator with [`tablepro_core::RunSummary`].
+    pub fn finish(&mut self, summary: tablepro_core::RunSummary) {
+        self.summary = Some(summary);
+    }
+}
