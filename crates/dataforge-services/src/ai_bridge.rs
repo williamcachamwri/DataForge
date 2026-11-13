@@ -229,11 +229,76 @@ impl AiAssistantService {
     ) -> Result<(String, ReplyEnd), ServiceError> {
         let request = ChatRequest {
             system: completion_system_prompt(schema_context),
-            messages: vec![ChatMessage::user(completion_message(before_cursor, after_cursor))],
+            messages: vec![ChatMessage::user(completion_message(
+                before_cursor,
+                after_cursor,
+            ))],
             max_tokens: ChatRequest::SUGGESTION_MAX_TOKENS,
         };
         collect_reply(&self.client, endpoint, &request)
             .await
             .map_err(|err| ServiceError::Ai(err.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tablepro_core::column::{ColumnDefault, ColumnType};
+
+    #[test]
+    fn endpoint_configs_set_expected_providers_and_urls() {
+        let ollama = AiEndpointConfig::ollama("llama3.2");
+        assert_eq!(ollama.provider, AiProvider::OpenAiCompatible);
+        assert_eq!(ollama.base_url, DEFAULT_OLLAMA_URL);
+        assert_eq!(ollama.model, "llama3.2");
+
+        let anthropic = AiEndpointConfig::anthropic("claude-sonnet-4-20250514");
+        assert_eq!(anthropic.provider, AiProvider::Anthropic);
+        assert_eq!(anthropic.base_url, DEFAULT_ANTHROPIC_URL);
+
+        let openai = AiEndpointConfig::openai("gpt-4.1");
+        assert_eq!(openai.provider, AiProvider::OpenAi);
+        assert_eq!(openai.base_url, DEFAULT_OPENAI_URL);
+    }
+
+    #[tokio::test]
+    async fn resolve_endpoint_allows_local_ollama_without_key() -> Result<(), ServiceError> {
+        let creds = Arc::new(WindowsCredentialStore::new("DataForgeTestAi/"));
+        let service = AiAssistantService::new(creds)?;
+        let endpoint = service
+            .resolve_endpoint(&AiEndpointConfig::ollama("qwen2.5-coder"))
+            .await?;
+        assert_eq!(endpoint.kind(), AiProvider::OpenAiCompatible);
+        assert_eq!(endpoint.model(), "qwen2.5-coder");
+        Ok(())
+    }
+
+    #[test]
+    fn build_schema_context_maps_columns_without_row_data() {
+        let cols = vec![ColumnInfo {
+            name: "id".to_owned(),
+            column_type: ColumnType::untyped_text("INTEGER"),
+            nullable: false,
+            primary_key: true,
+            is_auto_increment: true,
+            is_generated: false,
+            partition_scoped: false,
+            default: ColumnDefault::None,
+            comment: None,
+        }];
+        let ctx = AiAssistantService::build_schema_context(
+            "SQLite",
+            QueryLanguage::Sql,
+            Some("main".to_owned()),
+            None,
+            vec!["users".to_owned()],
+            vec![("users".to_owned(), cols)],
+        );
+        assert_eq!(ctx.engine, "SQLite");
+        assert_eq!(ctx.tables, vec!["users"]);
+        assert_eq!(ctx.described.len(), 1);
+        assert_eq!(ctx.described[0].columns[0].name, "id");
+        assert!(ctx.described[0].columns[0].primary_key);
     }
 }
