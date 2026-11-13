@@ -1,0 +1,55 @@
+# EditorConfig helps maintain consistent coding styles
+# https://editorconfig.org
+
+root = true
+
+# Default settings for all files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# String catalogs. Xcode writes these with no trailing newline; the [*] rule above would add one
+# back on every save, and Xcode's next sync would take it out again.
+[*.xcstrings]
+insert_final_newline = false
+
+# Swift files
+[*.swift]
+indent_size = 4
+max_line_length = 120
+
+# Markdown files
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# JSON files
+[*.json]
+indent_size = 2
+
+# YAML files
+[*.{yml,yaml}]
+indent_size = 2
+
+# Property lists
+[*.plist]
+indent_size = 4
+
+# Shell scripts
+# CLAUDE.md sets 4 spaces for the codebase, and 34 of the 43 shell scripts already use it.
+# This file said 2, so it disagreed with both.
+[*.sh]
+indent_size = 4
+
+# Makefile
+[Makefile]
+indent_style = tab
+
+# Xcode build configuration
+[*.xcconfig]
+indent_style = space
+indent_size = 4

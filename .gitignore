@@ -1,0 +1,52 @@
+# Repo-wide ignores. Each app keeps its own beside its code: apple/.gitignore, linux/.gitignore.
+
+# The shared Rust core, which a global ignore of core dumps would hide.
+!/core/
+
+# Cargo's output for the workspace at the top
+/target/
+
+# Claude Code worktrees and per-session state
+.claude/worktrees/
+
+# macOS
+#
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Thumbnails
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Sensitive data
+*.pem
+*.p12
+*.mobileprovision
+Secrets.xcconfig
+
+# Debug
+*.log
+
+# Python, and the towncrier venv both apps' release notes use (RELEASING.md, Notes)
+__pycache__/
+/.venv/
+
+# Issue analysis blueprints (local only)
+.analysis/
+.docs/
+/plans/reports
