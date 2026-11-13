@@ -24,3 +24,14 @@ stateDiagram-v2
 - **`AttemptToken` Fencing**: Every connect/reconnect increments a monotonic `AttemptToken(u64)`. Cancelling updates the phase immediately and invalidates prior tokens so late driver callbacks cannot mutate state.
 - **Inline `ConnectionUnavailableView`**: Failures render inline inside the workspace pane (`WorkspacePaneKind::UnavailableInline`) with `summary`, optional `detail`, `can_retry`, and `is_auth_failure` — never as modal alert dialogs.
 - **Close & Safe Mode Guards**: `CloseDecision` checks `SessionLiveness` and open-transaction state before closing a workspace or window.
+
+## 2. `DataGridModel` (`data_grid.rs`)
+
+Implements a 3-layer grid model separating stable data identity, display layout, and pending edits:
+
+- **Stable Identity**: `RowID(u64)` and `DataGridColumnID(u64)` remain invariant across sorts, filters, and column reordering.
+- **Frozen Leading Columns (`DataGridColumnSet`)**: Leading columns (`DataGridPane::Frozen`) are capped at `MAXIMUM_FROZEN_SHARE = 2.0 / 3.0` of the viewport width; column widths clamp to `[MIN_COLUMN_WIDTH (48.0), MAX_COLUMN_WIDTH (1200.0)]`. Table index `0` in both panes is reserved for `PaneColumnSlot::RowNumbers`.
+- **Selection (`GridSelectionReducer`)**: Pure reducer supporting single-cell, range, row, and column selection modes (`GridSelectionMode`).
+- **Sorting & Paging**: `HeaderSortCycle` cycles `None -> Ascending -> Descending -> None`; `TableQueryPage` tracks paged `table_query` windows and total row counts.
+- **Batched Edits (`TableEdits`)**: Tracks cell edits (`DataGridCellEdit`), inserts, and deletes with undo batches (`EditUndoBatch`) until committed or rolled back.
+- **Filter Bar & Exports**: `FilterBarState` manages active filter predicates; `GridExportFormat` supports CSV, JSON, and SQL output.
