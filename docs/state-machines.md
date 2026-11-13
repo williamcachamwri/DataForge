@@ -44,3 +44,9 @@ Implements a 3-layer grid model separating stable data identity, display layout,
 - **Schema Autocomplete (`AutocompleteState`)**: Ranks `SchemaCompletionItem` candidates (`SchemaCompletionKind`) against the current identifier prefix.
 - **Vim Mode (`VimState`)**: Modal state machine (`VimMode`, `VimOperator`, `VimMotion`, `VimAction`) for Normal/Insert/Visual editing.
 - **Split Panes & Results**: `SplitPaneLayoutPolicy` and `EditorSplitNode` manage horizontal/vertical editor splits; `RunEventAccumulator` collects streaming `ResultEvent`s into `AccumulatedResultSet`s alongside `QueryHistoryModel`.
+
+## 4. Tabs, Library, and Themes (`tabs.rs`, `library.rs`, `theme.rs`)
+
+- **Tab Strip (`TabStripModel`)**: Enforces `Ctrl+W` precedence (`CloseActionResult`: close active tab first, close window only when no tabs remain), maintains a `ClosedTabEntry` stack for `Ctrl+Shift+T` (`ReopenClosedTab`), and coordinates `CrashSafeTabPersistence` + `SessionRestorePlanner` across restarts.
+- **Connections Library (`ConnectionsLibraryModel`)**: Organizes `LibraryConnection` and `LibraryGroup` entries into `LibrarySection` outline rows with drag-and-drop reordering, inline `RenameSession`, and `ForeignImportReport` integration.
+- **Themes (`ThemeResolver`, `VsCodeThemeImporter`)**: Resolves `ThemeSlot` colors across `ThemeScope` and `ThemeAppearance` (`Light` / `Dark`) with deterministic fallbacks, and imports VS Code JSON color/token themes via `ThemeFileFormat`.
