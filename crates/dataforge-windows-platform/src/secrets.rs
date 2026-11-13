@@ -83,6 +83,15 @@ impl WindowsCredentialStore {
         self.blocking(move || enumerate_matching(&filter)).await
     }
 
+    /// Synchronously loads an application-wide [`SecretItem`] from Windows Credential Manager.
+    pub fn load_item_sync(&self, item: SecretItem) -> Result<Option<SecretString>, SecretError> {
+        let _held = STORE_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let target = self.item_target(item);
+        read_secret_string(&target)
+    }
+
     async fn blocking<T, F>(&self, work: F) -> Result<T, SecretError>
     where
         T: Send + 'static,
