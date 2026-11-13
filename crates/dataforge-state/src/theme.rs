@@ -624,3 +624,185 @@ impl ThemeResolver {
         }
     }
 }
+
+/// Errors raised when reading, writing, or importing a theme file.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ThemeError {
+    #[error("theme payload exceeds {MAX_THEME_FILE_BYTES} bytes ({size} bytes)")]
+    FileTooLarge { size: usize },
+
+    #[error("theme JSON exceeds maximum nesting depth of {MAX_THEME_JSON_DEPTH}")]
+    NestingTooDeep,
+
+    #[error("invalid JSON: {0}")]
+    InvalidJson(String),
+
+    #[error("unsupported theme schema version {schema} (supported: {MIN_READABLE_SCHEMA}..={CURRENT_SCHEMA})")]
+    UnsupportedSchema { schema: u32 },
+
+    #[error("unknown theme slot key '{0}'")]
+    UnknownSlotKey(String),
+
+    #[error("slot '{key}' requires schema {required}, but file declares schema {file_schema}")]
+    SlotNewerThanSchema {
+        key: String,
+        required: u32,
+        file_schema: u32,
+    },
+
+    #[error("invalid color hex '{value}' for slot '{key}'")]
+    InvalidColor { key: String, value: String },
+
+    #[error("theme id must not be empty")]
+    EmptyId,
+
+    #[error("theme name must not be empty")]
+    EmptyName,
+
+    #[error("remote theme cannot overwrite built-in theme id '{0}'")]
+    CannotOverwriteBuiltin(String),
+
+    #[error("remote theme category id '{expected}' does not match file id '{actual}'")]
+    IdMismatch { expected: String, actual: String },
+
+    #[error("VS Code theme include '{0}' escapes the theme directory")]
+    IncludeEscapesDirectory(String),
+
+    #[error("VS Code theme IO error: {0}")]
+    Io(String),
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct ThemeFilePayload {
+    schema: u32,
+    id: String,
+    name: String,
+    appearance: ThemeAppearance,
+    colors: BTreeMap<String, String>,
+}
+
+/// Checks JSON nesting depth before full deserialization.
+fn check_json_depth(value: &serde_json::Value, depth: usize) -> Result<(), ThemeError> {
+    if depth > MAX_THEME_JSON_DEPTH {
+        return Err(ThemeError::NestingTooDeep);
+    }
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                check_json_depth(item, depth + 1)?;
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for val in map.values() {
+                check_json_depth(val, depth + 1)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Serializes and deserializes theme files with strict schema validation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ThemeFileFormat;
+
+impl ThemeFileFormat {
+    /// Encodes `theme` using the oldest schema version that holds all of its keys.
+    ///
+    /// # Errors
+    /// Returns [`ThemeError::EmptyId`] or [`ThemeError::EmptyName`] if required metadata is blank.
+    pub fn encode(theme: &ThemeDefinition) -> Result<Vec<u8>, ThemeError> {
+        if theme.id.0.trim().is_empty() {
+            return Err(ThemeError::EmptyId);
+        }
+        if theme.name.trim().is_empty() {
+            return Err(ThemeError::EmptyName);
+        }
+        let schema = ThemeSchema::required_schema(theme.colors.keys());
+        let colors = theme
+            .colors
+            .iter()
+            .map(|(slot, rgba)| (slot.key().to_owned(), rgba.to_hex()))
+            .collect();
+        let payload = ThemeFilePayload {
+            schema,
+            id: theme.id.0.clone(),
+            name: theme.name.clone(),
+            appearance: theme.appearance,
+            colors,
+        };
+        let bytes = serde_json::to_vec_pretty(&payload).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
+        if bytes.len() > MAX_THEME_FILE_BYTES {
+            return Err(ThemeError::FileTooLarge { size: bytes.len() });
+        }
+        Ok(bytes)
+    }
+
+    /// Decodes and validates an untrusted theme file payload.
+    ///
+    /// # Errors
+    /// Refuses files exceeding 64 KiB, exceeding depth limits, declaring an unsupported
+    /// schema, containing unknown keys, or containing keys newer than the file's schema.
+    pub fn decode(bytes: &[u8]) -> Result<ThemeDefinition, ThemeError> {
+        if bytes.len() > MAX_THEME_FILE_BYTES {
+            return Err(ThemeError::FileTooLarge { size: bytes.len() });
+        }
+        let raw: serde_json::Value =
+            serde_json::from_slice(bytes).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
+        check_json_depth(&raw, 1)?;
+
+        let payload: ThemeFilePayload =
+            serde_json::from_value(raw).map_err(|e| ThemeError::InvalidJson(e.to_string()))?;
+        if !ThemeSchema::is_readable(payload.schema) {
+            return Err(ThemeError::UnsupportedSchema { schema: payload.schema });
+        }
+        if payload.id.trim().is_empty() {
+            return Err(ThemeError::EmptyId);
+        }
+        if payload.name.trim().is_empty() {
+            return Err(ThemeError::EmptyName);
+        }
+
+        let mut colors = BTreeMap::new();
+        for (key, hex) in payload.colors {
+            let slot = ThemeSlot::from_key(&key).ok_or_else(|| ThemeError::UnknownSlotKey(key.clone()))?;
+            let required = slot.schema_introduced_in();
+            if required > payload.schema {
+                return Err(ThemeError::SlotNewerThanSchema {
+                    key,
+                    required,
+                    file_schema: payload.schema,
+                });
+            }
+            let rgba = Rgba::from_hex(&hex).ok_or(ThemeError::InvalidColor { key, value: hex })?;
+            colors.insert(slot, rgba);
+        }
+
+        Ok(ThemeDefinition {
+            id: ThemeId(payload.id),
+            name: payload.name,
+            appearance: payload.appearance,
+            is_builtin: false,
+            colors,
+        })
+    }
+
+    /// Validates a synced remote theme payload for `category_id`.
+    ///
+    /// # Errors
+    /// Rejects built-in ids, mismatched ids, or invalid theme payloads.
+    pub fn validate_remote(category_id: &str, bytes: &[u8]) -> Result<ThemeDefinition, ThemeError> {
+        let id = ThemeId(category_id.to_owned());
+        if id.is_builtin() {
+            return Err(ThemeError::CannotOverwriteBuiltin(category_id.to_owned()));
+        }
+        let theme = Self::decode(bytes)?;
+        if theme.id.0 != category_id {
+            return Err(ThemeError::IdMismatch {
+                expected: category_id.to_owned(),
+                actual: theme.id.0,
+            });
+        }
+        Ok(theme)
+    }
+}
