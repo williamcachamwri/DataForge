@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use dataforge_gfx::glyphs::EngineKind;
-use dataforge_state::tabs::TabId;
+use dataforge_state::tabs::{TabId, TabKind};
 use dataforge_state::theme::ThemeDefinition;
 use dataforge_windows_platform::{ThemePreference, detect_theme_or_default};
 use herogpui::application;
@@ -47,6 +47,7 @@ use crate::app::{AppController, ScreenMode};
 use crate::branding::apply_window_icons;
 use crate::ipc::IpcInbox;
 use crate::services::ServiceEvent;
+use crate::views::status_bar::TableViewMode;
 use crate::window::apply_dwm_dark_mode;
 
 pub use actions::{WORKSPACE_KEY_CONTEXT, bind_workspace_keys};
@@ -232,12 +233,19 @@ impl DataForgeWorkspace {
             return;
         }
         let active_tab = self.controller.tabs.active_tab();
+        let mut connected_event = false;
         for event in &events {
+            if matches!(event, ServiceEvent::Connected { .. }) {
+                connected_event = true;
+            }
             if let Some(tab_id) = active_tab {
                 mirror_query_event_to_tab(&mut self.tab_results, tab_id, event);
             }
         }
-        self.controller.drain_service_events();
+        self.controller.apply_service_events(events);
+        if connected_event {
+            self.sidebar_ui.reset_session_cache();
+        }
         cx.notify();
     }
 
@@ -266,6 +274,39 @@ impl DataForgeWorkspace {
         push_toast(severity, title, description, cx)
     }
 
+    /// Synchronizes the workspace center sub-view and editor SQL text with the currently selected tab.
+    pub fn sync_active_tab_sub_view(&mut self) {
+        let Some(active_id) = self.controller.tabs.active_tab() else {
+            return;
+        };
+        let Some(tab) = self
+            .controller
+            .tabs
+            .tabs()
+            .iter()
+            .find(|t| t.id == active_id)
+            .cloned()
+        else {
+            return;
+        };
+        match tab.kind {
+            TabKind::QueryEditor { sql } => {
+                if !sql.is_empty() {
+                    self.controller.set_editor_sql(&sql);
+                }
+                self.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
+            }
+            TabKind::TableData { .. } => {
+                self.controller.status_bar.view_mode = TableViewMode::Data;
+                self.workspace_pane.sub_view = WorkspaceSubView::DataGrid;
+            }
+            TabKind::Structure { .. } => {
+                self.controller.status_bar.view_mode = TableViewMode::Structure;
+                self.workspace_pane.sub_view = WorkspaceSubView::Structure;
+            }
+        }
+    }
+
     fn execute_key_command(
         &mut self,
         cmd: crate::accessibility::KeyCommand,
@@ -273,9 +314,15 @@ impl DataForgeWorkspace {
         cx: &mut Context<Self>,
     ) {
         if self.controller.handle_key_command(cmd) {
+            if self.controller.needs_close_guard() && !self.pending_quit_after_confirm {
+                self.workspace_pane.close_guard_open = true;
+                cx.notify();
+                return;
+            }
             window.remove_window();
             return;
         }
+        self.sync_active_tab_sub_view();
         cx.notify();
     }
 
@@ -361,19 +408,22 @@ impl DataForgeWorkspace {
     }
 
     fn attach_query_and_grid_actions(&self, root: Div, cx: &mut Context<Self>) -> Div {
-        root.on_action(cx.listener(|ws, _: &actions::RunQuery, window, cx| {
-            ws.execute_key_command(crate::accessibility::KeyCommand::ExecuteQuery, window, cx);
+        root.on_action(cx.listener(|ws, _: &actions::RunQuery, _window, cx| {
+            sql_editor::trigger_run_query(ws, false, cx);
         }))
         .on_action(
-            cx.listener(|ws, _: &actions::RunSelectedQuery, window, cx| {
-                ws.execute_key_command(crate::accessibility::KeyCommand::ExecuteQuery, window, cx);
+            cx.listener(|ws, _: &actions::RunSelectedQuery, _window, cx| {
+                sql_editor::trigger_run_query(ws, true, cx);
             }),
         )
         .on_action(cx.listener(|ws, _: &actions::CancelQuery, _window, cx| {
-            ws.controller.cancel_active_connect();
-            cx.notify();
+            sql_editor::cancel_active_query(ws, cx);
         }))
         .on_action(cx.listener(|ws, _: &actions::SaveQuery, _window, cx| {
+            let sql = ws.sql_editor_ui.current_text(cx);
+            if !sql.trim().is_empty() {
+                ws.controller.set_editor_sql(&sql);
+            }
             ws.controller.save_current_query("Query", None);
             ws.notify_toast(ToastSeverity::Success, "Query saved", None, cx);
             cx.notify();
@@ -411,32 +461,9 @@ impl DataForgeWorkspace {
         match self.workspace_pane.sub_view {
             WorkspaceSubView::DataGrid => data_grid::render_data_grid(self, window, cx),
             WorkspaceSubView::Structure => structure_view::render_structure_view(self, window, cx),
-            WorkspaceSubView::SqlEditor => {
-                let editor = sql_editor::render_sql_editor(self, window, cx);
-                let has_results = self.active_tab_result().is_some_and(|r| {
-                    r.running || r.active_error.is_some() || !r.accumulator.result_sets.is_empty()
-                });
-                if has_results {
-                    div()
-                        .flex_1()
-                        .size_full()
-                        .flex()
-                        .flex_col()
-                        .child(editor)
-                        .child(results_pane::render_results_pane(self, window, cx))
-                        .into_any_element()
-                } else {
-                    editor
-                }
+            WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid => {
+                sql_editor::render_sql_editor(self, window, cx)
             }
-            WorkspaceSubView::SplitSqlAndGrid => div()
-                .flex_1()
-                .size_full()
-                .flex()
-                .flex_col()
-                .child(sql_editor::render_sql_editor(self, window, cx))
-                .child(results_pane::render_results_pane(self, window, cx))
-                .into_any_element(),
         }
     }
 

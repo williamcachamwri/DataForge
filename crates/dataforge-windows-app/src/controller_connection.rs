@@ -407,12 +407,12 @@ impl AppController {
         Ok(())
     }
 
-    /// Drains and applies all queued [`ServiceEvent`]s from background tasks.
-    pub fn drain_service_events(&mut self) {
+    /// Applies queued [`ServiceEvent`]s from background tasks.
+    pub fn apply_service_events(&mut self, events: Vec<ServiceEvent>) {
         let Some(services) = self.services.clone() else {
             return;
         };
-        for event in services.drain_events() {
+        for event in events {
             match event {
                 ServiceEvent::Connected {
                     workspace_id,
@@ -490,6 +490,15 @@ impl AppController {
                 }
             }
         }
+    }
+
+    /// Drains and applies all queued [`ServiceEvent`]s from background tasks.
+    pub fn drain_service_events(&mut self) {
+        let Some(services) = self.services.clone() else {
+            return;
+        };
+        let events = services.drain_events();
+        self.apply_service_events(events);
     }
 
     fn apply_connected(

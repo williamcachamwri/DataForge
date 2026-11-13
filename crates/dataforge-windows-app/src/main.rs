@@ -12,7 +12,7 @@ use dataforge_windows_app::i18n::init_locale;
 use dataforge_windows_app::ipc::{
     IpcInbox, acquire_or_forward, extract_forward_targets, spawn_ipc_listener,
 };
-use dataforge_windows_app::window::MainWindow;
+use dataforge_windows_app::ui::launch_gpui_app;
 use dataforge_windows_platform::{
     AppSettings, DEFAULT_MUTEX_NAME, DEFAULT_PIPE_NAME, SETTINGS_FILENAME, WindowsCliHost,
     storage_paths,
@@ -78,7 +78,8 @@ fn launch_gui(gui_args: &[OsString]) -> Result<()> {
         controller.open_forwarded_targets(&initial_targets);
     }
 
-    MainWindow::run(controller, inbox)
+    launch_gpui_app(controller, inbox);
+    Ok(())
 }
 
 fn enable_per_monitor_dpi() {
