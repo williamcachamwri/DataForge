@@ -8,6 +8,7 @@ pub mod machine_id;
 pub mod paths;
 pub mod secrets;
 pub mod settings;
+pub mod single_instance;
 pub mod theme_detect;
 
 pub use browser::{WindowsBrowserLauncher, validate_http_url};
@@ -23,6 +24,10 @@ pub use secrets::{
 };
 pub use settings::{
     AppSettings, EditorFont, McpSettings, SETTINGS_FILENAME, ThemePreference, WindowGeometry,
+};
+pub use single_instance::{
+    DEFAULT_MUTEX_NAME, DEFAULT_PIPE_NAME, ForwardPayload, NamedPipeServer, SingleInstanceLock,
+    is_forwardable_target, send_to_existing_instance,
 };
 pub use theme_detect::{
     WindowsTheme, apps_use_light_theme, detect_theme, detect_theme_or_default, is_high_contrast,
