@@ -173,3 +173,47 @@ fn tracing_logging_init_settings_and_d2d_budget_checks() -> E2eResult<()> {
     assert!(budget.total_bytes() < DEFAULT_MEMORY_BUDGET_BYTES);
     Ok(())
 }
+
+fn locate_app_binary(root: &Path) -> Option<(&'static str, PathBuf)> {
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("target"));
+
+    for profile in ["release", "debug"] {
+        let candidate = target_dir.join(profile).join("dataforge-windows-app.exe");
+        if candidate.is_file() {
+            return Some((profile, candidate));
+        }
+    }
+    None
+}
+
+#[test]
+fn verify_app_binary_startup_and_footprint_if_built() -> E2eResult<()> {
+    let root = workspace_root()?;
+    let Some((profile, bin_path)) = locate_app_binary(&root) else {
+        eprintln!(
+            "startup_perf_e2e: skipping binary startup probe (dataforge-windows-app.exe not built in target/{{release,debug}})"
+        );
+        return Ok(());
+    };
+
+    let metadata = fs::metadata(&bin_path)?;
+    let size_mb = metadata.len() as f64 / (1024.0 * 1024.0);
+    assert!(metadata.len() > 0, "binary should be non-empty");
+
+    let start = Instant::now();
+    let output = Command::new(&bin_path).arg("--version").output()?;
+    let elapsed = start.elapsed();
+
+    eprintln!(
+        "startup_perf_e2e: profile={profile} path={} size={size_mb:.2}MB --version elapsed={elapsed:?} status={}",
+        bin_path.display(),
+        output.status
+    );
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "binary --version startup exceeded 5s: {elapsed:?}"
+    );
+    Ok(())
+}
