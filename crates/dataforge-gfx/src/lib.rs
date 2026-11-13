@@ -2,6 +2,7 @@
 
 pub mod context;
 pub mod error;
+pub mod glyphs;
 pub mod palette;
 
 pub use error::{GfxError, Result};
