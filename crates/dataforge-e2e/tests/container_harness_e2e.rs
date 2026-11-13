@@ -114,3 +114,23 @@ async fn postgres_fake_session_capabilities_and_dialect() -> E2eResult<()> {
     assert!(session.is_shut_down());
     Ok(())
 }
+
+#[tokio::test]
+async fn mysql_fake_session_capabilities_and_dialect() -> E2eResult<()> {
+    let driver = Arc::new(MysqlDriver);
+    assert_eq!(driver.id(), "mysql");
+    assert_eq!(driver.category(), EngineCategory::Relational);
+    let caps = driver.capabilities();
+    assert_eq!(caps.data_model, DataModel::Relational);
+    assert!(caps.sql_grammar.is_some());
+
+    let (connector, session) = start_fake_engine_session(driver, "mysql", 3306).await?;
+    assert_eq!(connector.calls().len(), 1);
+    assert_eq!(session.metadata().driver_id, "mysql");
+    assert!(session.current_dialect().is_some());
+    assert_ne!(session.grammar(), SqlGrammar::Standard);
+
+    shutdown_session(&session).await?;
+    assert!(session.is_shut_down());
+    Ok(())
+}
