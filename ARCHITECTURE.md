@@ -67,3 +67,16 @@ ResultSink / RunEventAccumulator -> dataforge-state -> dataforge-gfx
 - **Cancellation & Attempt Fencing**: Every connection attempt carries an `attempt_token` (`u64`) and `CancellationToken`; late completions from superseded attempts are discarded cleanly.
 - **Health & Reconnect**: `tablepro-session` monitors connection liveness (`LivenessPolicy::DESKTOP`) and surfaces `ConnectionUnavailableView` in `ConnectionWindowPhaseMachine` with retry/edit/disconnect actions.
 - **Safe Mode & Open Transactions**: `SafeModeLevel` and open-transaction guards gate destructive SQL, row commits, and tab/window close flows.
+
+## Lint Policy & Testing Strategy
+
+The workspace enforces strict reliability rules in `Cargo.toml` (`[workspace.lints]`):
+- `unsafe_op_in_unsafe_fn = "deny"`
+- `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`, `too_many_lines`, `print_stdout`, `print_stderr` = `"deny"` (with test exemptions configured in `clippy.toml`).
+- `disallowed_types` / `disallowed_methods` prevent key-reordering JSON maps (`serde_json::Map`) and stack-overflowing BSON cursor deserialization.
+
+## Detailed Technical Guides
+
+- [State Machines](docs/state-machines.md) — `ConnectionWindowPhaseMachine`, `DataGridModel`, `EditorModel`, `TabStripModel`, `LibraryModel`, and `ThemeResolver`.
+- [Platform Seams](docs/platform-seams.md) — Windows Credential Manager, Named Pipe IPC, Registry theme/machine-ID, `StoragePaths`, and foreign app discovery.
+- [Rendering Pipeline](docs/rendering-pipeline.md) — Win32 + Direct3D 11 + Direct2D/DirectWrite pipeline, virtualized grid/editor rendering, and adaptive vector glyphs.
