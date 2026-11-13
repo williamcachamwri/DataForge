@@ -499,7 +499,12 @@ impl DataGridRenderer {
             let label = row.row_number.to_string();
             surface.draw_text(
                 &label,
-                rect_f(4.0, y, (layout.gutter_width - 10.0).max(4.0), layout.row_height),
+                rect_f(
+                    4.0,
+                    y,
+                    (layout.gutter_width - 10.0).max(4.0),
+                    layout.row_height,
+                ),
                 &spec,
                 palette.grid.gutter_text,
             )?;
@@ -574,7 +579,12 @@ impl DataGridRenderer {
     ) -> Result<()> {
         let (text, color, italic, align) = match cell.kind {
             CellKind::Null => ("NULL", palette.grid.null_text, true, TextAlign::Leading),
-            CellKind::Default => ("DEFAULT", palette.grid.default_text, true, TextAlign::Leading),
+            CellKind::Default => (
+                "DEFAULT",
+                palette.grid.default_text,
+                true,
+                TextAlign::Leading,
+            ),
             CellKind::Number => (
                 cell.text.as_str(),
                 palette.content.text,

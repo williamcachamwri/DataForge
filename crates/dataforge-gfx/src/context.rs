@@ -629,8 +629,7 @@ impl RenderSurface {
         let brush = self.brush(color)?;
         // SAFETY: `target` and `brush` are valid within an active draw frame.
         unsafe {
-            self.target
-                .DrawRectangle(&rect, &brush, stroke_width, None);
+            self.target.DrawRectangle(&rect, &brush, stroke_width, None);
         };
         Ok(())
     }
@@ -639,12 +638,7 @@ impl RenderSurface {
     ///
     /// # Errors
     /// Returns [`GfxError::Win32`] if brush creation fails.
-    pub fn fill_rounded_rect(
-        &mut self,
-        rect: D2D_RECT_F,
-        radius: f32,
-        color: Color,
-    ) -> Result<()> {
+    pub fn fill_rounded_rect(&mut self, rect: D2D_RECT_F, radius: f32, color: Color) -> Result<()> {
         let brush = self.brush(color)?;
         let rounded = D2D1_ROUNDED_RECT {
             rect,

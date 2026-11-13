@@ -869,17 +869,15 @@ fn classify_word(word: &str) -> SqlTokenKind {
     match upper.as_str() {
         "SELECT" | "FROM" | "WHERE" | "INSERT" | "INTO" | "VALUES" | "UPDATE" | "SET"
         | "DELETE" | "CREATE" | "ALTER" | "DROP" | "TABLE" | "INDEX" | "VIEW" | "JOIN"
-        | "INNER" | "LEFT" | "RIGHT" | "FULL" | "OUTER" | "ON" | "AS" | "AND" | "OR"
-        | "NOT" | "NULL" | "IS" | "IN" | "EXISTS" | "ORDER" | "BY" | "GROUP" | "HAVING"
-        | "LIMIT" | "OFFSET" | "DISTINCT" | "UNION" | "ALL" | "CASE" | "WHEN" | "THEN"
-        | "ELSE" | "END" | "PRIMARY" | "KEY" | "FOREIGN" | "REFERENCES" | "DEFAULT" => {
-            SqlTokenKind::Keyword
-        }
+        | "INNER" | "LEFT" | "RIGHT" | "FULL" | "OUTER" | "ON" | "AS" | "AND" | "OR" | "NOT"
+        | "NULL" | "IS" | "IN" | "EXISTS" | "ORDER" | "BY" | "GROUP" | "HAVING" | "LIMIT"
+        | "OFFSET" | "DISTINCT" | "UNION" | "ALL" | "CASE" | "WHEN" | "THEN" | "ELSE" | "END"
+        | "PRIMARY" | "KEY" | "FOREIGN" | "REFERENCES" | "DEFAULT" => SqlTokenKind::Keyword,
         "COUNT" | "SUM" | "AVG" | "MIN" | "MAX" | "COALESCE" | "NULLIF" | "LOWER" | "UPPER"
         | "NOW" | "CAST" => SqlTokenKind::Function,
         "INT" | "INTEGER" | "BIGINT" | "SMALLINT" | "TEXT" | "VARCHAR" | "CHAR" | "BOOLEAN"
-        | "BOOL" | "UUID" | "JSON" | "JSONB" | "TIMESTAMP" | "TIMESTAMPTZ" | "DATE"
-        | "NUMERIC" | "DECIMAL" | "FLOAT" | "DOUBLE" => SqlTokenKind::TypeName,
+        | "BOOL" | "UUID" | "JSON" | "JSONB" | "TIMESTAMP" | "TIMESTAMPTZ" | "DATE" | "NUMERIC"
+        | "DECIMAL" | "FLOAT" | "DOUBLE" => SqlTokenKind::TypeName,
         _ => SqlTokenKind::Identifier,
     }
 }
@@ -890,7 +888,8 @@ mod tests {
 
     #[test]
     fn tokenize_sql_line_classifies_tokens() {
-        let spans = tokenize_sql_line("SELECT COUNT(id) FROM users WHERE name = 'O''Reilly' -- tip");
+        let spans =
+            tokenize_sql_line("SELECT COUNT(id) FROM users WHERE name = 'O''Reilly' -- tip");
         assert!(spans.iter().any(|s| s.kind == SqlTokenKind::Keyword));
         assert!(spans.iter().any(|s| s.kind == SqlTokenKind::Function));
         assert!(spans.iter().any(|s| s.kind == SqlTokenKind::StringLiteral));

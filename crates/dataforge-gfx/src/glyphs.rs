@@ -420,7 +420,10 @@ impl<'a> SvgPathParser<'a> {
 
     fn parse_smooth_cubic(&mut self, rel: bool) -> Result<()> {
         let (c1x, c1y) = if matches!(self.last_cmd, b'C' | b'c' | b'S' | b's') {
-            (2.0 * self.cx - self.prev_ctrl_x, 2.0 * self.cy - self.prev_ctrl_y)
+            (
+                2.0 * self.cx - self.prev_ctrl_x,
+                2.0 * self.cy - self.prev_ctrl_y,
+            )
         } else {
             (self.cx, self.cy)
         };
@@ -454,7 +457,10 @@ impl<'a> SvgPathParser<'a> {
 
     fn parse_smooth_quad(&mut self, rel: bool) -> Result<()> {
         let (qx, qy) = if matches!(self.last_cmd, b'Q' | b'q' | b'T' | b't') {
-            (2.0 * self.cx - self.prev_ctrl_x, 2.0 * self.cy - self.prev_ctrl_y)
+            (
+                2.0 * self.cx - self.prev_ctrl_x,
+                2.0 * self.cy - self.prev_ctrl_y,
+            )
         } else {
             (self.cx, self.cy)
         };
@@ -582,11 +588,7 @@ impl<'a> SvgPathParser<'a> {
 
             let (c1x, c1y) = map(p1x, p1y);
             let (c2x, c2y) = map(p2x, p2y);
-            let (ex, ey) = if i + 1 == segs {
-                end
-            } else {
-                map(c1, s1)
-            };
+            let (ex, ey) = if i + 1 == segs { end } else { map(c1, s1) };
             self.push_cubic(c1x, c1y, c2x, c2y, ex, ey);
         }
     }
@@ -896,7 +898,10 @@ mod tests {
     fn parse_compact_arc_flags_and_beziers() -> Result<()> {
         let segs = parse_svg_path("M4 12a4 4 0 018 0q2-4 4 0t4 0", 16.0)?;
         assert!(matches!(segs[0], PathSegment::MoveTo { .. }));
-        assert!(segs.iter().any(|s| matches!(s, PathSegment::CubicTo { .. })));
+        assert!(
+            segs.iter()
+                .any(|s| matches!(s, PathSegment::CubicTo { .. }))
+        );
         assert!(segs.iter().any(|s| matches!(s, PathSegment::QuadTo { .. })));
         Ok(())
     }
