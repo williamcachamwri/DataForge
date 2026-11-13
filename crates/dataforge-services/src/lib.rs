@@ -16,7 +16,9 @@ pub use ai_bridge::{
 };
 pub use diagnostics::{CrashReport, LocaleTable, init_logging, write_crash_report};
 pub use error::ServiceError;
-pub use export::{ExportFormat, ExportOptions, export_rows_atomic, part_path_for, stream_export_atomic};
+pub use export::{
+    ExportFormat, ExportOptions, export_rows_atomic, part_path_for, stream_export_atomic,
+};
 pub use import_bridge::{
     SUPPORTED_IMPORT_APPS, foreign_inventory, has_foreign_data, import_from_app,
     import_from_app_with_dirs, parse_connection_url, test_connection,
