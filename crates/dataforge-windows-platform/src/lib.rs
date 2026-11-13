@@ -1,6 +1,7 @@
 //! Windows platform integration for DataForge.
 
 pub mod browser;
+pub mod cli_host;
 pub(crate) mod credential_parts;
 pub mod error;
 pub mod foreign;
@@ -12,6 +13,7 @@ pub mod single_instance;
 pub mod theme_detect;
 
 pub use browser::{WindowsBrowserLauncher, validate_http_url};
+pub use cli_host::WindowsCliHost;
 pub use error::PlatformError;
 pub use foreign::{
     ForeignAppDirs, ForeignHost, ForeignPlatform, PlainHost, foreign_app_dirs,
