@@ -11,11 +11,14 @@ name = "dataforge"
 path = "src/main.rs"
 
 [dependencies]
+async-channel.workspace = true
 dataforge-gfx.workspace = true
 dataforge-services = { path = "../dataforge-services" }
 dataforge-state.workspace = true
 dataforge-windows-platform.workspace = true
 futures.workspace = true
+herogpui.workspace = true
+raw-window-handle.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true

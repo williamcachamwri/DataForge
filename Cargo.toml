@@ -32,7 +32,7 @@ members = [
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.99"
 license = "AGPL-3.0-or-later"
 publish = false
 
@@ -204,6 +204,9 @@ winapi-util = "0.1"
 tempfile = "3"
 testcontainers = { version = "0.27", default-features = false, features = ["aws-lc-rs"] }
 testcontainers-modules = { version = "0.15", default-features = false, features = ["aws-lc-rs"] }
+herogpui = { version = "0.15.1", features = ["components", "serde", "watch"] }
+raw-window-handle = "0.6"
+async-channel = "2.5"
 
 # TablePro's fork of rust-postgres, pinned by revision: the tokio-postgres-v0.7.18 tag plus the
 # copy_in fix in rust-postgres/rust-postgres#1402, without which a COPY the server refuses before
