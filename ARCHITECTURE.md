@@ -48,3 +48,22 @@ flowchart TD
 2. **`crates/dataforge-state`**: Mirrors UI-facing state machines in pure Rust with zero Win32 or GPU dependencies, enabling deterministic unit testing of every transition without creating an HWND.
 3. **`crates/dataforge-windows-platform`**: Implements TablePro platform traits (`SecretVault` via `WindowsCredentialStore`, `ForeignHost` via `ForeignPlatform`, `CliHost` via `WindowsCliHost`) and Windows-specific IPC/Registry seams.
 4. **`crates/dataforge-gfx`**: Owns Direct3D 11 / DXGI / Direct2D / DirectWrite device resources and translates `dataforge-state` models + `ThemePalette` into GPU draw calls.
+
+## Runtime & Session Lifecycle
+
+```text
+Win32 UI Thread (MainWindow / AppController)
+   │  dispatches user intents & polls non-blocking updates
+   ▼
+dataforge-services::AppRuntime (Tokio multi-thread runtime)
+   │  owns DriverRegistry (9 drivers), SessionManager, McpServerController
+   ▼
+tablepro-session::Session (per-connection actor + HealthMonitor)
+   │  DriverConnector -> InProcessSsh / TLS -> DatabaseDriver
+   ▼
+ResultSink / RunEventAccumulator -> dataforge-state -> dataforge-gfx
+```
+
+- **Cancellation & Attempt Fencing**: Every connection attempt carries an `attempt_token` (`u64`) and `CancellationToken`; late completions from superseded attempts are discarded cleanly.
+- **Health & Reconnect**: `tablepro-session` monitors connection liveness (`LivenessPolicy::DESKTOP`) and surfaces `ConnectionUnavailableView` in `ConnectionWindowPhaseMachine` with retry/edit/disconnect actions.
+- **Safe Mode & Open Transactions**: `SafeModeLevel` and open-transaction guards gate destructive SQL, row commits, and tab/window close flows.
