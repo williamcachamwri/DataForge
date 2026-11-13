@@ -142,9 +142,10 @@ fn decode_utf16_blob(blob: &[u8]) -> Result<SecretString, SecretError> {
     if !blob.len().is_multiple_of(2) {
         return Err(SecretError::InvalidEncoding);
     }
-    let units: Vec<u16> = blob
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+    let (pairs, _) = blob.as_chunks::<2>();
+    let units: Vec<u16> = pairs
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
         .collect();
     let units = Zeroizing::new(units);
 
