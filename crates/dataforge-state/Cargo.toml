@@ -7,6 +7,23 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tablepro-core.workspace = true
+tablepro-foreign-import.workspace = true
+tablepro-session.workspace = true
+tablepro-storage.workspace = true
+thiserror.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+tablepro-account = { workspace = true, features = ["fakes"] }
+tablepro-session = { workspace = true, features = ["fakes"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
 
 [lints]
 workspace = true
