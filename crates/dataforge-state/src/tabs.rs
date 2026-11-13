@@ -238,3 +238,267 @@ impl TabStripModel {
         id
     }
 }
+
+/// Merges restored tabs into a strip without clobbering tabs that arrived before restore.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RestoredTabMerge;
+
+impl RestoredTabMerge {
+    /// Prepends `restored` tabs ahead of any pre-existing tabs that arrived before
+    /// the async restore completed (e.g. reopened or linked tabs), preserving both.
+    pub fn merge(strip: &mut TabStripModel, restored: Vec<TabItem>) {
+        let pre_existing = std::mem::take(&mut strip.tabs);
+        let mut merged = Vec::with_capacity(restored.len() + pre_existing.len());
+        for mut tab in restored {
+            tab.id = strip.alloc_id();
+            merged.push(tab);
+        }
+        let had_active = strip.active_tab;
+        merged.extend(pre_existing);
+        strip.tabs = merged;
+        if had_active.is_none() {
+            strip.active_tab = strip.tabs.first().map(|t| t.id);
+        }
+        strip.has_observed_tabs = true;
+    }
+}
+
+/// Reason a tab-save operation was accepted or refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveTabsOutcome {
+    Saved,
+    SkippedUnobserved,
+    SkippedEmptyOnSessionLoss,
+}
+
+/// Guards persisted tab lists against premature clearing on teardown or session loss.
+#[derive(Debug, Default, Clone)]
+pub struct SavedTabsStore {
+    persisted: std::collections::BTreeMap<TabConnectionId, Vec<TabItem>>,
+}
+
+impl SavedTabsStore {
+    /// Creates an empty saved-tabs store.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Reads the saved tabs for `conn`.
+    #[must_use]
+    pub fn get(&self, conn: &TabConnectionId) -> Option<&[TabItem]> {
+        self.persisted.get(conn).map(Vec::as_slice)
+    }
+
+    /// Saves tabs during teardown (`save_aggregated_sync`):
+    /// - Refuses to clear if `!strip.has_observed_tabs`.
+    /// - Skips an empty list if `session_lost` is true (only user close/move may clear).
+    pub fn save_aggregated_sync(
+        &mut self,
+        conn: TabConnectionId,
+        strip: &TabStripModel,
+        session_lost: bool,
+    ) -> SaveTabsOutcome {
+        if !strip.has_observed_tabs {
+            return SaveTabsOutcome::SkippedUnobserved;
+        }
+        if strip.tabs.is_empty() && session_lost {
+            return SaveTabsOutcome::SkippedEmptyOnSessionLoss;
+        }
+        self.persisted.insert(conn, strip.tabs.clone());
+        SaveTabsOutcome::Saved
+    }
+
+    /// Explicitly clears saved tabs when the user closes or moves out the last tab.
+    pub fn clear_by_user(&mut self, conn: &TabConnectionId, strip: &TabStripModel) -> SaveTabsOutcome {
+        if !strip.has_observed_tabs {
+            return SaveTabsOutcome::SkippedUnobserved;
+        }
+        if strip.tabs.is_empty() {
+            self.persisted.remove(conn);
+        } else {
+            self.persisted.insert(conn.clone(), strip.tabs.clone());
+        }
+        SaveTabsOutcome::Saved
+    }
+}
+
+/// Queued cross-connection tab move.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingTabMove {
+    pub tab: TabItem,
+    pub target_connection: TabConnectionId,
+}
+
+/// Coordinates moving a query tab between connections.
+///
+/// Per `connection-window.md`: a tab stays in its source until the target
+/// workspace is `Connected` and its strip has `has_observed_tabs == true`.
+/// A queued move is dropped if the target turns `Unavailable`.
+#[derive(Debug, Default, Clone)]
+pub struct MoveQueryTabQueue {
+    pending: Vec<PendingTabMove>,
+}
+
+impl MoveQueryTabQueue {
+    /// Queues a tab move to `target_connection`.
+    pub fn enqueue(&mut self, tab: TabItem, target_connection: TabConnectionId) {
+        self.pending.push(PendingTabMove {
+            tab,
+            target_connection,
+        });
+    }
+
+    /// Returns the number of queued moves.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.pending.len()
+    }
+
+    /// Returns whether the queue is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.pending.is_empty()
+    }
+
+    /// Processes queued moves for `target_connection` given its current phase and strip.
+    pub fn process_for_target(
+        &mut self,
+        target_connection: &TabConnectionId,
+        target_phase: &crate::connection_window::ConnectionWindowPhase,
+        target_strip: &mut TabStripModel,
+    ) -> usize {
+        if matches!(target_phase, crate::connection_window::ConnectionWindowPhase::Unavailable(_)) {
+            self.pending.retain(|m| &m.target_connection != target_connection);
+            return 0;
+        }
+        if !matches!(target_phase, crate::connection_window::ConnectionWindowPhase::Connected)
+            || !target_strip.has_observed_tabs
+        {
+            return 0;
+        }
+        let mut moved = 0;
+        let mut remaining = Vec::new();
+        for item in self.pending.drain(..) {
+            if &item.target_connection == target_connection {
+                target_strip.attach_tab(item.tab, target_connection.clone());
+                moved += 1;
+            } else {
+                remaining.push(item);
+            }
+        }
+        self.pending = remaining;
+        moved
+    }
+}
+
+/// Entry in a session restore plan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoredConnectionEntry {
+    pub connection_id: TabConnectionId,
+    pub should_dial: bool,
+    pub connect_immediately_on_launch: bool,
+}
+
+/// Computes which connections are restored and which one connects on launch.
+///
+/// Per `connection-window.md`: every connection on the strip comes back, only
+/// those with `retains_restore_intent` dial again, and only the frontmost
+/// connection connects immediately on launch.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SessionRestorePlanner;
+
+impl SessionRestorePlanner {
+    /// Builds the restore plan for `connections` where `frontmost_index` is the active strip item.
+    #[must_use]
+    pub fn plan(
+        connections: &[(TabConnectionId, crate::connection_window::ConnectionWindowPhase)],
+        frontmost_index: usize,
+    ) -> Vec<RestoredConnectionEntry> {
+        connections
+            .iter()
+            .enumerate()
+            .map(|(idx, (conn, phase))| {
+                let should_dial = phase.retains_restore_intent();
+                RestoredConnectionEntry {
+                    connection_id: conn.clone(),
+                    should_dial,
+                    connect_immediately_on_launch: should_dial && idx == frontmost_index,
+                }
+            })
+            .collect()
+    }
+}
+
+/// Checksum-protected snapshot envelope for crash-during-save recovery.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabSessionEnvelope {
+    pub checksum: u64,
+    pub strips: std::collections::BTreeMap<TabConnectionId, Vec<TabItem>>,
+}
+
+fn fnv1a_64(bytes: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    hash
+}
+
+/// Crash-safe session persistence using primary + backup files with checksum verification.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CrashSafeTabPersistence;
+
+impl CrashSafeTabPersistence {
+    /// Saves `strips` to `primary_path`, keeping the previous valid file at `backup_path`.
+    ///
+    /// # Errors
+    /// Returns an IO or serialization error if writing fails.
+    pub fn save_atomic(
+        primary_path: &std::path::Path,
+        backup_path: &std::path::Path,
+        strips: &std::collections::BTreeMap<TabConnectionId, Vec<TabItem>>,
+    ) -> Result<(), String> {
+        let payload_bytes = serde_json::to_vec(strips).map_err(|e| e.to_string())?;
+        let envelope = TabSessionEnvelope {
+            checksum: fnv1a_64(&payload_bytes),
+            strips: strips.clone(),
+        };
+        let encoded = serde_json::to_vec_pretty(&envelope).map_err(|e| e.to_string())?;
+
+        if primary_path.exists() {
+            let _ = std::fs::copy(primary_path, backup_path);
+        }
+        let tmp_path = primary_path.with_extension("tmp");
+        std::fs::write(&tmp_path, &encoded).map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp_path, primary_path).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Loads the primary snapshot if valid, otherwise recovers from `backup_path`.
+    ///
+    /// # Errors
+    /// Returns an error only if both primary and backup are missing or corrupt.
+    pub fn load_with_recovery(
+        primary_path: &std::path::Path,
+        backup_path: &std::path::Path,
+    ) -> Result<std::collections::BTreeMap<TabConnectionId, Vec<TabItem>>, String> {
+        if let Ok(strips) = Self::try_load_verified(primary_path) {
+            return Ok(strips);
+        }
+        Self::try_load_verified(backup_path)
+    }
+
+    fn try_load_verified(
+        path: &std::path::Path,
+    ) -> Result<std::collections::BTreeMap<TabConnectionId, Vec<TabItem>>, String> {
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let envelope: TabSessionEnvelope = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        let payload_bytes = serde_json::to_vec(&envelope.strips).map_err(|e| e.to_string())?;
+        if fnv1a_64(&payload_bytes) != envelope.checksum {
+            return Err("tab session checksum mismatch".to_owned());
+        }
+        Ok(envelope.strips)
+    }
+}
