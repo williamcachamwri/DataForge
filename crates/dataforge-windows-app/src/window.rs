@@ -23,6 +23,7 @@ use windows::core::PCWSTR;
 
 use crate::accessibility::{Modifiers, handle_wm_getobject, translate_key};
 use crate::app::AppController;
+use crate::branding::apply_window_icons;
 use crate::dialogs::{DialogKind, DialogOutcome, show_native_dialog};
 use crate::error::{AppError, Result};
 use crate::ipc::{IpcInbox, WM_APP_IPC_TARGETS};
@@ -120,6 +121,7 @@ impl MainWindow {
 
         let dark_titlebar = controller.uses_dark_titlebar();
         apply_dwm_dark_mode(hwnd, dark_titlebar);
+        apply_window_icons(hwnd);
         ipc_inbox.attach_hwnd(hwnd);
 
         let mut state = Box::new(WindowState {

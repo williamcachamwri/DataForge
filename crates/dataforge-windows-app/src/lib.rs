@@ -2,6 +2,7 @@
 
 pub mod accessibility;
 pub mod app;
+pub mod branding;
 pub mod crash;
 pub mod dialogs;
 pub mod error;
