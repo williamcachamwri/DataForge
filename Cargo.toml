@@ -25,6 +25,7 @@ members = [
     "crates/dataforge-windows-platform",
     "crates/dataforge-state",
     "crates/dataforge-gfx",
+    "crates/dataforge-services",
     "crates/dataforge-windows-app",
 ]
 
@@ -38,6 +39,7 @@ publish = false
 dataforge-windows-platform = { path = "crates/dataforge-windows-platform" }
 dataforge-state = { path = "crates/dataforge-state" }
 dataforge-gfx = { path = "crates/dataforge-gfx" }
+dataforge-services = { path = "crates/dataforge-services" }
 tablepro-account = { path = "core/crates/account" }
 tablepro-ai = { path = "core/crates/ai" }
 tablepro-cli = { path = "core/crates/cli" }
