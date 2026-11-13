@@ -253,3 +253,49 @@ impl ConnectionWindowPhaseMachine {
         }
     }
 }
+
+/// Resolves non-blank window titles from connection and database metadata.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WindowTitleResolver;
+
+impl WindowTitleResolver {
+    /// Resolves a guaranteed non-blank window title.
+    #[must_use]
+    pub fn resolve(connection_name: &str, database: Option<&str>, phase: &ConnectionWindowPhase) -> String {
+        let base = match connection_name.trim() {
+            "" => "Untitled Connection",
+            name => name,
+        };
+        let with_db = match database.map(str::trim).filter(|d| !d.is_empty()) {
+            Some(db) => format!("{base} — {db}"),
+            None => base.to_owned(),
+        };
+        match phase {
+            ConnectionWindowPhase::Disconnected => format!("{with_db} (Not Connected)"),
+            ConnectionWindowPhase::Connecting { .. } => format!("{with_db} (Connecting…)"),
+            ConnectionWindowPhase::Reconnecting { .. } => format!("{with_db} (Reconnecting…)"),
+            ConnectionWindowPhase::Unavailable(_) => format!("{with_db} (Unavailable)"),
+            ConnectionWindowPhase::Connected => with_db,
+        }
+    }
+}
+
+/// Resolves non-blank editor tab labels from creation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct EditorTabLabelResolver;
+
+impl EditorTabLabelResolver {
+    /// Resolves a guaranteed non-blank tab label.
+    #[must_use]
+    pub fn resolve(explicit_title: Option<&str>, index: usize, is_dirty: bool) -> String {
+        let base = explicit_title
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map_or_else(|| format!("Query {}", index.saturating_add(1)), str::to_owned);
+        if is_dirty {
+            format!("{base} •")
+        } else {
+            base
+        }
+    }
+}
