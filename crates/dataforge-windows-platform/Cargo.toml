@@ -7,6 +7,36 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+secrecy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tablepro-account.workspace = true
+tablepro-ai.workspace = true
+tablepro-cli.workspace = true
+tablepro-core.workspace = true
+tablepro-foreign-import.workspace = true
+tablepro-net.workspace = true
+tablepro-storage.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+windows = { workspace = true, features = [
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Registry",
+    "Win32_UI_Accessibility",
+] }
+windows-sys = { workspace = true, features = [
+    "Win32_Security_Credentials",
+] }
+
+[dev-dependencies]
+futures.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
