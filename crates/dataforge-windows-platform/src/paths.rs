@@ -27,7 +27,10 @@ impl Drop for CoTaskMemPwstr {
 }
 
 /// Resolves a Windows known folder GUID via `SHGetKnownFolderPath`.
-fn known_folder(folder_id: &GUID, operation: &'static str) -> Result<PathBuf, PlatformError> {
+pub(crate) fn known_folder(
+    folder_id: &GUID,
+    operation: &'static str,
+) -> Result<PathBuf, PlatformError> {
     // SAFETY: `folder_id` is a valid static `KNOWNFOLDERID` reference; `SHGetKnownFolderPath`
     // allocates a NUL-terminated UTF-16 string freed by `CoTaskMemPwstr::drop`.
     let raw = unsafe { SHGetKnownFolderPath(folder_id, KF_FLAG_DEFAULT, None) }.map_err(|err| {

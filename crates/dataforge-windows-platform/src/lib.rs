@@ -2,6 +2,7 @@
 
 pub mod browser;
 pub mod error;
+pub mod foreign;
 pub mod machine_id;
 pub mod paths;
 pub mod settings;
@@ -9,6 +10,10 @@ pub mod theme_detect;
 
 pub use browser::{WindowsBrowserLauncher, validate_http_url};
 pub use error::PlatformError;
+pub use foreign::{
+    ForeignAppDirs, ForeignHost, ForeignPlatform, PlainHost, foreign_app_dirs,
+    foreign_app_dirs_for,
+};
 pub use machine_id::{derive_machine_id, normalize_machine_guid, read_machine_id};
 pub use paths::{APP_DIR_NAME, storage_paths, storage_paths_for};
 pub use settings::{
