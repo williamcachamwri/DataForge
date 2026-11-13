@@ -585,3 +585,87 @@ impl UndoHistory {
         !self.redo_stack.is_empty()
     }
 }
+
+/// A syntax-highlighted token span in UTF-16 code units relative to a line's start.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Utf16SyntaxSpan {
+    pub start_utf16: usize,
+    pub end_utf16: usize,
+    pub kind: tablepro_core::sql_syntax::SyntaxKind,
+}
+
+/// Incremental per-line syntax highlighter backed by `tablepro_core::sql_syntax::syntax_tokens`.
+///
+/// Converts UTF-8 byte ranges from `syntax_tokens` into UTF-16 code unit offsets
+/// for Win32/DirectWrite text layout and caches unchanged lines.
+#[derive(Debug, Clone)]
+pub struct IncrementalLineHighlighter {
+    grammar: tablepro_core::sql_syntax::SqlGrammar,
+    cached_lines: Vec<Option<(String, Vec<Utf16SyntaxSpan>)>>,
+}
+
+impl IncrementalLineHighlighter {
+    /// Creates a highlighter for `grammar`.
+    #[must_use]
+    pub fn new(grammar: tablepro_core::sql_syntax::SqlGrammar) -> Self {
+        Self {
+            grammar,
+            cached_lines: Vec::new(),
+        }
+    }
+
+    /// Invalidates cached tokens for `[start_line..=end_line]`.
+    pub fn invalidate_lines(&mut self, start_line: usize, end_line: usize) {
+        let end = end_line.min(self.cached_lines.len().saturating_sub(1));
+        for idx in start_line..=end {
+            if let Some(slot) = self.cached_lines.get_mut(idx) {
+                *slot = None;
+            }
+        }
+    }
+
+    /// Returns UTF-16 syntax spans for `line_idx` in `rope`, lexing only on cache miss.
+    pub fn highlight_line(&mut self, rope: &Rope, line_idx: usize) -> Vec<Utf16SyntaxSpan> {
+        let Some(line_text) = rope.line(line_idx) else {
+            return Vec::new();
+        };
+        if self.cached_lines.len() <= line_idx {
+            self.cached_lines.resize(line_idx + 1, None);
+        }
+        if let Some((cached_text, spans)) = &self.cached_lines[line_idx]
+            && cached_text == &line_text
+        {
+            return spans.clone();
+        }
+        let spans = lex_line_utf16(&line_text, self.grammar);
+        self.cached_lines[line_idx] = Some((line_text, spans.clone()));
+        spans
+    }
+}
+
+/// Lexes a single line using `tablepro_core::sql_syntax::syntax_tokens` into UTF-16 spans.
+#[must_use]
+pub fn lex_line_utf16(line: &str, grammar: tablepro_core::sql_syntax::SqlGrammar) -> Vec<Utf16SyntaxSpan> {
+    let settings = tablepro_core::sql_syntax::script::LexicalSettings::default_for(grammar);
+    let tokens = tablepro_core::sql_syntax::syntax_tokens(line, grammar, settings);
+    let mut byte_to_utf16 = vec![0usize; line.len() + 1];
+    let mut utf16_acc = 0usize;
+    for (byte_idx, ch) in line.char_indices() {
+        byte_to_utf16[byte_idx] = utf16_acc;
+        utf16_acc += ch.len_utf16();
+    }
+    byte_to_utf16[line.len()] = utf16_acc;
+
+    tokens
+        .into_iter()
+        .filter_map(|tok| {
+            let start = *byte_to_utf16.get(tok.range.start)?;
+            let end = *byte_to_utf16.get(tok.range.end)?;
+            Some(Utf16SyntaxSpan {
+                start_utf16: start,
+                end_utf16: end,
+                kind: tok.kind,
+            })
+        })
+        .collect()
+}
