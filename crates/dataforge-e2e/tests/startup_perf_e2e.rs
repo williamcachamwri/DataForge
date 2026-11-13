@@ -217,3 +217,13 @@ fn verify_app_binary_startup_and_footprint_if_built() -> E2eResult<()> {
     );
     Ok(())
 }
+
+#[test]
+fn single_instance_forwardable_targets_validate_cleanly() {
+    assert!(is_forwardable_target("C:\\data\\analytics.sqlite"));
+    assert!(is_forwardable_target("C:\\data\\warehouse.duckdb"));
+    assert!(is_forwardable_target("postgres://user@localhost:5432/app"));
+    assert!(is_forwardable_target("mysql://localhost:3306/shop"));
+    assert!(!is_forwardable_target("C:\\notes\\readme.txt"));
+    assert!(!is_forwardable_target("--help"));
+}
