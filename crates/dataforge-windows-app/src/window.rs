@@ -382,7 +382,7 @@ fn current_modifiers() -> Modifiers {
 }
 
 /// Applies `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)` dynamically from `dwmapi.dll`.
-fn apply_dwm_dark_mode(hwnd: HWND, dark: bool) {
+pub(crate) fn apply_dwm_dark_mode(hwnd: HWND, dark: bool) {
     type DwmSetWindowAttributeFn = unsafe extern "system" fn(HWND, u32, *const c_void, u32) -> i32;
 
     let dll = to_wide_null("dwmapi.dll");

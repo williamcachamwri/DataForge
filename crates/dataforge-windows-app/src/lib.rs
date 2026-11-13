@@ -17,6 +17,7 @@ pub mod i18n;
 pub mod ipc;
 pub mod services;
 pub mod shell_layout;
+pub mod ui;
 pub mod views;
 pub mod window;
 
