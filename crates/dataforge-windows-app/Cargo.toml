@@ -15,6 +15,7 @@ dataforge-gfx.workspace = true
 dataforge-services = { path = "../dataforge-services" }
 dataforge-state.workspace = true
 dataforge-windows-platform.workspace = true
+futures.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -24,6 +25,7 @@ tablepro-core.workspace = true
 tablepro-foreign-import.workspace = true
 tablepro-mcp.workspace = true
 tablepro-session.workspace = true
+tablepro-ssh.workspace = true
 tablepro-storage.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
