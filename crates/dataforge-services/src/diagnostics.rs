@@ -14,8 +14,8 @@ use crate::error::ServiceError;
 ///
 /// Safe to call multiple times: subsequent calls are ignored if a global subscriber is already set.
 pub fn init_logging(default_filter: &str) {
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_filter));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
     let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(true)
@@ -131,5 +131,44 @@ impl LocaleTable {
 impl Default for LocaleTable {
     fn default() -> Self {
         Self::en_us()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_logging_is_idempotent() {
+        init_logging("info");
+        init_logging("debug");
+    }
+
+    #[test]
+    fn write_crash_report_creates_file_atomically() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let report = CrashReport {
+            app_version: "0.1.0".to_owned(),
+            os_version: "Windows 11".to_owned(),
+            message: "test panic".to_owned(),
+            location: Some("src/main.rs:10".to_owned()),
+            backtrace: Some("frame 0".to_owned()),
+        };
+        let path = write_crash_report(dir.path(), &report)?;
+        assert!(path.exists());
+        let contents = fs::read_to_string(&path)?;
+        assert!(contents.contains("DataForge Crash Report"));
+        assert!(contents.contains("test panic"));
+        assert!(contents.contains("src/main.rs:10"));
+        Ok(())
+    }
+
+    #[test]
+    fn locale_table_en_us_provides_defaults_and_fallback() {
+        let table = LocaleTable::en_us();
+        assert_eq!(table.locale(), "en-US");
+        assert!(!table.is_empty());
+        assert_eq!(table.get("app.name"), "DataForge");
+        assert_eq!(table.get("missing.key"), "missing.key");
     }
 }
