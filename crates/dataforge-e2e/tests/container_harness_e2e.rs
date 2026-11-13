@@ -5,16 +5,52 @@ use std::process::Command;
 use std::sync::Arc;
 
 use dataforge_e2e::{E2eResult, shutdown_session};
-use tablepro_core::credentials::CredentialInteraction;
-use tablepro_core::{DataModel, DatabaseDriver, EngineCategory, LivenessPolicy, SafeModeLevel};
+use secrecy::SecretString;
+use tablepro_core::credentials::{CredentialInteraction, Credentials};
+use tablepro_core::{
+    DataModel, DatabaseDriver, EngineCategory, LivenessPolicy, NetworkEndpoint, SafeModeLevel,
+    TlsConfig, WorkspaceSettings,
+};
 use tablepro_driver_mongodb::MongoDriver;
 use tablepro_driver_mysql::MysqlDriver;
 use tablepro_driver_postgres::PgDriver;
 use tablepro_driver_redis::RedisDriver;
 use tablepro_session::fakes::{FakeConnector, FakeEstablish};
 use tablepro_session::runtime::Tasks;
-use tablepro_session::{Connector, DefaultDeadlines, NoStoredCredentials, Session, SessionDeps};
+use tablepro_session::{
+    ConnectRequest, ConnectionMetadata, Connector, DefaultDeadlines, NoStoredCredentials,
+    RequestTarget, Session, SessionDeps,
+};
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
+fn fake_network_request(
+    driver: Arc<dyn DatabaseDriver>,
+    driver_id: &str,
+    port: u16,
+) -> E2eResult<ConnectRequest> {
+    Ok(ConnectRequest {
+        metadata: ConnectionMetadata {
+            id: Uuid::new_v4(),
+            name: format!("fake-{driver_id}"),
+            driver_id: driver_id.to_owned(),
+        },
+        driver,
+        target: RequestTarget::Network {
+            endpoint: NetworkEndpoint::new("127.0.0.1", port)?,
+            ssh: None,
+            credentials: Credentials::Password {
+                username: "app".to_owned(),
+                password: SecretString::from("secret"),
+            },
+            database: None,
+            tls: TlsConfig::disabled(),
+            options: Default::default(),
+        },
+        workspace_settings: WorkspaceSettings::workspace(false),
+        safe_mode: SafeModeLevel::Off,
+    })
+}
 
 async fn start_fake_engine_session(
     driver: Arc<dyn DatabaseDriver>,
@@ -24,10 +60,7 @@ async fn start_fake_engine_session(
     let connector = Arc::new(FakeConnector::new([FakeEstablish::Connect(
         Default::default(),
     )]));
-    let mut request = FakeConnector::network_request("127.0.0.1", port)?;
-    request.driver = driver;
-    request.metadata.driver_id = driver_id.to_owned();
-    request.metadata.name = format!("fake-{driver_id}");
+    let request = fake_network_request(driver, driver_id, port)?;
 
     let pending = connector
         .establish(
@@ -173,9 +206,7 @@ async fn fake_connector_reports_scripted_connection_failure() -> E2eResult<()> {
     let connector = FakeConnector::new([FakeEstablish::Fail(
         tablepro_session::ConnectError::Cancelled,
     )]);
-    let mut request = FakeConnector::network_request("127.0.0.1", 5432)?;
-    request.driver = Arc::new(PgDriver);
-    request.metadata.driver_id = "postgres".to_owned();
+    let request = fake_network_request(Arc::new(PgDriver), "postgres", 5432)?;
 
     let result = connector
         .establish(
