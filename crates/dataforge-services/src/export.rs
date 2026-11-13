@@ -311,3 +311,85 @@ pub async fn stream_export_atomic(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tablepro_core::column::ColumnType;
+    use tablepro_core::value::Value;
+
+    fn sample_columns() -> Vec<ResultColumn> {
+        vec![
+            ResultColumn::new("id", ColumnType::untyped_text("INTEGER")),
+            ResultColumn::new("name", ColumnType::untyped_text("TEXT")),
+        ]
+    }
+
+    #[test]
+    fn part_path_appends_part_extension() {
+        let path = Path::new("C:\\temp\\users.csv");
+        assert_eq!(
+            part_path_for(path),
+            PathBuf::from("C:\\temp\\users.csv.part")
+        );
+    }
+
+    #[test]
+    fn export_rows_atomic_writes_csv_and_cleans_part() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let target = dir.path().join("out.csv");
+        let cols = sample_columns();
+        let rows = vec![
+            vec![Value::Int(1), Value::Text("Alice".to_owned())],
+            vec![Value::Int(2), Value::Text("Bob".to_owned())],
+        ];
+        let count = export_rows_atomic(&target, &cols, &rows, &ExportOptions::default())?;
+        assert_eq!(count, 2);
+        assert!(target.exists());
+        assert!(!part_path_for(&target).exists());
+        let text = fs::read_to_string(&target)?;
+        assert!(text.contains("id,name"));
+        assert!(text.contains("1,Alice"));
+        assert!(text.contains("2,Bob"));
+        Ok(())
+    }
+
+    #[test]
+    fn export_rows_atomic_writes_json_array() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let target = dir.path().join("out.json");
+        let cols = sample_columns();
+        let rows = vec![vec![Value::Int(7), Value::Text("Carol".to_owned())]];
+        let opts = ExportOptions {
+            format: ExportFormat::JsonArray,
+            ..ExportOptions::default()
+        };
+        let count = export_rows_atomic(&target, &cols, &rows, &opts)?;
+        assert_eq!(count, 1);
+        let text = fs::read_to_string(&target)?;
+        assert!(text.contains("\"name\":\"Carol\"") || text.contains("\"name\": \"Carol\""));
+        Ok(())
+    }
+
+    #[test]
+    fn export_rows_atomic_writes_sql_inserts() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let target = dir.path().join("out.sql");
+        let cols = sample_columns();
+        let rows = vec![vec![Value::Int(1), Value::Text("Dan".to_owned())]];
+        let opts = ExportOptions {
+            format: ExportFormat::SqlInsert,
+            table: Some(TableRef::new(None::<String>, "users")),
+            dialect: Some(Arc::new(tablepro_driver_sqlite::SqliteDialect::new(
+                tablepro_driver_sqlite::SQLITE_MIN_VERSION,
+            ))),
+            ..ExportOptions::default()
+        };
+        let count = export_rows_atomic(&target, &cols, &rows, &opts)?;
+        assert_eq!(count, 1);
+        let text = fs::read_to_string(&target)?;
+        assert!(text.contains("INSERT INTO"));
+        assert!(text.contains("Dan"));
+        Ok(())
+    }
+}
