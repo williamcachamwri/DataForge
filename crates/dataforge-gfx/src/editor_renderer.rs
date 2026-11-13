@@ -883,3 +883,75 @@ fn classify_word(word: &str) -> SqlTokenKind {
         _ => SqlTokenKind::Identifier,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokenize_sql_line_classifies_tokens() {
+        let spans = tokenize_sql_line("SELECT COUNT(id) FROM users WHERE name = 'O''Reilly' -- tip");
+        assert!(spans.iter().any(|s| s.kind == SqlTokenKind::Keyword));
+        assert!(spans.iter().any(|s| s.kind == SqlTokenKind::Function));
+        assert!(spans.iter().any(|s| s.kind == SqlTokenKind::StringLiteral));
+        assert!(spans.iter().any(|s| s.kind == SqlTokenKind::Comment));
+    }
+
+    #[test]
+    fn editor_hit_test_gutter_text_and_popup() {
+        let lines = vec![
+            EditorLine::new("SELECT * FROM users;", 1),
+            EditorLine::new("WHERE id = 1;", 1),
+        ];
+        let layout = EditorLayout {
+            viewport_width: 600.0,
+            viewport_height: 400.0,
+            gutter_width: 48.0,
+            text_left_pad: 10.0,
+            line_height: 20.0,
+            char_width: 8.0,
+            ..EditorLayout::default()
+        };
+        assert_eq!(
+            SqlEditorRenderer::hit_test(12.0, 25.0, &layout, &lines, None),
+            EditorHitTest::Gutter(1)
+        );
+        assert_eq!(
+            SqlEditorRenderer::hit_test(58.0 + 24.0, 5.0, &layout, &lines, None),
+            EditorHitTest::Text { line: 0, col: 3 }
+        );
+
+        let popup = AutocompletePopup {
+            visible: true,
+            anchor: (0, 7),
+            items: vec![
+                AutocompleteItem {
+                    label: "users".to_owned(),
+                    detail: "table".to_owned(),
+                    kind: CompletionKind::Table,
+                },
+                AutocompleteItem {
+                    label: "user_roles".to_owned(),
+                    detail: "table".to_owned(),
+                    kind: CompletionKind::Table,
+                },
+            ],
+            selected: 0,
+        };
+        let (px, py, _, _) = layout.popup_rect(&popup);
+        assert_eq!(
+            SqlEditorRenderer::hit_test(px + 10.0, py + 28.0, &layout, &lines, Some(&popup)),
+            EditorHitTest::AutocompleteItem(1)
+        );
+    }
+
+    #[test]
+    fn selection_normalization() {
+        let sel = EditorSelection {
+            anchor: (4, 10),
+            head: (1, 2),
+        };
+        assert_eq!(sel.normalized(), ((1, 2), (4, 10)));
+        assert!(!sel.is_empty());
+    }
+}
