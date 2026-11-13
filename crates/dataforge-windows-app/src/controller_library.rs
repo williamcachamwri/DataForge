@@ -92,8 +92,7 @@ impl AppController {
         self.connection_form.port = conn.port.unwrap_or(5432);
         self.connection_form.database = conn.database.clone();
         self.connection_form.username = conn.username.clone();
-        self.connection_form.engine =
-            crate::views::library::engine_from_driver_id(&conn.driver_id);
+        self.connection_form.engine = crate::views::library::engine_from_driver_id(&conn.driver_id);
         self.connection_form.last_error = None;
         Ok(conn)
     }

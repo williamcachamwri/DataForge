@@ -42,11 +42,7 @@ pub fn create_dataforge_hicon(desired_px: i32) -> Option<HICON> {
         )
     }
     .ok()?;
-    if icon.is_invalid() {
-        None
-    } else {
-        Some(icon)
-    }
+    if icon.is_invalid() { None } else { Some(icon) }
 }
 
 /// Applies the DataForge small (16px) and large (32px) icons to `hwnd` via `WM_SETICON`.

@@ -15,14 +15,14 @@ use dataforge_services::{
 };
 use dataforge_state::connection_window::{AttemptToken, WorkspaceId};
 use dataforge_state::library::LibraryConnection;
-use dataforge_windows_platform::{DEFAULT_CREDENTIAL_PREFIX, WindowsCredentialStore, storage_paths};
+use dataforge_windows_platform::{
+    DEFAULT_CREDENTIAL_PREFIX, WindowsCredentialStore, storage_paths,
+};
 use futures::future::BoxFuture;
 use secrecy::SecretString;
 use tablepro_ai::ReplyEvent;
 use tablepro_core::column::ColumnInfo;
-use tablepro_core::credentials::{
-    CredentialPrompt, CredentialPrompter, PromptReply,
-};
+use tablepro_core::credentials::{CredentialPrompt, CredentialPrompter, PromptReply};
 use tablepro_core::meta::{ObjectInfo, SchemaInfo, TableRef};
 use tablepro_core::{
     Credentials, FileEndpoint, NetworkEndpoint, NetworkOptions, ResultEvent, RunSummary,
@@ -177,7 +177,9 @@ impl ServiceHub {
         let runtime = Arc::new(AppRuntime::new(worker_threads)?);
         let sessions = Arc::new(RwLock::new(SessionManager::new(runtime.clone())));
         let credentials = Arc::new(WindowsCredentialStore::new(DEFAULT_CREDENTIAL_PREFIX));
-        let ai = AiAssistantService::new(credentials.clone()).ok().map(Arc::new);
+        let ai = AiAssistantService::new(credentials.clone())
+            .ok()
+            .map(Arc::new);
         let mcp_host = Arc::new(DataForgeMcpHost::new(sessions.clone()));
         let mcp_server = Mutex::new(McpServerController::new(None));
         let paths = storage_paths().unwrap_or_else(|_| {
@@ -235,7 +237,11 @@ impl ServiceHub {
     }
 
     /// Registers a new [`CancellationToken`] for `(workspace_id, token)`, cancelling any prior attempt.
-    pub fn register_attempt(&self, workspace_id: WorkspaceId, token: AttemptToken) -> CancellationToken {
+    pub fn register_attempt(
+        &self,
+        workspace_id: WorkspaceId,
+        token: AttemptToken,
+    ) -> CancellationToken {
         let cancel = CancellationToken::new();
         if let Ok(mut guard) = self.active_cancels.lock()
             && let Some((_, prev)) = guard.insert(workspace_id, (token, cancel.clone()))
@@ -274,8 +280,8 @@ impl ServiceHub {
             if guard.is_running() {
                 return Ok(guard.address().map(|a| a.to_string()));
             }
-            let token = AccessToken::generate()
-                .map_err(|err| ServiceError::Mcp(err.to_string()))?;
+            let token =
+                AccessToken::generate().map_err(|err| ServiceError::Mcp(err.to_string()))?;
             let addr = self.runtime.block_on(guard.start(
                 &self.runtime,
                 self.mcp_host.clone(),

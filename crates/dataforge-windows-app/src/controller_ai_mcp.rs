@@ -118,9 +118,7 @@ impl AppController {
     /// Returns whether the local MCP server is currently running.
     #[must_use]
     pub fn is_mcp_server_running(&self) -> bool {
-        self.services
-            .as_ref()
-            .is_some_and(|s| s.is_mcp_running())
+        self.services.as_ref().is_some_and(|s| s.is_mcp_running())
     }
 
     /// Imports a VS Code or DataForge theme JSON file from `path`.

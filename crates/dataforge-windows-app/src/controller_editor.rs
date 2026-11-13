@@ -95,7 +95,8 @@ impl AppController {
             let total = Some(streamed_rows.len() as u64);
             self.grid_raw_columns = streamed_cols.clone();
             self.grid_raw_rows = streamed_rows.clone();
-            self.grid_model.reload_rows(streamed_cols, streamed_rows, total);
+            self.grid_model
+                .reload_rows(streamed_cols, streamed_rows, total);
             self.sync_grid_view_from_model();
         }
 
@@ -120,7 +121,8 @@ impl AppController {
             | ResultEvent::ColumnsResolved { columns, .. } => {
                 self.grid_raw_columns = columns.to_vec();
                 self.grid_raw_rows.clear();
-                self.grid_model.reload_rows(columns.to_vec(), Vec::new(), None);
+                self.grid_model
+                    .reload_rows(columns.to_vec(), Vec::new(), None);
                 self.sync_grid_view_from_model();
             }
             ResultEvent::Rows(batch) => {

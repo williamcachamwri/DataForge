@@ -130,7 +130,10 @@ impl AppController {
         let clamped = width_dip.max(40.0);
         if let Some(col) = self.grid_model.columns.columns().get(col_idx) {
             let id = col.id;
-            let _ = self.grid_model.columns.resize_column(id, f64::from(clamped));
+            let _ = self
+                .grid_model
+                .columns
+                .resize_column(id, f64::from(clamped));
         }
         if let Some(col) = self.grid_columns.get_mut(col_idx) {
             col.width = clamped;
@@ -237,7 +240,9 @@ impl AppController {
             };
             let outcome = show_native_dialog(None, &kind, &self.strings);
             if !matches!(outcome, DialogOutcome::Accepted(_)) {
-                return Err(AppError::InvalidState("commit cancelled in Safe Mode".to_owned()));
+                return Err(AppError::InvalidState(
+                    "commit cancelled in Safe Mode".to_owned(),
+                ));
             }
         }
         let services = self.require_services()?.clone();
@@ -359,7 +364,8 @@ impl AppController {
         let mut rows = Vec::with_capacity(self.grid_raw_rows.len());
         for (idx, values) in self.grid_raw_rows.iter().enumerate() {
             let row_id = self.grid_model.row_order.row_id(idx);
-            let is_deleted = row_id.is_some_and(|id| self.grid_model.edits.deleted_rows.contains(&id));
+            let is_deleted =
+                row_id.is_some_and(|id| self.grid_model.edits.deleted_rows.contains(&id));
             let mut has_modified = false;
             let cells: Vec<GridCell> = values
                 .iter()
@@ -367,7 +373,8 @@ impl AppController {
                 .map(|(col_idx, val)| {
                     let effective = if let (Some(rid), Some(col)) =
                         (row_id, self.grid_model.columns.columns().get(col_idx))
-                        && let Some(edited) = self.grid_model.edits.modified_cells.get(&(rid, col.id))
+                        && let Some(edited) =
+                            self.grid_model.edits.modified_cells.get(&(rid, col.id))
                     {
                         has_modified = true;
                         edited
