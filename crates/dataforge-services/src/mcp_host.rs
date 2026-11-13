@@ -31,8 +31,7 @@ pub type OpenConnectionHandler =
     Arc<dyn Fn(SavedConnection) -> BoxFuture<'static, OpenOutcome> + Send + Sync>;
 
 /// Callback invoked to record an MCP-executed query in query history.
-pub type QueryHistoryRecorder =
-    Arc<dyn Fn(NewEntry, Arc<dyn SqlDialect>) + Send + Sync>;
+pub type QueryHistoryRecorder = Arc<dyn Fn(NewEntry, Arc<dyn SqlDialect>) + Send + Sync>;
 
 /// Pre-dispatch helper classifying process arguments before launching the GUI.
 #[must_use]
@@ -158,7 +157,9 @@ impl McpServerController {
         token: AccessToken,
     ) -> Result<SocketAddr, ServiceError> {
         if self.server.is_some() {
-            return Err(ServiceError::Mcp("MCP server is already running".to_owned()));
+            return Err(ServiceError::Mcp(
+                "MCP server is already running".to_owned(),
+            ));
         }
         let context = ToolContext { host, connections };
         let server = McpServer::start(
@@ -196,5 +197,71 @@ impl McpServerController {
     #[must_use]
     pub fn seen_clients(&self) -> Option<watch::Receiver<Vec<SeenClient>>> {
         self.server.as_ref().map(McpServer::seen_clients)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio_util::sync::CancellationToken;
+
+    #[test]
+    fn classify_cli_args_routes_subcommands_and_gui() {
+        let gui_args = vec![OsString::from("dataforge")];
+        assert!(matches!(classify_cli_args(&gui_args), Dispatch::Gui(_)));
+
+        let help_args = vec![OsString::from("dataforge"), OsString::from("--help")];
+        assert_eq!(classify_cli_args(&help_args), Dispatch::Command);
+
+        let url_args = vec![
+            OsString::from("dataforge"),
+            OsString::from("postgres://localhost/db"),
+        ];
+        assert!(matches!(classify_cli_args(&url_args), Dispatch::Gui(_)));
+    }
+
+    #[test]
+    fn mcp_host_defaults_to_closed_and_declines_writes() -> Result<(), ServiceError> {
+        let runtime = Arc::new(AppRuntime::new(Some(1))?);
+        let sessions = Arc::new(RwLock::new(SessionManager::new(runtime.clone())));
+        let host = DataForgeMcpHost::new(sessions);
+
+        runtime.block_on(async {
+            assert!(host.open_connections().await.is_empty());
+            assert!(host.session(Uuid::new_v4()).await.is_none());
+
+            let approval = WriteApproval {
+                connection_id: Uuid::new_v4(),
+                connection_name: "test".to_owned(),
+                database: None,
+                sql: "DELETE FROM users".to_owned(),
+                destructive: true,
+                cancel: CancellationToken::new(),
+            };
+            assert!(!host.approve(approval).await);
+        });
+        Ok(())
+    }
+
+    #[test]
+    fn mcp_host_uses_custom_approval_handler() -> Result<(), ServiceError> {
+        let runtime = Arc::new(AppRuntime::new(Some(1))?);
+        let sessions = Arc::new(RwLock::new(SessionManager::new(runtime.clone())));
+        let host = DataForgeMcpHost::new(sessions).with_approval_handler(Arc::new(|approval| {
+            Box::pin(async move { !approval.destructive })
+        }));
+
+        runtime.block_on(async {
+            let safe_write = WriteApproval {
+                connection_id: Uuid::new_v4(),
+                connection_name: "test".to_owned(),
+                database: None,
+                sql: "INSERT INTO logs VALUES (1)".to_owned(),
+                destructive: false,
+                cancel: CancellationToken::new(),
+            };
+            assert!(host.approve(safe_write).await);
+        });
+        Ok(())
     }
 }
