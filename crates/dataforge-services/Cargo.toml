@@ -31,7 +31,7 @@ tablepro-driver-sqlite.workspace = true
 tablepro-foreign-import.workspace = true
 tablepro-mcp.workspace = true
 tablepro-net.workspace = true
-tablepro-session.workspace = true
+tablepro-session = { workspace = true, features = ["in-process-ssh"] }
 tablepro-ssh = { workspace = true, features = ["in-process"] }
 tablepro-storage.workspace = true
 thiserror.workspace = true
