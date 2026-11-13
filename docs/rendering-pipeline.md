@@ -15,3 +15,12 @@
 - **Frozen + Scrollable Panes**: Computes `frozen_pane_width` for leading frozen columns and `scrollable_origin_x` for horizontally scrolled columns, clipping each pane cleanly.
 - **Typed Cell Styling**: Differentiates `CellKind` (`Text`, `Number`, `Null`, `Boolean`, `Json`, `Binary`) and `RowState` (`Normal`, `Selected`, `Modified`, `Inserted`, `Deleted`) using `GridPalette`.
 - **Hit Testing**: `DataGridRenderer::hit_test` maps viewport `(x, y)` coordinates back to `GridHitTest` targets (column headers, resize handles, row numbers, and data cells) without allocating per-cell widgets.
+
+## 3. SQL Editor Rendering (`editor_renderer.rs`)
+
+`SqlEditorRenderer` pairs DirectWrite `IDWriteTextLayout` with a bounded `LineLayoutCache`:
+
+- **Tokenization (`tokenize_sql_line`)**: Produces `SyntaxSpan` runs (`SqlTokenKind`: `Keyword`, `StringLiteral`, `Number`, `Comment`, `Identifier`, `Operator`) colored via `SyntaxPalette`.
+- **Visible Line Windowing (`EditorLayout`)**: Only lines in `visible_lines()` are laid out and painted, with gutter line numbers (`text_origin_x`), active-line highlight, selections (`EditorSelection`), and `EditorCursor` (`CursorMode`).
+- **Autocomplete Popup**: `AutocompletePopup` renders ranked `AutocompleteItem`s (`CompletionKind`) anchored to `(line, column)`.
+- **Hit Testing**: `EditorHitTest` resolves pointer clicks to line/column offsets or gutter actions.
