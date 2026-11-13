@@ -6,6 +6,7 @@ pub mod error;
 pub mod foreign;
 pub mod machine_id;
 pub mod paths;
+pub mod secrets;
 pub mod settings;
 pub mod theme_detect;
 
@@ -17,6 +18,9 @@ pub use foreign::{
 };
 pub use machine_id::{derive_machine_id, normalize_machine_guid, read_machine_id};
 pub use paths::{APP_DIR_NAME, storage_paths, storage_paths_for};
+pub use secrets::{
+    DEFAULT_CREDENTIAL_PREFIX, LAYOUT_KEYWORD, PART_SIZE, WindowsCredentialStore,
+};
 pub use settings::{
     AppSettings, EditorFont, McpSettings, SETTINGS_FILENAME, ThemePreference, WindowGeometry,
 };
