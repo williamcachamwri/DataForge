@@ -247,3 +247,155 @@ pub enum DataGridChange {
     SelectionChanged,
     LayoutChanged,
 }
+
+/// Coordinate in the grid identified by stable row and column IDs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GridCoord {
+    pub row: RowID,
+    pub col: DataGridColumnID,
+}
+
+/// Selection mode per `data-grid.md`.
+///
+/// Copy, Delete, and row commands read `mode`, never the rectangle's shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum GridSelectionMode {
+    Cursor,
+    Cells,
+    Rows,
+}
+
+/// Pure grid selection state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GridSelection {
+    pub mode: GridSelectionMode,
+    pub anchor: Option<GridCoord>,
+    pub focus: Option<GridCoord>,
+    pub selected_rows: std::collections::BTreeSet<RowID>,
+    pub selected_cols: std::collections::BTreeSet<DataGridColumnID>,
+}
+
+impl Default for GridSelection {
+    fn default() -> Self {
+        Self {
+            mode: GridSelectionMode::Cursor,
+            anchor: None,
+            focus: None,
+            selected_rows: std::collections::BTreeSet::new(),
+            selected_cols: std::collections::BTreeSet::new(),
+        }
+    }
+}
+
+/// Input events to [`GridSelectionReducer`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GridSelectionAction {
+    Click(GridCoord),
+    ShiftClick(GridCoord),
+    DragTo(GridCoord),
+    SelectRow(RowID),
+    SelectAll,
+    RowsSelectedNatively(Vec<RowID>),
+    Clear,
+}
+
+/// Pure reducer for [`GridSelection`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GridSelectionReducer;
+
+impl GridSelectionReducer {
+    /// Applies `action` to `state` using `rows` and `cols` to resolve ranges.
+    #[must_use]
+    pub fn reduce(
+        state: &GridSelection,
+        action: GridSelectionAction,
+        rows: &DataGridRowOrder,
+        cols: &DataGridColumnSet,
+    ) -> GridSelection {
+        match action {
+            GridSelectionAction::Clear => GridSelection::default(),
+            GridSelectionAction::Click(coord) => GridSelection {
+                mode: GridSelectionMode::Cursor,
+                anchor: Some(coord),
+                focus: Some(coord),
+                selected_rows: std::collections::BTreeSet::from([coord.row]),
+                selected_cols: std::collections::BTreeSet::from([coord.col]),
+            },
+            GridSelectionAction::ShiftClick(coord) | GridSelectionAction::DragTo(coord) => {
+                let anchor = state.anchor.unwrap_or(coord);
+                Self::range_selection(anchor, coord, rows, cols)
+            }
+            GridSelectionAction::SelectRow(row_id) => GridSelection {
+                mode: GridSelectionMode::Rows,
+                anchor: cols.columns().first().map(|c| GridCoord { row: row_id, col: c.id }),
+                focus: cols.columns().first().map(|c| GridCoord { row: row_id, col: c.id }),
+                selected_rows: std::collections::BTreeSet::from([row_id]),
+                selected_cols: cols.columns().iter().map(|c| c.id).collect(),
+            },
+            GridSelectionAction::SelectAll => GridSelection {
+                mode: GridSelectionMode::Rows,
+                anchor: rows
+                    .row_id(0)
+                    .and_then(|r| cols.columns().first().map(|c| GridCoord { row: r, col: c.id })),
+                focus: rows
+                    .as_slice()
+                    .last()
+                    .copied()
+                    .and_then(|r| cols.columns().last().map(|c| GridCoord { row: r, col: c.id })),
+                selected_rows: rows.as_slice().iter().copied().collect(),
+                selected_cols: cols.columns().iter().map(|c| c.id).collect(),
+            },
+            GridSelectionAction::RowsSelectedNatively(row_ids) => {
+                let selected_rows: std::collections::BTreeSet<RowID> = row_ids.into_iter().collect();
+                let focus_col = state
+                    .focus
+                    .map(|c| c.col)
+                    .or_else(|| cols.columns().first().map(|c| c.id));
+                let first_row = selected_rows.iter().next().copied();
+                let coord = first_row.and_then(|r| focus_col.map(|c| GridCoord { row: r, col: c }));
+                GridSelection {
+                    mode: if selected_rows.len() > 1 {
+                        GridSelectionMode::Rows
+                    } else {
+                        GridSelectionMode::Cursor
+                    },
+                    anchor: coord,
+                    focus: coord,
+                    selected_rows,
+                    selected_cols: focus_col.into_iter().collect(),
+                }
+            }
+        }
+    }
+
+    fn range_selection(
+        anchor: GridCoord,
+        focus: GridCoord,
+        rows: &DataGridRowOrder,
+        cols: &DataGridColumnSet,
+    ) -> GridSelection {
+        let Some(r0) = rows.display_row(anchor.row) else {
+            return GridSelection::default();
+        };
+        let Some(r1) = rows.display_row(focus.row) else {
+            return GridSelection::default();
+        };
+        let Some(c0) = cols.display_position(anchor.col) else {
+            return GridSelection::default();
+        };
+        let Some(c1) = cols.display_position(focus.col) else {
+            return GridSelection::default();
+        };
+        let (r_min, r_max) = (r0.min(r1), r0.max(r1));
+        let (c_min, c_max) = (c0.min(c1), c0.max(c1));
+        let selected_rows = (r_min..=r_max).filter_map(|r| rows.row_id(r)).collect();
+        let selected_cols = cols.columns()[c_min..=c_max].iter().map(|c| c.id).collect();
+        GridSelection {
+            mode: GridSelectionMode::Cells,
+            anchor: Some(anchor),
+            focus: Some(focus),
+            selected_rows,
+            selected_cols,
+        }
+    }
+}
