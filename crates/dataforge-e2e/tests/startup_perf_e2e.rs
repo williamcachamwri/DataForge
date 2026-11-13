@@ -134,3 +134,42 @@ fn crash_report_atomic_write_and_session_recovery() -> E2eResult<()> {
     assert_eq!(planned.len(), 1);
     Ok(())
 }
+
+#[test]
+fn tracing_logging_init_settings_and_d2d_budget_checks() -> E2eResult<()> {
+    let root = workspace_root()?;
+    let diag_src = fs::read_to_string(root.join("crates/dataforge-services/src/diagnostics.rs"))?;
+    let crash_src = fs::read_to_string(root.join("crates/dataforge-windows-app/src/crash.rs"))?;
+
+    // Verify idempotent tracing subscriber initialization and RUST_LOG fallback exist.
+    assert!(diag_src.contains("pub fn init_logging"));
+    assert!(diag_src.contains("EnvFilter::try_from_default_env()"));
+    assert!(crash_src.contains("init_logging_and_crash_reports"));
+    assert!(crash_src.contains("LOG_INIT.call_once"));
+
+    // Verify AppSettings + StoragePaths roundtrip in an isolated temp directory.
+    let temp = tempfile::tempdir()?;
+    let paths = storage_paths_for(temp.path(), temp.path());
+    let settings = AppSettings::default();
+    let encoded = serde_json::to_vec_pretty(&settings)?;
+    let settings_file = paths.root_dir().join("settings.json");
+    fs::create_dir_all(paths.root_dir())?;
+    fs::write(&settings_file, encoded)?;
+    let decoded: AppSettings = serde_json::from_slice(&fs::read(&settings_file)?)?;
+    assert_eq!(decoded, settings);
+
+    // Verify Direct2D/DirectWrite factory initialization and < 60 MB surface budget.
+    let t0 = Instant::now();
+    let _d2d = D2dContext::new()?;
+    let elapsed = t0.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "D2dContext::new took unexpectedly long: {elapsed:?}"
+    );
+
+    let mut budget = MemoryBudget::new(DEFAULT_MEMORY_BUDGET_BYTES);
+    budget.set_surface_dimensions(1920, 1080);
+    assert!(!budget.is_over_budget());
+    assert!(budget.total_bytes() < DEFAULT_MEMORY_BUDGET_BYTES);
+    Ok(())
+}
