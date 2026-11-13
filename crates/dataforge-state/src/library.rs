@@ -420,3 +420,147 @@ impl ConnectionsLibraryModel {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use tablepro_foreign_import::{ForeignConnection, PasswordOutcome};
+
+    use super::*;
+
+    fn sample_conn(id: &str, name: &str, group: Option<&str>, fav: bool) -> LibraryConnection {
+        LibraryConnection {
+            id: LibraryConnectionId(id.to_owned()),
+            name: name.to_owned(),
+            driver_id: "postgres".to_owned(),
+            host: "localhost".to_owned(),
+            port: Some(5432),
+            database: "app".to_owned(),
+            username: "postgres".to_owned(),
+            group_id: group.map(|g| LibraryGroupId(g.to_owned())),
+            tags: BTreeSet::from(["prod".to_owned()]),
+            is_favorite: fav,
+            order: 0,
+        }
+    }
+
+    #[test]
+    fn favorite_has_distinct_row_ids_under_favorites_and_group() {
+        let mut model = ConnectionsLibraryModel::new();
+        model.upsert_group(LibraryGroup {
+            id: LibraryGroupId("g1".to_owned()),
+            name: "Production".to_owned(),
+            order: 0,
+            is_expanded: true,
+        });
+        model.upsert_connection(sample_conn("c1", "Primary DB", Some("g1"), true));
+
+        let row_ids: Vec<&LibraryRowID> = model.outline().iter().map(|r| &r.row_id).collect();
+        assert_eq!(row_ids.len(), 3);
+        assert!(row_ids.contains(&&LibraryRowID::Connection {
+            section: LibrarySection::Favorites,
+            id: LibraryConnectionId("c1".to_owned()),
+        }));
+        assert!(row_ids.contains(&&LibraryRowID::Connection {
+            section: LibrarySection::Group(LibraryGroupId("g1".to_owned())),
+            id: LibraryConnectionId("c1".to_owned()),
+        }));
+    }
+
+    #[test]
+    fn reload_defers_while_dragging_or_renaming_and_flushes_after() {
+        let mut model = ConnectionsLibraryModel::new();
+        model.upsert_connection(sample_conn("c1", "Old", None, false));
+        let count_before = model.reload_count;
+
+        model.begin_drag();
+        let mut fresh = model.storage().clone();
+        fresh.connections.insert(
+            LibraryConnectionId("c2".to_owned()),
+            sample_conn("c2", "New", None, false),
+        );
+        model.request_reload(fresh);
+        assert!(model.pending_reload);
+        assert_eq!(model.reload_count, count_before);
+
+        // Start rename before ending drag; reload must still wait for rename to finish.
+        model.begin_rename(
+            LibraryRowID::Connection {
+                section: LibrarySection::Ungrouped,
+                id: LibraryConnectionId("c1".to_owned()),
+            },
+            "Renamed",
+        );
+        model.end_drag();
+        assert!(model.pending_reload);
+        assert_eq!(model.reload_count, count_before);
+
+        model.cancel_rename();
+        assert!(!model.pending_reload);
+        assert_eq!(model.reload_count, count_before + 1);
+        assert_eq!(model.outline().len(), 2);
+    }
+
+    #[test]
+    fn url_parser_and_foreign_import_deduplicate() -> Result<(), Box<dyn std::error::Error>> {
+        let parsed = parse_connection_url("postgres://alice:secret@db.internal:5432/analytics")?;
+        assert_eq!(parsed.driver_id, "postgres");
+        assert_eq!(parsed.host, "db.internal");
+        assert_eq!(parsed.port, Some(5432));
+        assert_eq!(parsed.database, "analytics");
+
+        let mut model = ConnectionsLibraryModel::new();
+        let import = CollectedImport {
+            app: ForeignApp::TablePlus,
+            connections: vec![CollectedConnection {
+                reference: "tp-1".to_owned(),
+                settings: ForeignConnection {
+                    name: "Analytics".to_owned(),
+                    host: "db.internal".to_owned(),
+                    port: 5432,
+                    database: "analytics".to_owned(),
+                    username: "alice".to_owned(),
+                    engine: "postgres".to_owned(),
+                    ssh: None,
+                    ssl: None,
+                    color: None,
+                    additional_fields: BTreeMap::new(),
+                },
+                group_path: Vec::new(),
+                credentials: None,
+            }],
+            saved_queries: Vec::new(),
+            passwords: PasswordOutcome::NotRequested,
+        };
+
+        let first = model.import_foreign(&import);
+        assert_eq!(first.imported_count, 1);
+        assert_eq!(first.skipped_duplicates, 0);
+
+        let second = model.import_foreign(&import);
+        assert_eq!(second.imported_count, 0);
+        assert_eq!(second.skipped_duplicates, 1);
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn prop_outline_row_ids_are_always_unique(
+            favs in prop::collection::vec(any::<bool>(), 1..15),
+        ) {
+            let mut model = ConnectionsLibraryModel::new();
+            model.upsert_group(LibraryGroup {
+                id: LibraryGroupId("g".to_owned()),
+                name: "Group".to_owned(),
+                order: 0,
+                is_expanded: true,
+            });
+            for (idx, is_fav) in favs.into_iter().enumerate() {
+                let id = format!("c{idx}");
+                model.upsert_connection(sample_conn(&id, &id, Some("g"), is_fav));
+            }
+            let ids: BTreeSet<&LibraryRowID> = model.outline().iter().map(|r| &r.row_id).collect();
+            prop_assert_eq!(ids.len(), model.outline().len());
+        }
+    }
+}
