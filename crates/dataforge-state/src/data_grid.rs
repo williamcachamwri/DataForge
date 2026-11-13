@@ -869,3 +869,147 @@ fn compare_opt_values(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use tablepro_core::column::{ColumnType, ResultColumn};
+    use tablepro_core::export::CsvOptions;
+    use tablepro_core::filter::{FilterOp, FilterRule, FilterValue};
+    use tablepro_core::value::Value;
+
+    use super::*;
+
+    fn sample_cols() -> Vec<ResultColumn> {
+        vec![
+            ResultColumn::new("id", ColumnType::unknown()),
+            ResultColumn::new("name", ColumnType::unknown()),
+            ResultColumn::new("score", ColumnType::unknown()),
+        ]
+    }
+
+    #[test]
+    fn frozen_columns_enforce_two_thirds_width_cap_and_side_moves() {
+        let mut set = DataGridColumnSet::from_names(
+            &["a".to_owned(), "b".to_owned(), "c".to_owned(), "d".to_owned()],
+            100.0,
+        );
+        // Viewport = 300 -> max frozen = 200. Freezing 2 cols (200) succeeds; 3 cols (300) fails.
+        assert!(set.freeze_up_to(1, 300.0));
+        assert_eq!(set.frozen_count(), 2);
+        assert!(!set.freeze_up_to(2, 300.0));
+        assert_eq!(set.frozen_count(), 2);
+
+        // Slot 0 is RowNumbers in both panes; slot 3 is only in Main pane.
+        assert_eq!(set.slot(DataGridPane::Frozen, 0), Some(PaneColumnSlot::RowNumbers));
+        assert_eq!(set.slot(DataGridPane::Frozen, 3), None);
+        assert!(matches!(
+            set.slot(DataGridPane::Main, 3),
+            Some(PaneColumnSlot::DataColumn { display_position: 2, .. })
+        ));
+
+        // Cannot move across freeze line, can move within side.
+        assert!(!set.move_within_side(0, 2));
+        assert!(set.move_within_side(0, 1));
+    }
+
+    #[test]
+    fn selection_reducer_tracks_cursor_cells_and_rows_modes() {
+        let cols = DataGridColumnSet::from_names(&["a".to_owned(), "b".to_owned(), "c".to_owned()], 100.0);
+        let rows = DataGridRowOrder::new(vec![RowID(1), RowID(2), RowID(3)]);
+        let c0 = cols.columns()[0].id;
+        let c2 = cols.columns()[2].id;
+
+        let s1 = GridSelectionReducer::reduce(
+            &GridSelection::default(),
+            GridSelectionAction::Click(GridCoord { row: RowID(1), col: c0 }),
+            &rows,
+            &cols,
+        );
+        assert_eq!(s1.mode, GridSelectionMode::Cursor);
+
+        let s2 = GridSelectionReducer::reduce(
+            &s1,
+            GridSelectionAction::ShiftClick(GridCoord { row: RowID(2), col: c2 }),
+            &rows,
+            &cols,
+        );
+        assert_eq!(s2.mode, GridSelectionMode::Cells);
+        assert_eq!(s2.selected_rows.len(), 2);
+        assert_eq!(s2.selected_cols.len(), 3);
+
+        let s3 = GridSelectionReducer::reduce(&s2, GridSelectionAction::SelectAll, &rows, &cols);
+        assert_eq!(s3.mode, GridSelectionMode::Rows);
+        assert_eq!(s3.selected_rows.len(), 3);
+    }
+
+    #[test]
+    fn paging_sorting_filter_edits_and_exports() -> Result<(), Box<dyn std::error::Error>> {
+        let mut model = DataGridModel::new(DataGridLayoutScope::Table("users".to_owned()), 2);
+        model.reload_rows(
+            sample_cols(),
+            vec![
+                vec![Value::Int(2), Value::Text("Bob".to_owned()), Value::Int(10)],
+                vec![Value::Int(1), Value::Text("Alice".to_owned()), Value::Int(30)],
+            ],
+            Some(5),
+        );
+        assert_eq!(model.page.page_info(), (1, Some(3)));
+        assert!(model.page.next_page());
+        assert_eq!(model.page.page_info(), (2, Some(3)));
+
+        // Sort descending by id.
+        let id_col = model.columns.columns()[0].id;
+        model.sort.click(id_col, false);
+        model.sort.click(id_col, false);
+        model.sort_client_rows();
+        let csv = model.export_csv(&CsvOptions::default())?;
+        assert!(csv.contains("Bob"));
+        assert!(csv.contains("Alice"));
+        let json = model.export_json()?;
+        assert!(json.contains("\"Alice\""));
+
+        // Edits & rollback.
+        let r0 = model.row_order.row_id(0).ok_or("missing row 0")?;
+        model.commit(
+            vec![DataGridCellEdit {
+                row_id: r0,
+                column_id: id_col,
+                old_value: Value::Int(2),
+                new_value: Value::Int(99),
+            }],
+            "Edit ID",
+        );
+        assert!(model.edits.has_pending_edits());
+        model.edits.rollback();
+        assert!(!model.edits.has_pending_edits());
+
+        // Filter bar.
+        model.filter_bar.add_rule(FilterRule {
+            column: "name".to_owned(),
+            op: FilterOp::Eq,
+            value: Some(FilterValue::Single("Alice".to_owned())),
+        });
+        assert!(model.filter_bar.has_active_filters());
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn prop_frozen_width_never_exceeds_two_thirds(
+            widths in prop::collection::vec(48.0f64..300.0, 1..10),
+            viewport in 200.0f64..1500.0,
+            freeze_idx in 0usize..10,
+        ) {
+            let names: Vec<String> = (0..widths.len()).map(|i| format!("c{i}")).collect();
+            let mut set = DataGridColumnSet::from_names(&names, 100.0);
+            for (i, w) in widths.into_iter().enumerate() {
+                let id = set.columns()[i].id;
+                set.resize_column(id, w);
+            }
+            let idx = freeze_idx % set.columns().len();
+            let _ = set.freeze_up_to(idx, viewport);
+            prop_assert!(set.frozen_width() <= viewport * MAXIMUM_FROZEN_SHARE + 1e-6);
+        }
+    }
+}
