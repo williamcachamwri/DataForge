@@ -13,6 +13,7 @@ csv.workspace = true
 dataforge-gfx.workspace = true
 dataforge-state.workspace = true
 dataforge-windows-platform.workspace = true
+duckdb.workspace = true
 futures.workspace = true
 serde_json.workspace = true
 tablepro-core.workspace = true
