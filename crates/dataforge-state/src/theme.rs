@@ -484,3 +484,143 @@ impl ThemeDefinition {
         }
     }
 }
+
+/// Scope from which a view resolves its theme colors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ThemeScope {
+    /// Follows the active catalog selection for the current appearance.
+    Live,
+    /// Pinned to a specific theme id (used by theme editor previews).
+    Fixed(ThemeId),
+}
+
+/// Chrome backdrop state enforcing the Content vs Chrome split.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeBackdropState {
+    pub is_themed: bool,
+    pub can_reach_chrome: bool,
+    pub reduce_transparency: bool,
+    pub increase_contrast: bool,
+}
+
+impl ThemeBackdropState {
+    /// Returns the `window.background` fill for a glass sidebar/inspector pane
+    /// only when Reduce Transparency is on, `can_reach_chrome` is true,
+    /// `increase_contrast` is off, and the resolved theme sets `window.background`.
+    #[must_use]
+    pub fn chrome_reduce_transparency_fill(self, resolved: &ResolvedTheme) -> Option<Rgba> {
+        if !self.is_themed || !self.can_reach_chrome || !self.reduce_transparency || self.increase_contrast {
+            return None;
+        }
+        resolved.explicit_color(ThemeSlot::WindowBackground)
+    }
+
+    /// Chrome controls never read content slots; they only ask whether the window is themed.
+    #[must_use]
+    pub const fn chrome_uses_system_style(self) -> bool {
+        true
+    }
+}
+
+/// Result of resolving a theme for a given appearance and scope.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedTheme {
+    /// The id that was requested/saved (preserved even when falling back).
+    pub saved_id: Option<ThemeId>,
+    /// The id of the theme actually supplying colors.
+    pub effective_id: ThemeId,
+    pub appearance: ThemeAppearance,
+    /// True when the requested theme was missing, rejected, or wrong appearance.
+    pub used_fallback: bool,
+    explicit_colors: BTreeMap<ThemeSlot, Rgba>,
+    palette: BTreeMap<ThemeSlot, Rgba>,
+}
+
+impl ResolvedTheme {
+    /// Returns the color for `slot`, or `fallback` if the slot is unset.
+    #[must_use]
+    pub fn color_or_fallback(&self, slot: ThemeSlot, fallback: Rgba) -> Rgba {
+        self.palette.get(&slot).copied().unwrap_or(fallback)
+    }
+
+    /// Returns whether `slot` draws a theme color (explicitly set or derived).
+    #[must_use]
+    pub fn is_overridden(&self, slot: ThemeSlot) -> bool {
+        self.palette.contains_key(&slot)
+    }
+
+    /// Returns whether `slot` has an explicit color in the theme definition
+    /// (used only by the theme editor).
+    #[must_use]
+    pub fn has_explicit_color(&self, slot: ThemeSlot) -> bool {
+        self.explicit_colors.contains_key(&slot)
+    }
+
+    /// Returns the explicit color for `slot`, if any.
+    #[must_use]
+    pub fn explicit_color(&self, slot: ThemeSlot) -> Option<Rgba> {
+        self.explicit_colors.get(&slot).copied()
+    }
+}
+
+/// Pure theme resolver.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ThemeResolver;
+
+impl ThemeResolver {
+    /// Resolves `scope` against `catalog` for `appearance`.
+    ///
+    /// A missing, rejected, or wrong-appearance theme draws the built-in default
+    /// for `appearance` while preserving `saved_id` so the theme returns with its file.
+    #[must_use]
+    pub fn resolve(
+        saved_id: Option<&ThemeId>,
+        appearance: ThemeAppearance,
+        scope: &ThemeScope,
+        catalog: &BTreeMap<ThemeId, ThemeDefinition>,
+    ) -> ResolvedTheme {
+        let requested_id = match scope {
+            ThemeScope::Live => saved_id,
+            ThemeScope::Fixed(id) => Some(id),
+        };
+        let default_theme = ThemeDefinition::default_for(appearance);
+
+        let Some(req_id) = requested_id else {
+            return Self::from_definition(None, &default_theme, false);
+        };
+
+        if let Some(found) = catalog.get(req_id)
+            && found.appearance == appearance
+        {
+            return Self::from_definition(Some(req_id.clone()), found, false);
+        }
+
+        if req_id == &default_theme.id {
+            return Self::from_definition(Some(req_id.clone()), &default_theme, false);
+        }
+
+        // Missing or wrong-appearance: fall back to default while keeping `saved_id`.
+        Self::from_definition(Some(req_id.clone()), &default_theme, true)
+    }
+
+    fn from_definition(saved_id: Option<ThemeId>, def: &ThemeDefinition, used_fallback: bool) -> ResolvedTheme {
+        let mut palette = def.colors.clone();
+        // Derive `editor.syntax.null` from `editor.text` at ~50% alpha if not explicitly set.
+        if !palette.contains_key(&ThemeSlot::EditorSyntaxNull)
+            && let Some(text) = palette.get(&ThemeSlot::EditorText).copied()
+        {
+            palette.insert(
+                ThemeSlot::EditorSyntaxNull,
+                Rgba::rgba(text.r, text.g, text.b, text.a / 2),
+            );
+        }
+        ResolvedTheme {
+            saved_id,
+            effective_id: def.id.clone(),
+            appearance: def.appearance,
+            used_fallback,
+            explicit_colors: def.colors.clone(),
+            palette,
+        }
+    }
+}
