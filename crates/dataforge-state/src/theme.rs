@@ -238,3 +238,249 @@ impl ThemeSlotRegistry {
         self.readers.keys().copied().collect()
     }
 }
+
+/// RGBA color with 8-bit channels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Rgba {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl Rgba {
+    /// Creates an opaque RGBA color.
+    #[must_use]
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b, a: 255 }
+    }
+
+    /// Creates an RGBA color with explicit alpha.
+    #[must_use]
+    pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
+
+    /// Parses `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA` hex strings.
+    #[must_use]
+    pub fn from_hex(input: &str) -> Option<Self> {
+        let hex = input.strip_prefix('#').unwrap_or(input);
+        match hex.len() {
+            3 => {
+                let r = u8::from_str_radix(&hex[0..1], 16).ok()? * 17;
+                let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
+                let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
+                Some(Self::rgb(r, g, b))
+            }
+            4 => {
+                let r = u8::from_str_radix(&hex[0..1], 16).ok()? * 17;
+                let g = u8::from_str_radix(&hex[1..2], 16).ok()? * 17;
+                let b = u8::from_str_radix(&hex[2..3], 16).ok()? * 17;
+                let a = u8::from_str_radix(&hex[3..4], 16).ok()? * 17;
+                Some(Self::rgba(r, g, b, a))
+            }
+            6 => {
+                let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+                let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+                let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+                Some(Self::rgb(r, g, b))
+            }
+            8 => {
+                let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+                let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+                let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+                let a = u8::from_str_radix(&hex[6..8], 16).ok()?;
+                Some(Self::rgba(r, g, b, a))
+            }
+            _ => None,
+        }
+    }
+
+    /// Formats as `#RRGGBB` when opaque, or `#RRGGBBAA` when translucent.
+    #[must_use]
+    pub fn to_hex(self) -> String {
+        if self.a == 255 {
+            format!("#{:02X}{:02X}{:02X}", self.r, self.g, self.b)
+        } else {
+            format!("#{:02X}{:02X}{:02X}{:02X}", self.r, self.g, self.b, self.a)
+        }
+    }
+}
+
+/// Appearance category for a theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeAppearance {
+    Light,
+    Dark,
+    HighContrast,
+}
+
+/// Stable identifier for a theme.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+pub struct ThemeId(pub String);
+
+impl ThemeId {
+    /// Built-in Light theme id.
+    #[must_use]
+    pub fn builtin_light() -> Self {
+        Self("builtin.light".to_owned())
+    }
+
+    /// Built-in Dark theme id.
+    #[must_use]
+    pub fn builtin_dark() -> Self {
+        Self("builtin.dark".to_owned())
+    }
+
+    /// Built-in High-Contrast theme id.
+    #[must_use]
+    pub fn builtin_high_contrast() -> Self {
+        Self("builtin.high_contrast".to_owned())
+    }
+
+    /// Returns whether this id refers to a built-in theme.
+    #[must_use]
+    pub fn is_builtin(&self) -> bool {
+        self.0.starts_with("builtin.")
+    }
+}
+
+/// Complete theme definition (built-in or user-imported/edited).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThemeDefinition {
+    pub id: ThemeId,
+    pub name: String,
+    pub appearance: ThemeAppearance,
+    pub is_builtin: bool,
+    pub colors: BTreeMap<ThemeSlot, Rgba>,
+}
+
+impl ThemeDefinition {
+    /// Built-in Light content palette.
+    #[must_use]
+    pub fn builtin_light() -> Self {
+        let mut colors = BTreeMap::new();
+        colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::EditorText, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        colors.insert(ThemeSlot::EditorSelection, Rgba::rgba(0xAD, 0xD6, 0xFF, 0xC0));
+        colors.insert(ThemeSlot::EditorCaret, Rgba::rgb(0x00, 0x00, 0x00));
+        colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0xF5, 0xF7, 0xFA));
+        colors.insert(ThemeSlot::EditorGutterBackground, Rgba::rgb(0xF8, 0xF8, 0xF8));
+        colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0x6E, 0x76, 0x81));
+        colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x00, 0x33, 0xB3));
+        colors.insert(ThemeSlot::EditorSyntaxString, Rgba::rgb(0x06, 0x7D, 0x17));
+        colors.insert(ThemeSlot::EditorSyntaxComment, Rgba::rgb(0x6A, 0x73, 0x7D));
+        colors.insert(ThemeSlot::EditorSyntaxNumber, Rgba::rgb(0x17, 0x50, 0xEB));
+        colors.insert(ThemeSlot::EditorSyntaxOperator, Rgba::rgb(0x24, 0x29, 0x2E));
+        colors.insert(ThemeSlot::EditorSyntaxPunctuation, Rgba::rgb(0x4E, 0x56, 0x60));
+        colors.insert(ThemeSlot::EditorSyntaxIdentifier, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        colors.insert(ThemeSlot::EditorSyntaxQuotedIdentifier, Rgba::rgb(0x04, 0x51, 0xA5));
+        colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0x80, 0x80, 0x80));
+        colors.insert(ThemeSlot::DataGridHeaderBackground, Rgba::rgb(0xF3, 0xF4, 0xF6));
+        colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0x1F, 0x23, 0x28));
+        colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x09, 0x69, 0xDA));
+        colors.insert(ThemeSlot::DataGridInactiveSelection, Rgba::rgb(0xD0, 0xD7, 0xDE));
+        colors.insert(ThemeSlot::DataGridSelectionText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::DataGridFocusBorder, Rgba::rgb(0x09, 0x69, 0xDA));
+        colors.insert(ThemeSlot::DataGridInserted, Rgba::rgba(0x2D, 0xA4, 0x4E, 0x38));
+        colors.insert(ThemeSlot::DataGridModified, Rgba::rgba(0xBF, 0x87, 0x00, 0x38));
+        colors.insert(ThemeSlot::DataGridDeleted, Rgba::rgba(0xCF, 0x22, 0x2E, 0x38));
+        colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        Self {
+            id: ThemeId::builtin_light(),
+            name: "DataForge Light".to_owned(),
+            appearance: ThemeAppearance::Light,
+            is_builtin: true,
+            colors,
+        }
+    }
+
+    /// Built-in Dark content palette.
+    #[must_use]
+    pub fn builtin_dark() -> Self {
+        let mut colors = BTreeMap::new();
+        colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        colors.insert(ThemeSlot::EditorText, Rgba::rgb(0xD4, 0xD4, 0xD4));
+        colors.insert(ThemeSlot::EditorSelection, Rgba::rgba(0x26, 0x4F, 0x78, 0xCC));
+        colors.insert(ThemeSlot::EditorCaret, Rgba::rgb(0xAE, 0xAF, 0xAD));
+        colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0x28, 0x28, 0x28));
+        colors.insert(ThemeSlot::EditorGutterBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0x85, 0x85, 0x85));
+        colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x56, 0x9C, 0xD6));
+        colors.insert(ThemeSlot::EditorSyntaxString, Rgba::rgb(0xCE, 0x91, 0x78));
+        colors.insert(ThemeSlot::EditorSyntaxComment, Rgba::rgb(0x6A, 0x99, 0x55));
+        colors.insert(ThemeSlot::EditorSyntaxNumber, Rgba::rgb(0xB5, 0xCE, 0xA8));
+        colors.insert(ThemeSlot::EditorSyntaxOperator, Rgba::rgb(0xD4, 0xD4, 0xD4));
+        colors.insert(ThemeSlot::EditorSyntaxPunctuation, Rgba::rgb(0xA0, 0xA0, 0xA0));
+        colors.insert(ThemeSlot::EditorSyntaxIdentifier, Rgba::rgb(0xD4, 0xD4, 0xD4));
+        colors.insert(ThemeSlot::EditorSyntaxQuotedIdentifier, Rgba::rgb(0x9C, 0xDC, 0xFE));
+        colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0x80, 0x80, 0x80));
+        colors.insert(ThemeSlot::DataGridHeaderBackground, Rgba::rgb(0x25, 0x25, 0x26));
+        colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0xCC, 0xCC, 0xCC));
+        colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x09, 0x47, 0x71));
+        colors.insert(ThemeSlot::DataGridInactiveSelection, Rgba::rgb(0x3A, 0x3D, 0x41));
+        colors.insert(ThemeSlot::DataGridSelectionText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::DataGridFocusBorder, Rgba::rgb(0x00, 0x7F, 0xD4));
+        colors.insert(ThemeSlot::DataGridInserted, Rgba::rgba(0x2E, 0xA0, 0x43, 0x40));
+        colors.insert(ThemeSlot::DataGridModified, Rgba::rgba(0xD2, 0x99, 0x22, 0x40));
+        colors.insert(ThemeSlot::DataGridDeleted, Rgba::rgba(0xF8, 0x51, 0x49, 0x40));
+        colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        Self {
+            id: ThemeId::builtin_dark(),
+            name: "DataForge Dark".to_owned(),
+            appearance: ThemeAppearance::Dark,
+            is_builtin: true,
+            colors,
+        }
+    }
+
+    /// Built-in High-Contrast content palette.
+    #[must_use]
+    pub fn builtin_high_contrast() -> Self {
+        let mut colors = BTreeMap::new();
+        colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0x00, 0x00, 0x00));
+        colors.insert(ThemeSlot::EditorText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::EditorSelection, Rgba::rgb(0xFF, 0xFF, 0x00));
+        colors.insert(ThemeSlot::EditorCaret, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0x14, 0x14, 0x14));
+        colors.insert(ThemeSlot::EditorGutterBackground, Rgba::rgb(0x00, 0x00, 0x00));
+        colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x56, 0x9C, 0xD6));
+        colors.insert(ThemeSlot::EditorSyntaxString, Rgba::rgb(0xCE, 0x91, 0x78));
+        colors.insert(ThemeSlot::EditorSyntaxComment, Rgba::rgb(0x7C, 0xA6, 0x68));
+        colors.insert(ThemeSlot::EditorSyntaxNumber, Rgba::rgb(0xB5, 0xCE, 0xA8));
+        colors.insert(ThemeSlot::EditorSyntaxOperator, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::EditorSyntaxPunctuation, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::EditorSyntaxIdentifier, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::EditorSyntaxQuotedIdentifier, Rgba::rgb(0x9C, 0xDC, 0xFE));
+        colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0xD4, 0xD4, 0xD4));
+        colors.insert(ThemeSlot::DataGridHeaderBackground, Rgba::rgb(0x00, 0x00, 0x00));
+        colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x00, 0x78, 0xD7));
+        colors.insert(ThemeSlot::DataGridInactiveSelection, Rgba::rgb(0x3F, 0x3F, 0x46));
+        colors.insert(ThemeSlot::DataGridSelectionText, Rgba::rgb(0xFF, 0xFF, 0xFF));
+        colors.insert(ThemeSlot::DataGridFocusBorder, Rgba::rgb(0xF3, 0x85, 0x18));
+        colors.insert(ThemeSlot::DataGridInserted, Rgba::rgba(0x1B, 0x87, 0x3F, 0x60));
+        colors.insert(ThemeSlot::DataGridModified, Rgba::rgba(0xD2, 0x99, 0x22, 0x60));
+        colors.insert(ThemeSlot::DataGridDeleted, Rgba::rgba(0xE5, 0x14, 0x00, 0x60));
+        colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x00, 0x00, 0x00));
+        Self {
+            id: ThemeId::builtin_high_contrast(),
+            name: "DataForge High Contrast".to_owned(),
+            appearance: ThemeAppearance::HighContrast,
+            is_builtin: true,
+            colors,
+        }
+    }
+
+    /// Returns the built-in default theme for the given appearance.
+    #[must_use]
+    pub fn default_for(appearance: ThemeAppearance) -> Self {
+        match appearance {
+            ThemeAppearance::Light => Self::builtin_light(),
+            ThemeAppearance::Dark => Self::builtin_dark(),
+            ThemeAppearance::HighContrast => Self::builtin_high_contrast(),
+        }
+    }
+}
