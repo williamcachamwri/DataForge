@@ -1,0 +1,36 @@
+[package]
+name = "dataforge-e2e"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+dataforge-gfx.workspace = true
+dataforge-state.workspace = true
+dataforge-windows-platform.workspace = true
+serde_json.workspace = true
+tablepro-core.workspace = true
+tablepro-driver-cassandra.workspace = true
+tablepro-driver-clickhouse.workspace = true
+tablepro-driver-duckdb.workspace = true
+tablepro-driver-mongodb.workspace = true
+tablepro-driver-mssql.workspace = true
+tablepro-driver-mysql.workspace = true
+tablepro-driver-postgres.workspace = true
+tablepro-driver-redis.workspace = true
+tablepro-driver-sqlite.workspace = true
+tablepro-foreign-import.workspace = true
+tablepro-session.workspace = true
+tablepro-storage.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tablepro-session = { workspace = true, features = ["fakes"] }
+
+[lints]
+workspace = true

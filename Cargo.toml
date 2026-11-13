@@ -26,6 +26,7 @@ members = [
     "crates/dataforge-state",
     "crates/dataforge-gfx",
     "crates/dataforge-windows-app",
+    "crates/dataforge-e2e",
 ]
 
 [workspace.package]
