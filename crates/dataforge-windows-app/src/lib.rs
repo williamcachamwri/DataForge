@@ -3,6 +3,7 @@
 pub mod accessibility;
 pub mod app;
 pub mod branding;
+pub mod controller_types;
 pub mod crash;
 pub mod dialogs;
 pub mod error;
