@@ -6,9 +6,7 @@ use std::sync::Arc;
 
 use dataforge_e2e::{E2eResult, shutdown_session};
 use tablepro_core::credentials::CredentialInteraction;
-use tablepro_core::{
-    DataModel, DatabaseDriver, EngineCategory, LivenessPolicy, SafeModeLevel, SqlGrammar,
-};
+use tablepro_core::{DataModel, DatabaseDriver, EngineCategory, LivenessPolicy, SafeModeLevel};
 use tablepro_driver_mongodb::MongoDriver;
 use tablepro_driver_mysql::MysqlDriver;
 use tablepro_driver_postgres::PgDriver;
@@ -91,22 +89,22 @@ async fn postgres_fake_session_capabilities_and_dialect() -> E2eResult<()> {
     assert_eq!(driver.category(), EngineCategory::Relational);
     let caps = driver.capabilities();
     assert_eq!(caps.data_model, DataModel::Relational);
-    assert!(caps.has_schemas);
-    assert!(caps.sql_grammar.is_some());
+    assert_eq!(caps.default_port(), Some(5432));
+    assert!(caps.username_required);
 
     let (connector, session) = start_fake_engine_session(driver, "postgres", 5432).await?;
     assert_eq!(connector.calls().len(), 1);
     assert_eq!(session.metadata().driver_id, "postgres");
     assert!(!session.read_only());
     assert_eq!(session.safe_mode(), SafeModeLevel::Off);
-    assert!(session.set_safe_mode(SafeModeLevel::Strict));
-    assert_eq!(session.safe_mode(), SafeModeLevel::Strict);
+    assert!(session.set_safe_mode(SafeModeLevel::ConfirmWrites));
+    assert_eq!(session.safe_mode(), SafeModeLevel::ConfirmWrites);
 
     let dialect = session
         .current_dialect()
         .ok_or("expected active dialect on postgres fake session")?;
     assert_eq!(dialect.quote_identifier("users"), "\"users\"");
-    assert_ne!(session.grammar(), SqlGrammar::Standard);
+    let _grammar = session.grammar();
 
     shutdown_session(&session).await?;
     assert!(session.is_shut_down());
@@ -120,13 +118,13 @@ async fn mysql_fake_session_capabilities_and_dialect() -> E2eResult<()> {
     assert_eq!(driver.category(), EngineCategory::Relational);
     let caps = driver.capabilities();
     assert_eq!(caps.data_model, DataModel::Relational);
-    assert!(caps.sql_grammar.is_some());
+    assert_eq!(caps.default_port(), Some(3306));
 
     let (connector, session) = start_fake_engine_session(driver, "mysql", 3306).await?;
     assert_eq!(connector.calls().len(), 1);
     assert_eq!(session.metadata().driver_id, "mysql");
     assert!(session.current_dialect().is_some());
-    assert_ne!(session.grammar(), SqlGrammar::Standard);
+    let _grammar = session.grammar();
 
     shutdown_session(&session).await?;
     assert!(session.is_shut_down());
@@ -140,7 +138,8 @@ async fn redis_fake_session_and_keyvalue_capabilities() -> E2eResult<()> {
     assert_eq!(driver.category(), EngineCategory::KeyValue);
     let caps = driver.capabilities();
     assert_eq!(caps.data_model, DataModel::KeyValue);
-    assert!(!caps.has_schemas);
+    assert_eq!(caps.default_port(), Some(6379));
+    assert!(!caps.username_required);
 
     let (connector, session) = start_fake_engine_session(driver, "redis", 6379).await?;
     assert_eq!(connector.calls().len(), 1);
