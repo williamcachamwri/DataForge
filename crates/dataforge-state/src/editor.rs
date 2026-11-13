@@ -669,3 +669,331 @@ pub fn lex_line_utf16(line: &str, grammar: tablepro_core::sql_syntax::SqlGrammar
         })
         .collect()
 }
+
+/// Kind of completion item offered by schema-aware autocomplete.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SchemaCompletionKind {
+    Keyword,
+    Schema,
+    Table,
+    Column,
+    Function,
+}
+
+/// A single schema-aware autocomplete candidate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchemaCompletionItem {
+    pub label: String,
+    pub kind: SchemaCompletionKind,
+    pub detail: Option<String>,
+    pub insert_text: String,
+}
+
+/// Schema-aware autocomplete popup state.
+#[derive(Debug, Default, Clone)]
+pub struct AutocompleteState {
+    pub is_open: bool,
+    pub prefix: String,
+    catalog: Vec<SchemaCompletionItem>,
+    filtered: Vec<SchemaCompletionItem>,
+    pub selected_index: usize,
+}
+
+impl AutocompleteState {
+    /// Creates an autocomplete state with an initial schema catalog.
+    #[must_use]
+    pub fn with_catalog(catalog: Vec<SchemaCompletionItem>) -> Self {
+        Self {
+            is_open: false,
+            prefix: String::new(),
+            catalog,
+            filtered: Vec::new(),
+            selected_index: 0,
+        }
+    }
+
+    /// Replaces the schema catalog and refreshes active matches.
+    pub fn set_catalog(&mut self, catalog: Vec<SchemaCompletionItem>) {
+        self.catalog = catalog;
+        if self.is_open {
+            let prefix = self.prefix.clone();
+            self.update_prefix(&prefix);
+        }
+    }
+
+    /// Opens or updates autocomplete for `prefix`.
+    pub fn update_prefix(&mut self, prefix: &str) {
+        self.prefix = prefix.to_owned();
+        let needle = prefix.to_lowercase();
+        let mut items: Vec<SchemaCompletionItem> = self
+            .catalog
+            .iter()
+            .filter(|item| needle.is_empty() || item.label.to_lowercase().contains(&needle))
+            .cloned()
+            .collect();
+        items.sort_by(|a, b| {
+            let a_starts = a.label.to_lowercase().starts_with(&needle);
+            let b_starts = b.label.to_lowercase().starts_with(&needle);
+            b_starts
+                .cmp(&a_starts)
+                .then_with(|| a.kind.cmp(&b.kind))
+                .then_with(|| a.label.cmp(&b.label))
+        });
+        self.filtered = items;
+        self.selected_index = 0;
+        self.is_open = !self.filtered.is_empty();
+    }
+
+    /// Returns currently matched items.
+    #[must_use]
+    pub fn items(&self) -> &[SchemaCompletionItem] {
+        &self.filtered
+    }
+
+    /// Moves selection down.
+    pub fn move_next(&mut self) {
+        if !self.filtered.is_empty() {
+            self.selected_index = (self.selected_index + 1) % self.filtered.len();
+        }
+    }
+
+    /// Moves selection up.
+    pub fn move_prev(&mut self) {
+        if !self.filtered.is_empty() {
+            self.selected_index = if self.selected_index == 0 {
+                self.filtered.len() - 1
+            } else {
+                self.selected_index - 1
+            };
+        }
+    }
+
+    /// Accepts the currently selected item and closes the popup.
+    pub fn accept(&mut self) -> Option<SchemaCompletionItem> {
+        let item = self.filtered.get(self.selected_index).cloned()?;
+        self.dismiss();
+        Some(item)
+    }
+
+    /// Closes the autocomplete popup.
+    pub fn dismiss(&mut self) {
+        self.is_open = false;
+        self.filtered.clear();
+        self.selected_index = 0;
+    }
+}
+
+/// Vim modal editing mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VimMode {
+    Normal,
+    Insert,
+    Visual,
+    Command,
+}
+
+/// Pending Vim operator in Normal mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VimOperator {
+    Delete,
+    Change,
+    Yank,
+}
+
+/// Vim motion primitives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VimMotion {
+    Left,
+    Right,
+    Up,
+    Down,
+    WordForward,
+    WordBack,
+    WordEnd,
+    LineStart,
+    LineEnd,
+    DocStart,
+    DocEnd,
+}
+
+/// Output action produced by [`VimState::handle_key`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VimAction {
+    None,
+    Move(VimMotion, usize),
+    ApplyOperator(VimOperator, VimMotion, usize),
+    LineOperator(VimOperator, usize),
+    ExecuteCommand(String),
+}
+
+/// Optional Vim mode state machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VimState {
+    pub enabled: bool,
+    pub mode: VimMode,
+    pub pending_operator: Option<VimOperator>,
+    pub count_prefix: String,
+    pub command_buffer: String,
+    pub pending_g: bool,
+    pub register: String,
+}
+
+impl Default for VimState {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: VimMode::Normal,
+            pending_operator: None,
+            count_prefix: String::new(),
+            command_buffer: String::new(),
+            pending_g: false,
+            register: String::new(),
+        }
+    }
+}
+
+impl VimState {
+    /// Creates an enabled or disabled Vim state machine.
+    #[must_use]
+    pub fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            ..Self::default()
+        }
+    }
+
+    fn take_count(&mut self) -> usize {
+        let n = self.count_prefix.parse::<usize>().unwrap_or(1).max(1);
+        self.count_prefix.clear();
+        n
+    }
+
+    /// Processes a single key token (e.g. `"Esc"`, `"i"`, `"d"`, `"w"`, `":"`, `"Enter"`).
+    pub fn handle_key(&mut self, key: &str) -> VimAction {
+        if !self.enabled {
+            return VimAction::None;
+        }
+        if key == "Esc" {
+            self.mode = VimMode::Normal;
+            self.pending_operator = None;
+            self.count_prefix.clear();
+            self.command_buffer.clear();
+            self.pending_g = false;
+            return VimAction::None;
+        }
+        match self.mode {
+            VimMode::Insert => VimAction::None,
+            VimMode::Command => self.handle_command_key(key),
+            VimMode::Normal | VimMode::Visual => self.handle_normal_or_visual(key),
+        }
+    }
+
+    fn handle_command_key(&mut self, key: &str) -> VimAction {
+        if key == "Enter" {
+            let cmd = std::mem::take(&mut self.command_buffer);
+            self.mode = VimMode::Normal;
+            return VimAction::ExecuteCommand(cmd);
+        }
+        if key == "Backspace" {
+            self.command_buffer.pop();
+            if self.command_buffer.is_empty() {
+                self.mode = VimMode::Normal;
+            }
+            return VimAction::None;
+        }
+        if key.chars().count() == 1 {
+            self.command_buffer.push_str(key);
+        }
+        VimAction::None
+    }
+
+    fn handle_normal_or_visual(&mut self, key: &str) -> VimAction {
+        if key.len() == 1
+            && let Some(ch) = key.chars().next()
+            && ch.is_ascii_digit()
+            && !(ch == '0' && self.count_prefix.is_empty())
+        {
+            self.count_prefix.push(ch);
+            return VimAction::None;
+        }
+
+        if self.pending_g {
+            self.pending_g = false;
+            if key == "g" {
+                return self.emit_motion(VimMotion::DocStart);
+            }
+        }
+
+        match key {
+            "i" | "a" | "o" | "O" if self.pending_operator.is_none() => {
+                self.mode = VimMode::Insert;
+                VimAction::None
+            }
+            "v" if self.pending_operator.is_none() => {
+                self.mode = if self.mode == VimMode::Visual {
+                    VimMode::Normal
+                } else {
+                    VimMode::Visual
+                };
+                VimAction::None
+            }
+            ":" if self.pending_operator.is_none() => {
+                self.mode = VimMode::Command;
+                self.command_buffer.clear();
+                VimAction::None
+            }
+            "g" => {
+                self.pending_g = true;
+                VimAction::None
+            }
+            "d" => self.handle_operator(VimOperator::Delete),
+            "c" => self.handle_operator(VimOperator::Change),
+            "y" => self.handle_operator(VimOperator::Yank),
+            _ => match Self::parse_motion(key) {
+                Some(motion) => self.emit_motion(motion),
+                None => VimAction::None,
+            },
+        }
+    }
+
+    fn handle_operator(&mut self, op: VimOperator) -> VimAction {
+        if self.pending_operator == Some(op) {
+            self.pending_operator = None;
+            let count = self.take_count();
+            if op == VimOperator::Change {
+                self.mode = VimMode::Insert;
+            }
+            return VimAction::LineOperator(op, count);
+        }
+        self.pending_operator = Some(op);
+        VimAction::None
+    }
+
+    fn emit_motion(&mut self, motion: VimMotion) -> VimAction {
+        let count = self.take_count();
+        if let Some(op) = self.pending_operator.take() {
+            if op == VimOperator::Change {
+                self.mode = VimMode::Insert;
+            }
+            VimAction::ApplyOperator(op, motion, count)
+        } else {
+            VimAction::Move(motion, count)
+        }
+    }
+
+    fn parse_motion(key: &str) -> Option<VimMotion> {
+        Some(match key {
+            "h" | "Left" => VimMotion::Left,
+            "j" | "Down" => VimMotion::Down,
+            "k" | "Up" => VimMotion::Up,
+            "l" | "Right" => VimMotion::Right,
+            "w" => VimMotion::WordForward,
+            "b" => VimMotion::WordBack,
+            "e" => VimMotion::WordEnd,
+            "0" => VimMotion::LineStart,
+            "$" => VimMotion::LineEnd,
+            "G" => VimMotion::DocEnd,
+            _ => return None,
+        })
+    }
+}
