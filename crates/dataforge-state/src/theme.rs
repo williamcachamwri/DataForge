@@ -1062,3 +1062,216 @@ impl VsCodeThemeImporter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    #[test]
+    fn slot_registry_removes_slot_when_last_reader_releases() {
+        let mut reg = ThemeSlotRegistry::new();
+        assert_eq!(reg.acquire(ThemeSlot::EditorBackground), 1);
+        assert_eq!(reg.acquire(ThemeSlot::EditorBackground), 2);
+        assert!(reg.contains(ThemeSlot::EditorBackground));
+
+        reg.release(ThemeSlot::EditorBackground);
+        assert_eq!(reg.reader_count(ThemeSlot::EditorBackground), 1);
+        assert!(reg.contains(ThemeSlot::EditorBackground));
+
+        reg.release(ThemeSlot::EditorBackground);
+        assert_eq!(reg.reader_count(ThemeSlot::EditorBackground), 0);
+        assert!(!reg.contains(ThemeSlot::EditorBackground));
+    }
+
+    #[test]
+    fn schema_encoding_picks_oldest_compatible_schema() -> Result<(), Box<dyn std::error::Error>> {
+        let mut colors = BTreeMap::new();
+        colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0x10, 0x20, 0x30));
+        let v3_theme = ThemeDefinition {
+            id: ThemeId("custom-v3".to_owned()),
+            name: "Custom V3".to_owned(),
+            appearance: ThemeAppearance::Dark,
+            is_builtin: false,
+            colors,
+        };
+        let encoded = ThemeFileFormat::encode(&v3_theme)?;
+        let raw: serde_json::Value = serde_json::from_slice(&encoded)?;
+        assert_eq!(raw.get("schema").and_then(serde_json::Value::as_u64), Some(3));
+
+        let decoded = ThemeFileFormat::decode(&encoded)?;
+        assert_eq!(decoded, v3_theme);
+        Ok(())
+    }
+
+    #[test]
+    fn decode_refuses_newer_schema_unknown_keys_and_future_keys() {
+        let future_schema = br##"{
+            "schema": 99,
+            "id": "future",
+            "name": "Future",
+            "appearance": "dark",
+            "colors": { "editor.background": "#000000" }
+        }"##;
+        assert!(matches!(
+            ThemeFileFormat::decode(future_schema),
+            Err(ThemeError::UnsupportedSchema { schema: 99 })
+        ));
+
+        let unknown_key = br##"{
+            "schema": 5,
+            "id": "u",
+            "name": "U",
+            "appearance": "dark",
+            "colors": { "chrome.toolbar": "#123456" }
+        }"##;
+        assert!(matches!(
+            ThemeFileFormat::decode(unknown_key),
+            Err(ThemeError::UnknownSlotKey(_))
+        ));
+
+        let future_key_in_v3 = br##"{
+            "schema": 3,
+            "id": "mismatch",
+            "name": "Mismatch",
+            "appearance": "dark",
+            "colors": { "dataGrid.inserted": "#00FF00" }
+        }"##;
+        assert!(matches!(
+            ThemeFileFormat::decode(future_key_in_v3),
+            Err(ThemeError::SlotNewerThanSchema {
+                required: 5,
+                file_schema: 3,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn resolver_preserves_saved_id_on_missing_or_wrong_appearance() {
+        let mut catalog = BTreeMap::new();
+        let dark_custom = ThemeDefinition {
+            id: ThemeId("my-dark".to_owned()),
+            name: "My Dark".to_owned(),
+            appearance: ThemeAppearance::Dark,
+            is_builtin: false,
+            colors: BTreeMap::from([(ThemeSlot::EditorText, Rgba::rgb(0xEE, 0xEE, 0xEE))]),
+        };
+        catalog.insert(dark_custom.id.clone(), dark_custom.clone());
+
+        // Missing id -> falls back to default, preserves saved_id.
+        let missing = ThemeResolver::resolve(
+            Some(&ThemeId("missing-id".to_owned())),
+            ThemeAppearance::Dark,
+            &ThemeScope::Live,
+            &catalog,
+        );
+        assert!(missing.used_fallback);
+        assert_eq!(missing.saved_id, Some(ThemeId("missing-id".to_owned())));
+        assert_eq!(missing.effective_id, ThemeId::builtin_dark());
+
+        // Wrong appearance -> falls back to Light default, preserves saved_id.
+        let wrong_app = ThemeResolver::resolve(
+            Some(&dark_custom.id),
+            ThemeAppearance::Light,
+            &ThemeScope::Live,
+            &catalog,
+        );
+        assert!(wrong_app.used_fallback);
+        assert_eq!(wrong_app.saved_id, Some(dark_custom.id));
+        assert_eq!(wrong_app.effective_id, ThemeId::builtin_light());
+    }
+
+    #[test]
+    fn chrome_reduce_transparency_only_uses_window_background_when_allowed() {
+        let mut catalog = BTreeMap::new();
+        let bg = Rgba::rgb(0x22, 0x24, 0x26);
+        let custom = ThemeDefinition {
+            id: ThemeId("win-bg".to_owned()),
+            name: "Win BG".to_owned(),
+            appearance: ThemeAppearance::Dark,
+            is_builtin: false,
+            colors: BTreeMap::from([(ThemeSlot::WindowBackground, bg)]),
+        };
+        catalog.insert(custom.id.clone(), custom.clone());
+        let resolved = ThemeResolver::resolve(Some(&custom.id), ThemeAppearance::Dark, &ThemeScope::Live, &catalog);
+
+        let allowed = ThemeBackdropState {
+            is_themed: true,
+            can_reach_chrome: true,
+            reduce_transparency: true,
+            increase_contrast: false,
+        };
+        assert_eq!(allowed.chrome_reduce_transparency_fill(&resolved), Some(bg));
+
+        let high_contrast_system = ThemeBackdropState {
+            increase_contrast: true,
+            ..allowed
+        };
+        assert_eq!(high_contrast_system.chrome_reduce_transparency_fill(&resolved), None);
+    }
+
+    #[test]
+    fn vscode_importer_rejects_parent_escape_and_mints_fresh_uuid() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let escape_file = dir.path().join("theme.json");
+        std::fs::write(&escape_file, br#"{"name":"Bad","include":"../secret.json","colors":{}}"#)?;
+        assert!(matches!(
+            VsCodeThemeImporter::import_file(&escape_file),
+            Err(ThemeError::IncludeEscapesDirectory(_))
+        ));
+
+        let valid = br##"{
+            "name": "Ocean",
+            "type": "dark",
+            "colors": {
+                "editor.background": "#112233",
+                "editor.foreground": "#AABBCC",
+                "dataGrid.headerBackground": "#223344",
+                "list.activeSelectionBackground": "#334455",
+                "focusBorder": "#445566",
+                "window.background": "#0A0B0C"
+            },
+            "tokenColors": [
+                { "scope": "keyword", "settings": { "foreground": "#FF00AA" } }
+            ]
+        }"##;
+        let a = VsCodeThemeImporter::import_bytes(valid)?;
+        let b = VsCodeThemeImporter::import_bytes(valid)?;
+        assert_ne!(a.id, b.id);
+        assert_eq!(a.colors.get(&ThemeSlot::EditorBackground), Some(&Rgba::rgb(0x11, 0x22, 0x33)));
+        assert_eq!(a.colors.get(&ThemeSlot::EditorSyntaxKeyword), Some(&Rgba::rgb(0xFF, 0x00, 0xAA)));
+        assert_eq!(a.colors.get(&ThemeSlot::DataGridFocusBorder), Some(&Rgba::rgb(0x44, 0x55, 0x66)));
+        Ok(())
+    }
+
+    proptest! {
+        #[test]
+        fn prop_rgba_hex_roundtrip(r: u8, g: u8, b: u8, a: u8) {
+            let color = Rgba::rgba(r, g, b, a);
+            let hex = color.to_hex();
+            prop_assert_eq!(Rgba::from_hex(&hex), Some(color));
+        }
+
+        #[test]
+        fn prop_theme_file_roundtrip(
+            r in any::<u8>(),
+            g in any::<u8>(),
+            b in any::<u8>(),
+            slot_idx in 0usize..ThemeSlot::ALL.len(),
+        ) {
+            let slot = ThemeSlot::ALL[slot_idx];
+            let theme = ThemeDefinition {
+                id: ThemeId("prop-theme".to_owned()),
+                name: "Prop Theme".to_owned(),
+                appearance: ThemeAppearance::Dark,
+                is_builtin: false,
+                colors: BTreeMap::from([(slot, Rgba::rgb(r, g, b))]),
+            };
+            let encoded = ThemeFileFormat::encode(&theme).map_err(|e| TestCaseError::fail(e.to_string()))?;
+            let decoded = ThemeFileFormat::decode(&encoded).map_err(|e| TestCaseError::fail(e.to_string()))?;
+            prop_assert_eq!(decoded, theme);
+        }
+    }
+}
