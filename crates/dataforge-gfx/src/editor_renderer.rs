@@ -335,7 +335,7 @@ impl LineLayoutCache {
             self.entries.clear();
         }
         let format = surface.text_format(spec)?;
-        let layout = surface.create_text_layout(&line.text, &format, 10_000.0, 100.0)?;
+        let layout = surface.create_text_layout(&line.text, &format, 10_000.0, 22.0)?;
         self.entries.insert(
             line_idx,
             CachedLineLayout {
@@ -552,7 +552,7 @@ impl SqlEditorRenderer {
     ) -> Result<()> {
         let spec = TextFormatSpec::new(&self.font_family, layout.font_size)
             .with_align(TextAlign::Leading)
-            .with_valign(VerticalAlign::Center);
+            .with_valign(VerticalAlign::Top);
         let origin_x = layout.text_origin_x();
 
         surface.push_clip(rect_f(
@@ -567,7 +567,8 @@ impl SqlEditorRenderer {
                 .line_cache
                 .get_or_build(surface, line_idx, line, &spec)?;
             apply_syntax_colors(surface, palette, &dwrite_layout, &line.spans)?;
-            let y = line_idx as f32 * layout.line_height - layout.scroll_y;
+            let top_pad = ((layout.line_height - layout.font_size * 1.25) * 0.5).max(0.0);
+            let y = line_idx as f32 * layout.line_height - layout.scroll_y + top_pad;
             surface.draw_text_layout(point_f(origin_x, y), &dwrite_layout, palette.content.text)?;
         }
         surface.pop_clip();

@@ -57,6 +57,7 @@ fn run_cli_subcommand(args: Vec<OsString>) -> ExitCode {
 }
 
 fn launch_gui(gui_args: &[OsString]) -> Result<()> {
+    enable_per_monitor_dpi();
     let paths = storage_paths()?;
     init_logging_and_crash_reports(&paths.state.join("logs"))?;
     let _locale = init_locale(None);
@@ -78,4 +79,14 @@ fn launch_gui(gui_args: &[OsString]) -> Result<()> {
     }
 
     MainWindow::run(controller, inbox)
+}
+
+fn enable_per_monitor_dpi() {
+    use windows::Win32::UI::HiDpi::{
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
+    };
+    // SAFETY: Setting process DPI awareness before creating any HWND is safe and idempotent.
+    unsafe {
+        let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    }
 }

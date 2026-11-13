@@ -2,10 +2,9 @@
 
 use dataforge_gfx::Result;
 use dataforge_gfx::context::{
-    FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign, point_f, rect_f,
+    FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign, point_f,
 };
 use dataforge_gfx::palette::ThemePalette;
-use windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F;
 
 use crate::shell_layout::{Rect, ShellLayout};
 
@@ -105,6 +104,4 @@ pub fn render_ai_drawer(
     Ok(())
 }
 
-const fn to_d2d_rect(r: Rect) -> D2D_RECT_F {
-    rect_f(r.x, r.y, r.right(), r.bottom())
-}
+use super::to_d2d_rect;
