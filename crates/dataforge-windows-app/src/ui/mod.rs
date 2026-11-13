@@ -1,23 +1,46 @@
-//! HeroGPUI application root, theme/icon bridges, and Wave 2 workspace contracts.
+//! HeroGPUI application root, theme/icon/syntax bridges, and Wave 2 workspace contracts.
 
+pub mod actions;
+pub mod ai_drawer;
+pub mod command_palette;
+pub mod data_grid;
 pub mod engine_icons;
+pub mod inspector;
+pub mod library;
+pub mod modals;
+pub mod rail;
+pub mod results_pane;
+pub mod settings;
 pub mod shell_state;
+pub mod sidebar;
+pub mod sql_editor;
+pub mod status_bar;
+pub mod structure_view;
+pub mod syntax_bridge;
+pub mod tabs;
 pub mod theme;
+pub mod titlebar;
+pub mod toasts;
+pub mod toolbar;
+pub mod unavailable;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use dataforge_gfx::glyphs::EngineKind;
 use dataforge_state::tabs::TabId;
-use dataforge_windows_platform::detect_theme_or_default;
+use dataforge_state::theme::ThemeDefinition;
+use dataforge_windows_platform::{ThemePreference, detect_theme_or_default};
 use herogpui::application;
-use herogpui::components::{HeroGpuiAssets, TitleBar, ToastViewport, WindowBorder, app_focus_root};
+use herogpui::components::{HeroGpuiAssets, TitleBar, WindowBorder, app_focus_root};
 use herogpui::gpui::{
-    AnyElement, App, AppContext as _, AsyncApp, Bounds, Context, FocusHandle, Focusable,
+    AnyElement, App, AppContext as _, AsyncApp, Bounds, Context, Div, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Subscription,
     Task, WeakEntity, Window, WindowBounds, div, px, size,
 };
 use herogpui::theme::ActiveTheme;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use tablepro_core::sql_syntax::SqlGrammar;
 use windows::Win32::Foundation::HWND;
 
 use crate::app::{AppController, ScreenMode};
@@ -26,6 +49,7 @@ use crate::ipc::IpcInbox;
 use crate::services::ServiceEvent;
 use crate::window::apply_dwm_dark_mode;
 
+pub use actions::{WORKSPACE_KEY_CONTEXT, bind_workspace_keys};
 pub use engine_icons::{
     ENGINE_SVG_SPECS, EngineSvgSpec, build_engine_paths, engine_icon, engine_svg_spec,
 };
@@ -34,10 +58,15 @@ pub use shell_state::{
     QueryTabResultState, ResultPaneSubView, SettingsSection, SettingsViewState, ToastSeverity,
     WorkspacePaneState, WorkspaceSubView, push_error_toast, push_success_toast, push_toast,
 };
+pub use syntax_bridge::{
+    build_line_text_runs, grammar_for_engine, highlight_sql_line, highlight_sql_text,
+    highlight_style_for_kind, styled_sql_block, utf16_spans_to_byte_highlights,
+};
 pub use theme::{
     ContentThemePalette, HIGH_CONTRAST_THEME_ID, apply_chrome_theme_and_motion,
-    chrome_theme_for_mode, high_contrast_chrome_theme, high_contrast_theme_from_palette,
-    state_rgba_to_gpui, state_rgba_to_hsla,
+    chrome_theme_for_mode, editor_gpui_font, gpui_font_from_editor, gpui_font_from_spec,
+    high_contrast_chrome_theme, high_contrast_theme_from_palette, state_rgba_to_gpui,
+    state_rgba_to_hsla, value_gpui_font,
 };
 
 /// Root GPUI workspace entity owning live [`AppController`] state, per-tab query
@@ -54,13 +83,25 @@ pub struct DataForgeWorkspace {
     pub workspace_pane: WorkspacePaneState,
     pub ai_panel: AiPanelState,
     pub pending_quit_after_confirm: bool,
+    pub tabs_ui: tabs::TabsStripState,
+    pub command_palette_ui: command_palette::CommandPaletteState,
+    pub sidebar_ui: sidebar::SidebarPanelState,
+    pub library_ui: library::LibraryScreenState,
+    pub sql_editor_ui: sql_editor::SqlEditorViewState,
+    pub data_grid_ui: data_grid::DataGridViewState,
+    pub structure_ui: structure_view::StructureViewState,
+    pub results_ui: results_pane::ResultsPaneState,
+    pub inspector_ui: inspector::InspectorViewState,
+    pub ai_drawer_ui: ai_drawer::AiDrawerViewState,
+    pub settings_ui: settings::SettingsScreenState,
+    pub modals_ui: modals::ModalLayerState,
     _tasks: Vec<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl DataForgeWorkspace {
     /// Constructs the GPUI root workspace and wires Win32 branding, appearance sync,
-    /// close guard, and reactive IPC/service wakeup listeners.
+    /// close guard, modular Wave 2 view states, and reactive IPC/service listeners.
     pub fn new(
         mut controller: AppController,
         ipc_inbox: Arc<IpcInbox>,
@@ -87,6 +128,18 @@ impl DataForgeWorkspace {
             workspace_pane: WorkspacePaneState::default(),
             ai_panel: AiPanelState::default(),
             pending_quit_after_confirm: false,
+            tabs_ui: tabs::TabsStripState::new(window, cx),
+            command_palette_ui: command_palette::CommandPaletteState::new(window, cx),
+            sidebar_ui: sidebar::SidebarPanelState::new(window, cx),
+            library_ui: library::LibraryScreenState::new(window, cx),
+            sql_editor_ui: sql_editor::SqlEditorViewState::new(window, cx),
+            data_grid_ui: data_grid::DataGridViewState::new(window, cx),
+            structure_ui: structure_view::StructureViewState::new(window, cx),
+            results_ui: results_pane::ResultsPaneState::new(window, cx),
+            inspector_ui: inspector::InspectorViewState::new(window, cx),
+            ai_drawer_ui: ai_drawer::AiDrawerViewState::new(window, cx),
+            settings_ui: settings::SettingsScreenState::new(window, cx),
+            modals_ui: modals::ModalLayerState::new(window, cx),
             _tasks: tasks,
             _subscriptions: subscriptions,
         }
@@ -99,6 +152,63 @@ impl DataForgeWorkspace {
         apply_chrome_theme_and_motion(self.controller.effective_theme_mode(), cx);
         install_win32_window_branding(window, self.controller.uses_dark_titlebar());
         cx.notify();
+    }
+
+    /// Toggles between Light and Dark themes (unless user explicitly locked High Contrast),
+    /// refreshing both Content and Chrome palettes cleanly.
+    pub fn toggle_theme_mode(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let next_pref = if self.controller.uses_dark_titlebar() {
+            ThemePreference::Light
+        } else {
+            ThemePreference::Dark
+        };
+        self.controller.settings.theme = next_pref;
+        let next_appearance = match next_pref {
+            ThemePreference::Light => dataforge_state::theme::ThemeAppearance::Light,
+            ThemePreference::Dark => dataforge_state::theme::ThemeAppearance::Dark,
+            ThemePreference::HighContrast => dataforge_state::theme::ThemeAppearance::HighContrast,
+            ThemePreference::System => dataforge_state::theme::ThemeAppearance::Dark,
+        };
+        self.controller.content_theme = ThemeDefinition::default_for(next_appearance);
+        self.refresh_theme(window, cx);
+    }
+
+    /// Switches top-level screen mode and refreshes the root workspace view.
+    pub fn switch_screen(&mut self, mode: ScreenMode, cx: &mut Context<Self>) {
+        self.controller.screen_mode = mode;
+        cx.notify();
+    }
+
+    /// Dismisses transient overlays (command palette, modals, inline cell edit, autocomplete).
+    pub fn dismiss_overlays(&mut self, cx: &mut Context<Self>) {
+        if self.command_palette_ui.is_open() {
+            self.command_palette_ui.close();
+        } else if self.modals_ui.has_open_modal(self) {
+            self.modals_ui.close_all();
+            self.workspace_pane.close_guard_open = false;
+            self.workspace_pane.confirm_commit_open = false;
+        } else if self.workspace_pane.inline_edit.take().is_some() {
+            // Cancelled inline grid cell edit.
+        } else {
+            self.controller.editor_autocomplete = None;
+        }
+        cx.notify();
+    }
+
+    /// Returns the active SQL grammar derived from the connected workspace engine.
+    #[must_use]
+    pub fn active_grammar(&self) -> SqlGrammar {
+        let engine = EngineKind::ALL
+            .iter()
+            .copied()
+            .find(|kind| {
+                self.controller
+                    .toolbar_status
+                    .engine_version
+                    .starts_with(kind.display_name())
+            })
+            .unwrap_or(EngineKind::Postgresql);
+        grammar_for_engine(engine)
     }
 
     /// Drains any pending forwarded IPC targets into the controller.
@@ -155,6 +265,219 @@ impl DataForgeWorkspace {
     ) -> u64 {
         push_toast(severity, title, description, cx)
     }
+
+    fn execute_key_command(
+        &mut self,
+        cmd: crate::accessibility::KeyCommand,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.controller.handle_key_command(cmd) {
+            window.remove_window();
+            return;
+        }
+        cx.notify();
+    }
+
+    fn attach_workspace_actions(&self, root: Div, cx: &mut Context<Self>) -> Div {
+        let root = self.attach_tab_and_nav_actions(root, cx);
+        self.attach_query_and_grid_actions(root, cx)
+    }
+
+    fn attach_tab_and_nav_actions(&self, root: Div, cx: &mut Context<Self>) -> Div {
+        root.key_context(WORKSPACE_KEY_CONTEXT)
+            .on_action(cx.listener(|ws, _: &actions::NewQueryTab, window, cx| {
+                ws.execute_key_command(crate::accessibility::KeyCommand::NewQueryTab, window, cx);
+            }))
+            .on_action(cx.listener(|ws, _: &actions::CloseActiveTab, window, cx| {
+                ws.execute_key_command(
+                    crate::accessibility::KeyCommand::CloseTabOrWindow,
+                    window,
+                    cx,
+                );
+            }))
+            .on_action(cx.listener(|ws, _: &actions::ReopenClosedTab, window, cx| {
+                ws.execute_key_command(
+                    crate::accessibility::KeyCommand::ReopenClosedTab,
+                    window,
+                    cx,
+                );
+            }))
+            .on_action(cx.listener(|ws, _: &actions::NextTab, window, cx| {
+                ws.execute_key_command(crate::accessibility::KeyCommand::NextTab, window, cx);
+            }))
+            .on_action(cx.listener(|ws, _: &actions::PrevTab, window, cx| {
+                ws.execute_key_command(crate::accessibility::KeyCommand::PrevTab, window, cx);
+            }))
+            .on_action(
+                cx.listener(|ws, _: &actions::OpenCommandPalette, window, cx| {
+                    ws.command_palette_ui.toggle(window, cx);
+                    cx.notify();
+                }),
+            )
+            .on_action(
+                cx.listener(|ws, _: &actions::FocusSidebarFilter, window, cx| {
+                    ws.execute_key_command(
+                        crate::accessibility::KeyCommand::FocusFilter,
+                        window,
+                        cx,
+                    );
+                    ws.sidebar_ui.focus_filter(window, cx);
+                }),
+            )
+            .on_action(cx.listener(|ws, _: &actions::ToggleSidebar, window, cx| {
+                ws.execute_key_command(crate::accessibility::KeyCommand::ToggleSidebar, window, cx);
+            }))
+            .on_action(cx.listener(|ws, _: &actions::ToggleInspector, window, cx| {
+                ws.execute_key_command(
+                    crate::accessibility::KeyCommand::ToggleInspector,
+                    window,
+                    cx,
+                );
+            }))
+            .on_action(cx.listener(|ws, _: &actions::ToggleAiDrawer, window, cx| {
+                ws.execute_key_command(
+                    crate::accessibility::KeyCommand::ToggleAiDrawer,
+                    window,
+                    cx,
+                );
+            }))
+            .on_action(cx.listener(|ws, _: &actions::OpenConnections, window, cx| {
+                ws.execute_key_command(
+                    crate::accessibility::KeyCommand::OpenConnectionsLibrary,
+                    window,
+                    cx,
+                );
+            }))
+            .on_action(cx.listener(|ws, _: &actions::OpenSettings, window, cx| {
+                ws.execute_key_command(crate::accessibility::KeyCommand::OpenSettings, window, cx);
+            }))
+            .on_action(cx.listener(|ws, _: &actions::ToggleTheme, window, cx| {
+                ws.toggle_theme_mode(window, cx);
+            }))
+            .on_action(cx.listener(|ws, _: &actions::EscapeDismiss, _window, cx| {
+                ws.dismiss_overlays(cx);
+            }))
+    }
+
+    fn attach_query_and_grid_actions(&self, root: Div, cx: &mut Context<Self>) -> Div {
+        root.on_action(cx.listener(|ws, _: &actions::RunQuery, window, cx| {
+            ws.execute_key_command(crate::accessibility::KeyCommand::ExecuteQuery, window, cx);
+        }))
+        .on_action(
+            cx.listener(|ws, _: &actions::RunSelectedQuery, window, cx| {
+                ws.execute_key_command(crate::accessibility::KeyCommand::ExecuteQuery, window, cx);
+            }),
+        )
+        .on_action(cx.listener(|ws, _: &actions::CancelQuery, _window, cx| {
+            ws.controller.cancel_active_connect();
+            cx.notify();
+        }))
+        .on_action(cx.listener(|ws, _: &actions::SaveQuery, _window, cx| {
+            ws.controller.save_current_query("Query", None);
+            ws.notify_toast(ToastSeverity::Success, "Query saved", None, cx);
+            cx.notify();
+        }))
+        .on_action(cx.listener(|ws, _: &actions::CommitEdits, _window, cx| {
+            ws.workspace_pane.confirm_commit_open = true;
+            cx.notify();
+        }))
+        .on_action(cx.listener(|ws, _: &actions::RollbackEdits, _window, cx| {
+            ws.controller.rollback_grid_edits();
+            ws.workspace_pane.inline_edit = None;
+            cx.notify();
+        }))
+        .on_action(cx.listener(|ws, _: &actions::AddRow, _window, cx| {
+            let col_count = ws.controller.grid_columns.len();
+            let values = vec![tablepro_core::Value::Null; col_count];
+            ws.controller.insert_grid_row(values);
+            cx.notify();
+        }))
+        .on_action(
+            cx.listener(|ws, _: &actions::DeleteSelectedRows, _window, cx| {
+                if let Some((row_idx, _)) = ws.controller.grid_selection.focused {
+                    ws.controller.delete_grid_row(row_idx);
+                    cx.notify();
+                }
+            }),
+        )
+        .on_action(cx.listener(|ws, _: &actions::ExportResults, window, cx| {
+            ws.modals_ui.open_export(window, cx);
+            cx.notify();
+        }))
+    }
+
+    fn render_center_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        match self.workspace_pane.sub_view {
+            WorkspaceSubView::DataGrid => data_grid::render_data_grid(self, window, cx),
+            WorkspaceSubView::Structure => structure_view::render_structure_view(self, window, cx),
+            WorkspaceSubView::SqlEditor => {
+                let editor = sql_editor::render_sql_editor(self, window, cx);
+                let has_results = self.active_tab_result().is_some_and(|r| {
+                    r.running || r.active_error.is_some() || !r.accumulator.result_sets.is_empty()
+                });
+                if has_results {
+                    div()
+                        .flex_1()
+                        .size_full()
+                        .flex()
+                        .flex_col()
+                        .child(editor)
+                        .child(results_pane::render_results_pane(self, window, cx))
+                        .into_any_element()
+                } else {
+                    editor
+                }
+            }
+            WorkspaceSubView::SplitSqlAndGrid => div()
+                .flex_1()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(sql_editor::render_sql_editor(self, window, cx))
+                .child(results_pane::render_results_pane(self, window, cx))
+                .into_any_element(),
+        }
+    }
+
+    fn render_workspace_screen(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let mut middle_row = div().flex_1().min_h(px(0.0)).flex().flex_row();
+        if self.controller.layout_config.sidebar_visible {
+            middle_row = middle_row.child(sidebar::render_sidebar(self, window, cx));
+        }
+        middle_row = middle_row.child(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .min_h(px(0.0))
+                .flex()
+                .flex_col()
+                .child(self.render_center_pane(window, cx)),
+        );
+        if self.controller.layout_config.inspector_visible {
+            middle_row = middle_row.child(inspector::render_inspector(self, window, cx));
+        }
+        if self.controller.layout_config.ai_drawer_visible {
+            middle_row = middle_row.child(ai_drawer::render_ai_drawer(self, window, cx));
+        }
+
+        let mut col = div()
+            .flex_1()
+            .min_w(px(0.0))
+            .min_h(px(0.0))
+            .flex()
+            .flex_col()
+            .child(toolbar::render_toolbar(self, window, cx))
+            .child(tabs::render_tab_strip(self, window, cx));
+        if let Some(banner) = unavailable::render_unavailable_banner(self, window, cx) {
+            col = col.child(banner);
+        }
+        col.child(middle_row).into_any_element()
+    }
 }
 
 impl Focusable for DataForgeWorkspace {
@@ -166,69 +489,54 @@ impl Focusable for DataForgeWorkspace {
 impl Render for DataForgeWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = cx.colors().clone();
-        let screen_label = match self.controller.screen_mode {
-            ScreenMode::Workspace => "Workspace",
-            ScreenMode::ConnectionsLibrary => "Connections",
-            ScreenMode::Settings => "Settings",
+        let main_area = match self.controller.screen_mode {
+            ScreenMode::Workspace => self.render_workspace_screen(window, cx),
+            ScreenMode::ConnectionsLibrary => library::render_library_screen(self, window, cx),
+            ScreenMode::Settings => settings::render_settings_screen(self, window, cx),
         };
-        let status_summary = self.controller.toolbar_status.format_pill_text();
 
-        let body: AnyElement = div()
-            .flex_1()
-            .size_full()
+        let mut shell_col = div()
+            .relative()
             .flex()
             .flex_col()
-            .bg(self.content_palette.window_background)
+            .size_full()
+            .bg(colors.background)
             .text_color(colors.foreground)
-            .p(px(16.0))
-            .gap(px(8.0))
+            .child(titlebar::render_titlebar(self, window, cx))
             .child(
                 div()
-                    .text_sm()
-                    .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
-                    .child(format!(
-                        "{} — {screen_label}",
-                        self.controller.strings.app_title
-                    )),
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .flex()
+                    .flex_row()
+                    .child(rail::render_rail(self, window, cx))
+                    .child(main_area),
             )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(colors.muted)
-                    .child(status_summary),
-            )
-            .into_any_element();
+            .child(status_bar::render_status_bar(self, window, cx));
 
-        let shell = WindowBorder::new().child(
-            div()
-                .flex()
-                .flex_col()
-                .size_full()
-                .bg(colors.background)
-                .text_color(colors.foreground)
-                .child(TitleBar::new("dataforge-titlebar").title(self.controller.strings.app_title))
-                .child(body)
-                .child(ToastViewport::new().id("dataforge-toast-viewport")),
-        );
+        if let Some(palette) = command_palette::render_command_palette(self, window, cx) {
+            shell_col = shell_col.child(palette);
+        }
+        if let Some(modal) = modals::render_modals(self, window, cx) {
+            shell_col = shell_col.child(modal);
+        }
+        shell_col = shell_col.child(toasts::render_toast_viewport(self, window, cx));
 
-        app_focus_root(
-            div()
-                .size_full()
-                .track_focus(&self.focus_handle)
-                .child(shell),
-            window,
-            cx,
-        )
+        let root = self
+            .attach_workspace_actions(div().size_full().track_focus(&self.focus_handle), cx)
+            .child(WindowBorder::new().child(shell_col));
+        app_focus_root(root, window, cx)
     }
 }
 
 /// Launches the HeroGPUI desktop shell with [`HeroGpuiAssets`] registered,
-/// reduced motion initialized, and [`DataForgeWorkspace`] mounted as root view.
+/// reduced motion & keymap initialized, and [`DataForgeWorkspace`] mounted as root view.
 pub fn launch_gpui_app(controller: AppController, ipc_inbox: Arc<IpcInbox>) {
     application()
         .with_assets(HeroGpuiAssets)
         .run(move |cx: &mut App| {
             herogpui::init(cx);
+            actions::bind_workspace_keys(cx);
             apply_chrome_theme_and_motion(controller.effective_theme_mode(), cx);
 
             let width =

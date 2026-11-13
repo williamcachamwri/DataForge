@@ -8,17 +8,51 @@
 //!   appearance, while High Contrast builds a live system [`Theme`] via
 //!   [`ThemePalette::from_system_high_contrast`].
 
+use std::time::Duration;
+
 use dataforge_gfx::palette::{Color as GfxColor, ThemeMode, ThemePalette};
 use dataforge_state::theme::{
     ResolvedTheme, Rgba as StateRgba, ThemeAppearance, ThemeDefinition, ThemeSlot,
 };
-use dataforge_windows_platform::detect_reduced_motion;
+use dataforge_windows_platform::{AppSettings, EditorFont, FontSpec, detect_reduced_motion};
 use herogpui::core::{readable_color, with_alpha};
-use herogpui::gpui::{App, Hsla, Rgba as GpuiRgba};
-use herogpui::theme::{Appearance, Theme, set_reduce_motion, set_theme};
+use herogpui::gpui::{
+    App, Font, FontFeatures, FontStyle, Hsla, Rgba as GpuiRgba, font as gpui_font,
+};
+use herogpui::theme::{ActiveTheme, Appearance, Theme, set_reduce_motion, set_theme};
 
 /// Theme id registered in HeroGPUI when Windows High Contrast mode is active.
 pub const HIGH_CONTRAST_THEME_ID: &str = "dataforge-high-contrast";
+
+/// Crisp hairline border width (`1.0` DIP) for dense developer tool surfaces.
+pub const HAIRLINE_BORDER_PX: f32 = 1.0;
+
+/// Compact control corner radius (`6.0` DIP) aligned with Windows Fluent / HeroGPUI.
+pub const CONTROL_RADIUS_PX: f32 = 6.0;
+
+/// Panel and card corner radius (`8.0` DIP).
+pub const PANEL_RADIUS_PX: f32 = 8.0;
+
+/// Micro layout gap (`4.0` DIP) between tight icon/label/badge pairs.
+pub const MICRO_GAP_PX: f32 = 4.0;
+
+/// Standard compact spacing gap (`8.0` DIP) inside toolbars, sidebars, and drawers.
+pub const COMPACT_GAP_PX: f32 = 8.0;
+
+/// Zero-delay instant transition (`0ms`) for high-frequency actions (100+/day).
+pub const INSTANT_ACTION_MS: u64 = 0;
+
+/// Crisp hover/button feedback duration (`100ms`, <= `150ms`).
+pub const HOVER_FEEDBACK_MS: u64 = 100;
+
+/// Overlay/modal entrance duration (`150ms`, < `250ms`).
+pub const OVERLAY_ENTER_MS: u64 = 150;
+
+/// Overlay/modal exit duration (`100ms`).
+pub const OVERLAY_EXIT_MS: u64 = 100;
+
+/// Drawer/panel slide transition duration (`180ms`, < `250ms`).
+pub const DRAWER_SLIDE_MS: u64 = 180;
 
 /// Converts a `dataforge-state` 8-bit [`StateRgba`] color into GPUI [`GpuiRgba`].
 #[must_use]
@@ -270,6 +304,118 @@ pub fn chrome_theme_for_mode(mode: ThemeMode) -> Theme {
 pub fn apply_chrome_theme_and_motion(mode: ThemeMode, cx: &mut App) {
     set_theme(chrome_theme_for_mode(mode), cx);
     set_reduce_motion(detect_reduced_motion(), cx);
+}
+
+fn build_font(family: &str, ligatures: bool) -> Font {
+    let mut built = gpui_font(family.to_owned());
+    built.features = if ligatures {
+        FontFeatures::default()
+    } else {
+        FontFeatures::disable_ligatures()
+    };
+    built.style = FontStyle::Normal;
+    built
+}
+
+/// Converts [`EditorFont`] settings into a GPUI [`Font`] for SQL editing and code blocks.
+#[must_use]
+pub fn gpui_font_from_editor(spec: &EditorFont) -> Font {
+    build_font(&spec.family, spec.ligatures)
+}
+
+/// Converts tabular [`FontSpec`] settings into a GPUI [`Font`] for grid cells and values.
+#[must_use]
+pub fn gpui_font_from_spec(spec: &FontSpec) -> Font {
+    build_font(&spec.family, spec.ligatures)
+}
+
+/// Returns the active SQL editor [`Font`] configured in [`AppSettings`].
+#[must_use]
+pub fn editor_gpui_font(settings: &AppSettings) -> Font {
+    gpui_font_from_editor(&settings.editor_font)
+}
+
+/// Returns the active tabular value/grid [`Font`] configured in [`AppSettings`].
+#[must_use]
+pub fn value_gpui_font(settings: &AppSettings) -> Font {
+    gpui_font_from_spec(&settings.value_font)
+}
+
+/// Crisp hairline border color from the active HeroGPUI Chrome [`Theme`].
+#[must_use]
+pub fn hairline_border_color(cx: &App) -> Hsla {
+    cx.colors().border
+}
+
+/// Primary elevated panel surface fill from the active Chrome [`Theme`].
+#[must_use]
+pub fn panel_surface_bg(cx: &App) -> Hsla {
+    cx.colors().surface.background
+}
+
+/// Secondary/muted surface fill (headers, wells, recessed strips).
+#[must_use]
+pub fn muted_surface_bg(cx: &App) -> Hsla {
+    cx.colors().surface_secondary
+}
+
+/// Floating overlay/popover/modal surface fill from the active Chrome [`Theme`].
+#[must_use]
+pub fn elevated_overlay_bg(cx: &App) -> Hsla {
+    cx.colors().overlay.background
+}
+
+/// Subtle zebra-stripe tint for odd rows in dense grids (none for even rows).
+#[must_use]
+pub fn row_zebra_bg(row_index: usize, cx: &App) -> Option<Hsla> {
+    if row_index.is_multiple_of(2) {
+        None
+    } else {
+        Some(with_alpha(cx.colors().surface_secondary, 0.45))
+    }
+}
+
+/// Returns `true` when reduced motion is enabled in GPUI or Windows `SPI_GETCLIENTAREAANIMATION`.
+#[must_use]
+pub fn is_reduced_motion(cx: &App) -> bool {
+    ActiveTheme::reduce_motion(cx) || detect_reduced_motion()
+}
+
+/// Returns `0ms` when reduced motion is active, otherwise `base_ms`.
+#[must_use]
+pub fn effective_duration_ms(base_ms: u64, cx: &App) -> u64 {
+    if is_reduced_motion(cx) { 0 } else { base_ms }
+}
+
+/// Zero-delay duration (`0ms`) for high-frequency navigation, selection, and tab switching.
+#[must_use]
+pub const fn instant_duration() -> Duration {
+    Duration::from_millis(INSTANT_ACTION_MS)
+}
+
+/// Hover/button micro-transition duration (`<= 150ms`, or `0ms` under reduced motion).
+#[must_use]
+pub fn hover_duration(cx: &App) -> Duration {
+    Duration::from_millis(effective_duration_ms(HOVER_FEEDBACK_MS, cx))
+}
+
+/// Modal/popover entrance transition duration (`< 250ms`, or `0ms` under reduced motion).
+#[must_use]
+pub fn overlay_duration(cx: &App) -> Duration {
+    Duration::from_millis(effective_duration_ms(OVERLAY_ENTER_MS, cx))
+}
+
+/// Drawer/panel slide transition duration (`< 250ms`, or `0ms` under reduced motion).
+#[must_use]
+pub fn drawer_duration(cx: &App) -> Duration {
+    Duration::from_millis(effective_duration_ms(DRAWER_SLIDE_MS, cx))
+}
+
+/// Smooth quadratic ease-out curve for compact UI micro-transitions.
+#[must_use]
+pub fn ease_out_quad(t: f32) -> f32 {
+    let clamped = t.clamp(0.0, 1.0);
+    1.0 - (1.0 - clamped) * (1.0 - clamped)
 }
 
 #[cfg(test)]
