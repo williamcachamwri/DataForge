@@ -3,6 +3,7 @@
 pub mod context;
 pub mod error;
 pub mod glyphs;
+pub mod grid_renderer;
 pub mod palette;
 
 pub use error::{GfxError, Result};
