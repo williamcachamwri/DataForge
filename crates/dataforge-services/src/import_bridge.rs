@@ -105,3 +105,48 @@ pub async fn test_connection(
     let _ = pending.discard().await;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dataforge_windows_platform::ForeignPlatform;
+
+    #[test]
+    fn supported_import_apps_includes_all_five_clients() {
+        assert_eq!(SUPPORTED_IMPORT_APPS.len(), 5);
+        assert!(SUPPORTED_IMPORT_APPS.contains(&ForeignApp::TablePlus));
+        assert!(SUPPORTED_IMPORT_APPS.contains(&ForeignApp::DBeaver));
+        assert!(SUPPORTED_IMPORT_APPS.contains(&ForeignApp::DataGrip));
+        assert!(SUPPORTED_IMPORT_APPS.contains(&ForeignApp::Navicat));
+        assert!(SUPPORTED_IMPORT_APPS.contains(&ForeignApp::SequelAce));
+    }
+
+    #[test]
+    fn parse_connection_url_parses_postgres_and_rejects_invalid() -> Result<(), ServiceError> {
+        let parsed = parse_connection_url("postgres://alice:secret@db.example.com:5432/appdb")?;
+        assert_eq!(parsed.driver_id, "postgres");
+        assert_eq!(parsed.host, "db.example.com");
+        assert_eq!(parsed.port, Some(5432));
+        assert_eq!(parsed.username, "alice");
+        assert_eq!(parsed.database, "appdb");
+
+        let invalid = parse_connection_url("not-a-valid-url");
+        assert!(invalid.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn has_foreign_data_returns_false_for_empty_dirs() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let dirs = ForeignAppDirs {
+            platform: ForeignPlatform::Windows,
+            config: dir.path().to_path_buf(),
+            data: dir.path().to_path_buf(),
+            home: dir.path().to_path_buf(),
+        };
+        assert!(!has_foreign_data(ForeignApp::DBeaver, &dirs));
+        let inv = foreign_inventory(ForeignApp::DBeaver, &dirs);
+        assert_eq!(inv.connections, 0);
+        Ok(())
+    }
+}
