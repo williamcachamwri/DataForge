@@ -30,13 +30,16 @@ use std::sync::Arc;
 use dataforge_gfx::glyphs::EngineKind;
 use dataforge_state::tabs::{TabId, TabKind};
 use dataforge_state::theme::ThemeDefinition;
-use dataforge_windows_platform::{ThemePreference, detect_theme_or_default};
+use dataforge_windows_platform::{
+    ThemePreference, WindowBackdropPreference, detect_theme_or_default,
+};
 use herogpui::application;
 use herogpui::components::{HeroGpuiAssets, TitleBar, WindowBorder, app_focus_root};
+use herogpui::core::with_alpha;
 use herogpui::gpui::{
     AnyElement, App, AppContext as _, AsyncApp, Bounds, Context, Div, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Subscription,
-    Task, WeakEntity, Window, WindowBounds, div, px, size,
+    Task, WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, div, px, size,
 };
 use herogpui::theme::ActiveTheme;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -110,11 +113,22 @@ impl DataForgeWorkspace {
         cx: &mut Context<Self>,
     ) -> Self {
         controller.headless = false;
-        let content_palette = ContentThemePalette::from_definition(&controller.content_theme);
-        apply_chrome_theme_and_motion(controller.effective_theme_mode(), cx);
+        apply_saved_theme_presets(&mut controller);
+        let mut content_palette = ContentThemePalette::from_definition(&controller.content_theme);
+        theme::apply_backdrop_to_content_palette(
+            &mut content_palette,
+            controller.settings.window_backdrop,
+        );
+        apply_chrome_theme_and_motion(
+            controller.effective_theme_mode(),
+            controller.settings.window_backdrop,
+            cx,
+        );
+        window.set_background_appearance(gpui_window_backdrop(controller.settings.window_backdrop));
         install_win32_window_branding(window, controller.uses_dark_titlebar());
 
         let focus_handle = cx.focus_handle();
+        window.focus(&focus_handle, cx);
         let (tasks, subscriptions) = spawn_reactive_bridges(&controller, &ipc_inbox, window, cx);
         install_close_guard(window, cx);
 
@@ -150,7 +164,18 @@ impl DataForgeWorkspace {
     /// and reduced motion after a theme preference, custom theme import, or OS change.
     pub fn refresh_theme(&mut self, window: &Window, cx: &mut Context<Self>) {
         self.content_palette = ContentThemePalette::from_definition(&self.controller.content_theme);
-        apply_chrome_theme_and_motion(self.controller.effective_theme_mode(), cx);
+        theme::apply_backdrop_to_content_palette(
+            &mut self.content_palette,
+            self.controller.settings.window_backdrop,
+        );
+        apply_chrome_theme_and_motion(
+            self.controller.effective_theme_mode(),
+            self.controller.settings.window_backdrop,
+            cx,
+        );
+        window.set_background_appearance(gpui_window_backdrop(
+            self.controller.settings.window_backdrop,
+        ));
         install_win32_window_branding(window, self.controller.uses_dark_titlebar());
         cx.notify();
     }
@@ -458,13 +483,30 @@ impl DataForgeWorkspace {
     }
 
     fn render_center_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        match self.workspace_pane.sub_view {
+        let active_tab = self.controller.tabs.active_tab();
+        let sub_view = self.workspace_pane.sub_view;
+        let pane = match sub_view {
             WorkspaceSubView::DataGrid => data_grid::render_data_grid(self, window, cx),
             WorkspaceSubView::Structure => structure_view::render_structure_view(self, window, cx),
             WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid => {
                 sql_editor::render_sql_editor(self, window, cx)
             }
-        }
+        };
+        let anim_id = SharedString::from(format!("center-pane-{active_tab:?}-{sub_view:?}"));
+        theme::animate_slide_fade_in(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .min_h(px(0.0))
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(pane),
+            anim_id,
+            180,
+            6.0,
+            cx,
+        )
     }
 
     fn render_workspace_screen(
@@ -472,9 +514,21 @@ impl DataForgeWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let mut middle_row = div().flex_1().min_h(px(0.0)).flex().flex_row();
+        let mut middle_row = div()
+            .flex_1()
+            .min_w(px(0.0))
+            .min_h(px(0.0))
+            .overflow_hidden()
+            .flex()
+            .flex_row();
         if self.controller.layout_config.sidebar_visible {
-            middle_row = middle_row.child(sidebar::render_sidebar(self, window, cx));
+            let sidebar_el = sidebar::render_sidebar(self, window, cx);
+            middle_row = middle_row.child(theme::animate_drawer_enter(
+                div().h_full().flex_shrink_0().child(sidebar_el),
+                "workspace-sidebar-drawer",
+                false,
+                cx,
+            ));
         }
         middle_row = middle_row.child(
             div()
@@ -486,10 +540,22 @@ impl DataForgeWorkspace {
                 .child(self.render_center_pane(window, cx)),
         );
         if self.controller.layout_config.inspector_visible {
-            middle_row = middle_row.child(inspector::render_inspector(self, window, cx));
+            let inspector_el = inspector::render_inspector(self, window, cx);
+            middle_row = middle_row.child(theme::animate_drawer_enter(
+                div().h_full().flex_shrink_0().child(inspector_el),
+                "workspace-inspector-drawer",
+                true,
+                cx,
+            ));
         }
         if self.controller.layout_config.ai_drawer_visible {
-            middle_row = middle_row.child(ai_drawer::render_ai_drawer(self, window, cx));
+            let ai_el = ai_drawer::render_ai_drawer(self, window, cx);
+            middle_row = middle_row.child(theme::animate_drawer_enter(
+                div().h_full().flex_shrink_0().child(ai_el),
+                "workspace-ai-drawer",
+                true,
+                cx,
+            ));
         }
 
         let mut col = div()
@@ -516,10 +582,36 @@ impl Focusable for DataForgeWorkspace {
 impl Render for DataForgeWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = cx.colors().clone();
+        let screen_key = match self.controller.screen_mode {
+            ScreenMode::Workspace => "screen-workspace",
+            ScreenMode::ConnectionsLibrary => "screen-library",
+            ScreenMode::Settings => "screen-settings",
+        };
         let main_area = match self.controller.screen_mode {
             ScreenMode::Workspace => self.render_workspace_screen(window, cx),
             ScreenMode::ConnectionsLibrary => library::render_library_screen(self, window, cx),
             ScreenMode::Settings => settings::render_settings_screen(self, window, cx),
+        };
+        let main_area = theme::animate_fade_in(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .min_h(px(0.0))
+                .overflow_hidden()
+                .flex()
+                .flex_col()
+                .child(main_area),
+            screen_key,
+            theme::SCREEN_TRANSITION_MS,
+            cx,
+        );
+
+        let shell_bg = match self.controller.settings.window_backdrop {
+            WindowBackdropPreference::Opaque => colors.background,
+            WindowBackdropPreference::GaussianBlur => with_alpha(colors.background, 0.72),
+            WindowBackdropPreference::Mica | WindowBackdropPreference::MicaAlt => {
+                with_alpha(colors.background, 0.80)
+            }
         };
 
         let mut shell_col = div()
@@ -527,13 +619,17 @@ impl Render for DataForgeWorkspace {
             .flex()
             .flex_col()
             .size_full()
-            .bg(colors.background)
+            .min_w(px(0.0))
+            .overflow_hidden()
+            .bg(shell_bg)
             .text_color(colors.foreground)
             .child(titlebar::render_titlebar(self, window, cx))
             .child(
                 div()
                     .flex_1()
+                    .min_w(px(0.0))
                     .min_h(px(0.0))
+                    .overflow_hidden()
                     .flex()
                     .flex_row()
                     .child(rail::render_rail(self, window, cx))
@@ -564,16 +660,22 @@ pub fn launch_gpui_app(controller: AppController, ipc_inbox: Arc<IpcInbox>) {
         .run(move |cx: &mut App| {
             herogpui::init(cx);
             actions::bind_workspace_keys(cx);
-            apply_chrome_theme_and_motion(controller.effective_theme_mode(), cx);
+            apply_chrome_theme_and_motion(
+                controller.effective_theme_mode(),
+                controller.settings.window_backdrop,
+                cx,
+            );
 
             let width =
-                f32::from(u16::try_from(controller.settings.window.width.max(800)).unwrap_or(1280));
+                f32::from(u16::try_from(controller.settings.window.width.max(900)).unwrap_or(1280));
             let height =
-                f32::from(u16::try_from(controller.settings.window.height.max(540)).unwrap_or(800));
+                f32::from(u16::try_from(controller.settings.window.height.max(600)).unwrap_or(800));
             let bounds = Bounds::centered(None, size(px(width), px(height)), cx);
 
             let mut options = TitleBar::window_options();
             options.window_bounds = Some(WindowBounds::Windowed(bounds));
+            options.window_min_size = Some(size(px(900.0), px(600.0)));
+            options.window_background = gpui_window_backdrop(controller.settings.window_backdrop);
             if let Some(titlebar) = options.titlebar.as_mut() {
                 titlebar.title = Some(controller.strings.app_title.into());
             }
@@ -688,5 +790,27 @@ fn mirror_query_event_to_tab(
             }
         },
         _ => {}
+    }
+}
+
+const fn gpui_window_backdrop(pref: WindowBackdropPreference) -> WindowBackgroundAppearance {
+    match pref {
+        WindowBackdropPreference::Opaque => WindowBackgroundAppearance::Opaque,
+        WindowBackdropPreference::GaussianBlur => WindowBackgroundAppearance::Blurred,
+        WindowBackdropPreference::Mica => WindowBackgroundAppearance::MicaBackdrop,
+        WindowBackdropPreference::MicaAlt => WindowBackgroundAppearance::MicaAltBackdrop,
+    }
+}
+
+fn apply_saved_theme_presets(controller: &mut AppController) {
+    if let Some(theme_id) = controller.settings.content_theme_id.as_deref()
+        && let Some(base) = ThemeDefinition::from_builtin_id(theme_id)
+    {
+        controller.content_theme = base;
+    }
+    if let Some(syntax_id) = controller.settings.syntax_palette_id.as_deref()
+        && let Some(syntax_src) = ThemeDefinition::from_builtin_id(syntax_id)
+    {
+        controller.content_theme = controller.content_theme.with_syntax_from(&syntax_src);
     }
 }
