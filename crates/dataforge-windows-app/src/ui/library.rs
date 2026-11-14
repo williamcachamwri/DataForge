@@ -579,51 +579,50 @@ fn render_empty_library_state(s: &Strings, cx: &mut Context<DataForgeWorkspace>)
                 .child(CardDescription::new().child(s.empty_library_desc)),
         )
         .child(
-            CardContent::new()
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(COMPACT_GAP_PX))
-                        .child(
-                            Button::new("empty-new-conn")
-                                .variant(Variant::Primary)
-                                .size(Size::Sm)
-                                .full_width(true)
-                                .label(s.new_connection_btn)
-                                .child(Icon::new(IconName::Plus).size(IconSize::Sm))
-                                .on_press(cx.listener(|ws, _, _, cx| {
-                                    ws.library_ui
-                                        .reset_to_new(&mut ws.controller.connection_form, cx);
-                                    cx.notify();
-                                })),
-                        )
-                        .child(
-                            Button::new("empty-open-file")
-                                .variant(Variant::Secondary)
-                                .size(Size::Sm)
-                                .full_width(true)
-                                .label(s.open_local_file_btn)
-                                .child(Icon::new(IconName::FolderOpen).size(IconSize::Sm))
-                                .on_press(cx.listener(|ws, _, _, cx| {
-                                    let prompt = ws.controller.strings.open_sqlite_duckdb_prompt;
-                                    trigger_open_local_file(prompt, cx);
-                                })),
-                        )
-                        .child(
-                            Button::new("empty-open-import")
-                                .variant(Variant::Tertiary)
-                                .size(Size::Sm)
-                                .full_width(true)
-                                .label(s.import_other_clients_btn)
-                                .child(Icon::new(IconName::Download).size(IconSize::Sm))
-                                .on_press(cx.listener(|ws, _, _, cx| {
-                                    ws.library_ui.active_tab = SharedString::from(TAB_IMPORT);
-                                    ensure_inventories_scanned(ws);
-                                    cx.notify();
-                                })),
-                        ),
-                ),
+            CardContent::new().child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(COMPACT_GAP_PX))
+                    .child(
+                        Button::new("empty-new-conn")
+                            .variant(Variant::Primary)
+                            .size(Size::Sm)
+                            .full_width(true)
+                            .label(s.new_connection_btn)
+                            .child(Icon::new(IconName::Plus).size(IconSize::Sm))
+                            .on_press(cx.listener(|ws, _, _, cx| {
+                                ws.library_ui
+                                    .reset_to_new(&mut ws.controller.connection_form, cx);
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        Button::new("empty-open-file")
+                            .variant(Variant::Secondary)
+                            .size(Size::Sm)
+                            .full_width(true)
+                            .label(s.open_local_file_btn)
+                            .child(Icon::new(IconName::FolderOpen).size(IconSize::Sm))
+                            .on_press(cx.listener(|ws, _, _, cx| {
+                                let prompt = ws.controller.strings.open_sqlite_duckdb_prompt;
+                                trigger_open_local_file(prompt, cx);
+                            })),
+                    )
+                    .child(
+                        Button::new("empty-open-import")
+                            .variant(Variant::Tertiary)
+                            .size(Size::Sm)
+                            .full_width(true)
+                            .label(s.import_other_clients_btn)
+                            .child(Icon::new(IconName::Download).size(IconSize::Sm))
+                            .on_press(cx.listener(|ws, _, _, cx| {
+                                ws.library_ui.active_tab = SharedString::from(TAB_IMPORT);
+                                ensure_inventories_scanned(ws);
+                                cx.notify();
+                            })),
+                    ),
+            ),
         );
 
     div().flex_1().p(px(12.0)).child(card).into_any_element()
@@ -747,9 +746,9 @@ fn has_group_children(header: &LibraryOutlineRow, outline: &[LibraryOutlineRow])
 }
 
 fn has_ungrouped_header(items: &[ListBoxItem], other_header: &str) -> bool {
-    items.iter().any(
-        |item| matches!(item, ListBoxItem::Section(title) if title.as_ref() == other_header),
-    )
+    items
+        .iter()
+        .any(|item| matches!(item, ListBoxItem::Section(title) if title.as_ref() == other_header))
 }
 
 fn encode_row_key(section: &LibrarySection, id: &str) -> String {
@@ -1135,7 +1134,9 @@ fn render_url_parser_card(
                             Input::new(&ws.library_ui.url_input)
                                 .input_type(InputType::Url)
                                 .variant(FieldVariant::Primary)
-                                .placeholder("postgres://user:password@localhost:5432/app?sslmode=require")
+                                .placeholder(
+                                    "postgres://user:password@localhost:5432/app?sslmode=require",
+                                )
                                 .is_clearable(true)
                                 .full_width()
                                 .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -2064,7 +2065,10 @@ fn render_test_alert(
                 .indicator(indicator)
                 .description(
                     s.testing_handshake_tpl
-                        .replace("{engine}", ws.controller.connection_form.engine.display_name())
+                        .replace(
+                            "{engine}",
+                            ws.controller.connection_form.engine.display_name(),
+                        )
                         .replace("{target}", &target),
                 )
                 .into_any_element(),
@@ -2162,48 +2166,44 @@ fn render_foreign_importers_tab(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
-    let mut root = div()
-        .flex()
-        .flex_col()
-        .gap(px(14.0))
-        .child(
-            Card::new()
-                .variant(CardVariant::Secondary)
-                .child(
-                    CardHeader::new()
-                        .child(CardTitle::new().child(s.importer_header_title))
-                        .child(CardDescription::new().child(s.importer_header_desc)),
-                )
-                .child(
-                    CardContent::new().child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(px(COMPACT_GAP_PX))
-                            .child(
-                                Button::new("library-rescan-importers")
-                                    .variant(Variant::Secondary)
-                                    .size(Size::Sm)
-                                    .label(s.rescan_locations_btn)
-                                    .child(Icon::new(IconName::RefreshCw).size(IconSize::Sm))
-                                    .on_press(cx.listener(|ws, _, _, cx| {
-                                        rescan_foreign_inventories(ws);
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Button::new("library-back-configure")
-                                    .variant(Variant::Tertiary)
-                                    .size(Size::Sm)
-                                    .label(s.back_to_form_btn)
-                                    .on_press(cx.listener(|ws, _, _, cx| {
-                                        ws.library_ui.active_tab = SharedString::from(TAB_CONFIGURE);
-                                        cx.notify();
-                                    })),
-                            ),
-                    ),
+    let mut root = div().flex().flex_col().gap(px(14.0)).child(
+        Card::new()
+            .variant(CardVariant::Secondary)
+            .child(
+                CardHeader::new()
+                    .child(CardTitle::new().child(s.importer_header_title))
+                    .child(CardDescription::new().child(s.importer_header_desc)),
+            )
+            .child(
+                CardContent::new().child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(COMPACT_GAP_PX))
+                        .child(
+                            Button::new("library-rescan-importers")
+                                .variant(Variant::Secondary)
+                                .size(Size::Sm)
+                                .label(s.rescan_locations_btn)
+                                .child(Icon::new(IconName::RefreshCw).size(IconSize::Sm))
+                                .on_press(cx.listener(|ws, _, _, cx| {
+                                    rescan_foreign_inventories(ws);
+                                    cx.notify();
+                                })),
+                        )
+                        .child(
+                            Button::new("library-back-configure")
+                                .variant(Variant::Tertiary)
+                                .size(Size::Sm)
+                                .label(s.back_to_form_btn)
+                                .on_press(cx.listener(|ws, _, _, cx| {
+                                    ws.library_ui.active_tab = SharedString::from(TAB_CONFIGURE);
+                                    cx.notify();
+                                })),
+                        ),
                 ),
-        );
+            ),
+    );
 
     if let Some(report) = &ws.library_ui.last_import_report {
         let alert = match report {
@@ -2761,7 +2761,12 @@ fn apply_saved_secrets_outcome(
                     set_input_text(&ws.library_ui.ssh_passphrase_input, "", cx);
                 }
             }
-            ws.notify_toast(ToastSeverity::Success, s.connection_and_creds_saved, None, cx);
+            ws.notify_toast(
+                ToastSeverity::Success,
+                s.connection_and_creds_saved,
+                None,
+                cx,
+            );
             cx.notify();
         }
         Err(err) => {
@@ -2945,8 +2950,7 @@ fn trigger_test_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
         .as_deref()
         .and_then(|id| Uuid::parse_str(id).ok());
     let draft = ws.controller.connection_form.clone();
-    let tls_override =
-        build_tls_config(&ws.library_ui, &draft, s.tls_cert_and_key_required, cx);
+    let tls_override = build_tls_config(&ws.library_ui, &draft, s.tls_cert_and_key_required, cx);
     let network_options = build_network_options(&ws.library_ui, cx);
     let read_only = ws.library_ui.read_only;
 
