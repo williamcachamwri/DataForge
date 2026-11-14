@@ -228,7 +228,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
                         .text_xs()
                         .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
-                        .child("AI Assistant"),
+                        .child(ws.controller.strings.ai_assistant_title),
                 ),
         )
         .child(
@@ -246,7 +246,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
                                 ws.ai_drawer_ui.last_error = None;
                                 cx.notify();
                             }))
-                            .child("Clear"),
+                            .child(ws.controller.strings.clear),
                     )
                 })
                 .child(
@@ -258,7 +258,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
                         })
                         .size(HeroSize::Sm)
                         .is_icon_only(true)
-                        .aria_label("Provider Settings")
+                        .aria_label(ws.controller.strings.ai_provider_settings)
                         .on_press(cx.listener(|ws, _, _window, cx| {
                             ws.ai_drawer_ui.config_expanded = !ws.ai_drawer_ui.config_expanded;
                             cx.notify();
@@ -270,7 +270,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
                         .variant(Variant::Ghost)
                         .size(HeroSize::Sm)
                         .is_icon_only(true)
-                        .aria_label("Close AI Drawer")
+                        .aria_label(ws.controller.strings.ai_close_drawer)
                         .on_press(cx.listener(|ws, _, _window, cx| {
                             ws.controller.layout_config.ai_drawer_visible = false;
                             ws.controller.toolbar_status.ai_open = false;
@@ -306,7 +306,7 @@ fn render_privacy_strip(ws: &DataForgeWorkspace, _cx: &App) -> AnyElement {
                         .items_center()
                         .gap(px(4.0))
                         .child(Icon::new(IconName::ShieldCheck).size(IconSize::Xs))
-                        .child(ChipLabel::new().child("Schema only — row data never sent")),
+                        .child(ChipLabel::new().child(ws.controller.strings.ai_privacy_banner)),
                 ),
         )
         .child(
@@ -326,14 +326,19 @@ fn render_provider_config_panel(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let active_provider = ws.ai_drawer_ui.config.provider;
     let active_model = ws.ai_drawer_ui.config.model.clone();
     let provider_items = vec![
-        PickerItem::new(AiProvider::OpenAiCompatible.id(), "Ollama (Local)"),
+        PickerItem::new(
+            AiProvider::OpenAiCompatible.id(),
+            s.ai_provider_ollama_local,
+        ),
         PickerItem::new(AiProvider::OpenAi.id(), "OpenAI (BYOK)"),
         PickerItem::new(AiProvider::Anthropic.id(), "Anthropic (BYOK)"),
     ];
     let provider_select = Select::new("ai-provider-select", provider_items)
+        .aria_label(s.ai_provider_label)
         .height(px(28.0))
         .trigger_text_size(px(12.0))
         .full_width(true)
@@ -351,6 +356,7 @@ fn render_provider_config_panel(
         .map(|m| PickerItem::new(m.clone(), m.clone()))
         .collect();
     let model_select = Select::new("ai-model-select", model_items)
+        .aria_label(s.ai_model_label)
         .height(px(28.0))
         .trigger_text_size(px(12.0))
         .full_width(true)
@@ -367,7 +373,7 @@ fn render_provider_config_panel(
         .size(HeroSize::Sm)
         .is_icon_only(true)
         .is_disabled(ws.ai_drawer_ui.fetching_models)
-        .aria_label("Refresh Models")
+        .aria_label(s.ai_refresh_models)
         .on_press(cx.listener(|ws, _, _window, cx| {
             fetch_models_async(ws, cx);
         }))
@@ -415,15 +421,16 @@ fn render_api_key_section(
     colors: &herogpui::theme::ThemeColors,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let key_input = Input::new(&ws.ai_drawer_ui.api_key_input)
         .input_type(InputType::Password)
         .height(px(28.0))
         .text_size(px(12.0))
         .full_width()
-        .placeholder(format!(
-            "Enter {} API key...",
-            provider_short_name(active_provider)
-        ));
+        .placeholder(
+            s.ai_api_key_placeholder
+                .replace("{provider}", provider_short_name(active_provider)),
+        );
     let save_btn = Button::new("ai-save-key")
         .variant(Variant::Secondary)
         .size(HeroSize::Sm)
@@ -436,7 +443,7 @@ fn render_api_key_section(
                 .items_center()
                 .gap(px(4.0))
                 .child(Icon::new(IconName::Key).size(IconSize::Xs))
-                .child("Save"),
+                .child(s.save),
         );
 
     div()
@@ -466,9 +473,9 @@ fn render_api_key_section(
                         })
                         .size(HeroSize::Sm)
                         .child(ChipLabel::new().child(if has_saved_key {
-                            "API key stored in Credential Manager"
+                            s.ai_key_stored
                         } else {
-                            "API key required"
+                            s.ai_key_required
                         })),
                 )
                 .child(div().text_xs().text_color(colors.muted).child("BYOK")),
@@ -491,7 +498,7 @@ fn render_transcript(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         }
     }
     if waiting {
-        feed = feed.child(render_streaming_indicator(cx));
+        feed = feed.child(render_streaming_indicator(&ws.controller.strings, cx));
     }
     if let Some(err) = err_banner {
         let colors = cx.colors().clone();
@@ -502,9 +509,25 @@ fn render_transcript(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
                 .bg(with_alpha(colors.danger.color, 0.12))
                 .border_1()
                 .border_color(colors.danger.color)
-                .text_xs()
-                .text_color(colors.danger.color)
-                .child(err),
+                .flex()
+                .flex_col()
+                .gap(px(4.0))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .text_xs()
+                        .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
+                        .text_color(colors.danger.color)
+                        .child(
+                            Icon::new(IconName::TriangleAlert)
+                                .size(IconSize::Xs)
+                                .color(colors.danger.color),
+                        )
+                        .child(ws.controller.strings.failed),
+                )
+                .child(div().text_xs().text_color(colors.danger.color).child(err)),
         );
     }
 
@@ -526,18 +549,29 @@ fn render_transcript(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
 
 fn render_empty_transcript_card(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let schema = ws
         .controller
         .cached_schemas
         .first()
-        .map_or_else(|| "default".to_owned(), |s| s.name.clone());
+        .map_or_else(|| s.default_schema.to_owned(), |sch| sch.name.clone());
     let table_count = ws.controller.cached_objects.len();
+    let objects_word = if table_count == 1 {
+        s.object_singular
+    } else {
+        s.object_plural
+    };
     let active_tbl = ws
         .controller
         .active_table
         .as_ref()
-        .map(|t| t.name.clone())
-        .unwrap_or_else(|| "none selected".to_owned());
+        .map_or_else(|| s.ai_no_active_table.to_owned(), |t| t.name.clone());
+    let context_line = s
+        .ai_empty_context_template
+        .replace("{schema}", &schema)
+        .replace("{count}", &table_count.to_string())
+        .replace("{objects}", objects_word)
+        .replace("{table}", &active_tbl);
 
     Card::new()
         .child(
@@ -548,21 +582,19 @@ fn render_empty_transcript_card(ws: &DataForgeWorkspace, cx: &App) -> AnyElement
                         .text_xs()
                         .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
-                        .child("Schema-Aware SQL Assistant"),
+                        .child(s.ai_empty_title),
                 )
                 .child(
                     div()
                         .text_xs()
                         .text_color(colors.muted)
-                        .child(format!(
-                            "Context: schema '{schema}' · {table_count} objects · active table: {active_tbl}"
-                        )),
+                        .child(context_line),
                 )
                 .child(
                     div()
                         .text_xs()
                         .text_color(colors.muted)
-                        .child("Ask to write queries, optimize joins, or explain SQL errors. Generated SQL blocks can be inserted directly into the active editor."),
+                        .child(s.ai_empty_desc),
                 ),
         )
         .into_any_element()
@@ -575,6 +607,7 @@ fn render_message_bubble(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     if msg.is_user {
         return div()
             .w_full()
@@ -591,7 +624,7 @@ fn render_message_bubble(
                     .text_xs()
                     .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
                     .text_color(colors.accent.color)
-                    .child("You"),
+                    .child(s.ai_role_you),
             )
             .child(
                 div()
@@ -628,7 +661,7 @@ fn render_message_bubble(
                         .text_xs()
                         .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
-                        .child("Assistant"),
+                        .child(s.ai_role_assistant),
                 ),
         );
 
@@ -690,6 +723,7 @@ fn render_sql_block_actions(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let block_key = format!("{msg_idx}:{seg_idx}");
     let is_copied = ws.ai_drawer_ui.copied_block_key.as_deref() == Some(block_key.as_str());
     let sql_insert = sql.clone();
@@ -715,7 +749,7 @@ fn render_sql_block_actions(
                         .on_press(cx.listener(move |ws, _, _window, cx| {
                             insert_sql_into_active_editor(ws, &sql_insert, cx);
                         }))
-                        .child("Insert"),
+                        .child(s.ai_sql_insert),
                 )
                 .child(
                     Button::new(("ai-sql-new-tab", element_id))
@@ -724,7 +758,7 @@ fn render_sql_block_actions(
                         .on_press(cx.listener(move |ws, _, _window, cx| {
                             open_sql_in_new_tab(ws, &sql_tab, cx);
                         }))
-                        .child("New Tab"),
+                        .child(s.ai_sql_new_tab),
                 ),
         )
         .child(
@@ -753,13 +787,13 @@ fn render_sql_block_actions(
                                 colors.foreground
                             }),
                         )
-                        .child(if is_copied { "Copied" } else { "Copy" }),
+                        .child(if is_copied { s.copied } else { s.copy_label }),
                 ),
         )
         .into_any_element()
 }
 
-fn render_streaming_indicator(cx: &App) -> AnyElement {
+fn render_streaming_indicator(strings: &crate::i18n::Strings, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     div()
         .px(px(10.0))
@@ -776,18 +810,19 @@ fn render_streaming_indicator(cx: &App) -> AnyElement {
             div()
                 .text_xs()
                 .text_color(colors.muted)
-                .child("Streaming response..."),
+                .child(strings.ai_streaming),
         )
         .into_any_element()
 }
 
 fn render_composer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+    let s = &ws.controller.strings;
     let waiting = ws.ai_panel.waiting_reply;
     let chips = render_quick_schema_chips(ws, cx);
     let area = TextArea::new(&ws.ai_drawer_ui.prompt_input)
         .rows(3)
         .full_width()
-        .placeholder("Ask about your schema, joins, or SQL...");
+        .placeholder(s.ai_prompt_placeholder);
 
     let send_or_cancel = if waiting {
         Button::new("ai-cancel-stream")
@@ -808,7 +843,7 @@ fn render_composer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>
                     .justify_center()
                     .gap(px(6.0))
                     .child(Icon::new(IconName::Square).size(IconSize::Xs))
-                    .child("Stop Generation"),
+                    .child(s.stop_generation),
             )
     } else {
         Button::new("ai-send-prompt")
@@ -825,7 +860,7 @@ fn render_composer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>
                     .justify_center()
                     .gap(px(6.0))
                     .child(Icon::new(IconName::Send).size(IconSize::Xs))
-                    .child("Send"),
+                    .child(s.send),
             )
     };
 
@@ -844,27 +879,23 @@ fn render_quick_schema_chips(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
-    let table_name = ws
-        .controller
-        .active_table
-        .as_ref()
-        .map_or_else(|| "this table".to_owned(), |t| t.name.clone());
+    let s = &ws.controller.strings;
+    let select_prompt = match ws.controller.active_table.as_ref() {
+        Some(table) => s.ai_prompt_select.replace("{table}", &table.name),
+        None => s.ai_prompt_select_current.to_owned(),
+    };
     let presets = [
         (
             "ai-chip-explain",
-            "Explain SQL",
-            "Explain the current SQL query step-by-step and flag any performance risks.".to_owned(),
+            s.ai_chip_explain,
+            s.ai_prompt_explain.to_owned(),
         ),
         (
             "ai-chip-optimize",
-            "Optimize",
-            "Optimize the current SQL query for index usage and readability.".to_owned(),
+            s.ai_chip_optimize,
+            s.ai_prompt_optimize.to_owned(),
         ),
-        (
-            "ai-chip-select",
-            "Write SELECT",
-            format!("Write a clean SELECT query for table {table_name} with helpful filtering."),
-        ),
+        ("ai-chip-select", s.ai_chip_select, select_prompt),
     ];
 
     let mut row = div().flex().flex_wrap().gap(px(MICRO_GAP_PX));
@@ -940,7 +971,7 @@ fn save_provider_api_key(
         .trim()
         .to_owned();
     if raw_key.is_empty() {
-        push_error_toast("API key is empty", None, cx);
+        push_error_toast(ws.controller.strings.ai_err_empty_key, None, cx);
         return;
     }
     match ws.controller.store_ai_api_key_blocking(provider, &raw_key) {
@@ -950,19 +981,20 @@ fn save_provider_api_key(
                 input.set_value(String::new());
                 cx.notify();
             });
+            let s = &ws.controller.strings;
             push_success_toast(
-                "API credential saved",
-                Some(SharedString::from(format!(
-                    "Stored {} key in Windows Credential Manager",
-                    provider_short_name(provider)
-                ))),
+                s.ai_toast_key_saved,
+                Some(SharedString::from(
+                    s.ai_toast_key_saved_desc
+                        .replace("{provider}", provider_short_name(provider)),
+                )),
                 cx,
             );
             cx.notify();
         }
         Err(err) => {
             push_error_toast(
-                "Failed to save API key",
+                ws.controller.strings.ai_err_save_key,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -972,11 +1004,11 @@ fn save_provider_api_key(
 
 fn fetch_models_async(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
     let Some(services) = ws.controller.services.clone() else {
-        push_error_toast("AI service unavailable", None, cx);
+        push_error_toast(ws.controller.strings.ai_err_service_unavailable, None, cx);
         return;
     };
     let Some(ai) = services.ai.clone() else {
-        push_error_toast("AI assistant client not initialized", None, cx);
+        push_error_toast(ws.controller.strings.ai_err_client_uninitialized, None, cx);
         return;
     };
     let cfg = ws.ai_drawer_ui.config.clone();
@@ -996,25 +1028,26 @@ fn fetch_models_async(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWor
 
             let _ = this.update(cx, |ws, cx| {
                 ws.ai_drawer_ui.fetching_models = false;
+                let s = &ws.controller.strings;
                 match outcome {
                     Ok(Ok(models)) if !models.is_empty() => {
                         ws.ai_drawer_ui.config.model = models[0].clone();
                         ws.ai_drawer_ui.fetched_models.insert(provider_id, models);
-                        push_success_toast("Refreshed model list", None, cx);
+                        push_success_toast(s.ai_toast_models_refreshed, None, cx);
                     }
                     Ok(Ok(_)) => {
-                        push_error_toast("Provider returned no models", None, cx);
+                        push_error_toast(s.ai_err_no_models, None, cx);
                     }
                     Ok(Err(err)) => {
                         push_error_toast(
-                            "Could not list models",
+                            s.ai_err_list_models,
                             Some(SharedString::from(err.to_string())),
                             cx,
                         );
                     }
                     Err(join_err) => {
                         push_error_toast(
-                            "Model refresh aborted",
+                            s.ai_err_refresh_aborted,
                             Some(SharedString::from(join_err.to_string())),
                             cx,
                         );
@@ -1148,11 +1181,11 @@ fn submit_ai_prompt(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorks
         return;
     }
     let Some(services) = ws.controller.services.clone() else {
-        push_error_toast("AI service unavailable", None, cx);
+        push_error_toast(ws.controller.strings.ai_err_service_unavailable, None, cx);
         return;
     };
     let Some(ai) = services.ai.clone() else {
-        push_error_toast("AI assistant not initialized", None, cx);
+        push_error_toast(ws.controller.strings.ai_err_client_uninitialized, None, cx);
         return;
     };
 
@@ -1226,7 +1259,7 @@ fn insert_sql_into_active_editor(
     {
         ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
     }
-    push_success_toast("Inserted SQL into active editor", None, cx);
+    push_success_toast(ws.controller.strings.ai_toast_sql_inserted, None, cx);
     cx.notify();
 }
 
@@ -1235,6 +1268,8 @@ fn open_sql_in_new_tab(
     sql: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
+    let tab_title = ws.controller.strings.ai_query_tab_title;
+    let toast_title = ws.controller.strings.ai_toast_sql_new_tab;
     let conn_id = ws
         .controller
         .tabs
@@ -1244,11 +1279,11 @@ fn open_sql_in_new_tab(
             || TabConnectionId("default".to_owned()),
             |t| t.connection_id.clone(),
         );
-    ws.controller.tabs.open_query_tab(conn_id, Some("AI Query"));
+    ws.controller.tabs.open_query_tab(conn_id, Some(tab_title));
     ws.controller.set_editor_sql(sql);
     ws.controller.sync_layout_counts();
     ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
-    push_success_toast("Opened SQL in new Query tab", None, cx);
+    push_success_toast(toast_title, None, cx);
     cx.notify();
 }
 
