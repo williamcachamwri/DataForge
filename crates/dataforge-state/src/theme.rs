@@ -373,7 +373,7 @@ impl ThemeDefinition {
         colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0xF5, 0xF7, 0xFA));
         colors.insert(
             ThemeSlot::EditorGutterBackground,
-            Rgba::rgb(0xF8, 0xF8, 0xF8),
+            Rgba::rgb(0xFF, 0xFF, 0xFF),
         );
         colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0x6E, 0x76, 0x81));
         colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x00, 0x33, 0xB3));
@@ -396,7 +396,7 @@ impl ThemeDefinition {
         colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0x80, 0x80, 0x80));
         colors.insert(
             ThemeSlot::DataGridHeaderBackground,
-            Rgba::rgb(0xF3, 0xF4, 0xF6),
+            Rgba::rgb(0xF8, 0xF9, 0xFB),
         );
         colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0x1F, 0x23, 0x28));
         colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x09, 0x69, 0xDA));
@@ -435,17 +435,17 @@ impl ThemeDefinition {
     #[must_use]
     pub fn builtin_dark() -> Self {
         let mut colors = BTreeMap::new();
-        colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        colors.insert(ThemeSlot::EditorBackground, Rgba::rgb(0x1B, 0x1C, 0x20));
         colors.insert(ThemeSlot::EditorText, Rgba::rgb(0xD4, 0xD4, 0xD4));
         colors.insert(
             ThemeSlot::EditorSelection,
             Rgba::with_alpha(0x26, 0x4F, 0x78, 0xCC),
         );
         colors.insert(ThemeSlot::EditorCaret, Rgba::rgb(0xAE, 0xAF, 0xAD));
-        colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0x28, 0x28, 0x28));
+        colors.insert(ThemeSlot::EditorCurrentLine, Rgba::rgb(0x21, 0x23, 0x29));
         colors.insert(
             ThemeSlot::EditorGutterBackground,
-            Rgba::rgb(0x1E, 0x1E, 0x1E),
+            Rgba::rgb(0x1B, 0x1C, 0x20),
         );
         colors.insert(ThemeSlot::EditorGutterText, Rgba::rgb(0x85, 0x85, 0x85));
         colors.insert(ThemeSlot::EditorSyntaxKeyword, Rgba::rgb(0x56, 0x9C, 0xD6));
@@ -468,7 +468,7 @@ impl ThemeDefinition {
         colors.insert(ThemeSlot::EditorSyntaxNull, Rgba::rgb(0x80, 0x80, 0x80));
         colors.insert(
             ThemeSlot::DataGridHeaderBackground,
-            Rgba::rgb(0x25, 0x25, 0x26),
+            Rgba::rgb(0x1F, 0x20, 0x25),
         );
         colors.insert(ThemeSlot::DataGridHeaderText, Rgba::rgb(0xCC, 0xCC, 0xCC));
         colors.insert(ThemeSlot::DataGridSelection, Rgba::rgb(0x09, 0x47, 0x71));
@@ -493,7 +493,7 @@ impl ThemeDefinition {
             ThemeSlot::DataGridDeleted,
             Rgba::with_alpha(0xF8, 0x51, 0x49, 0x40),
         );
-        colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x1E, 0x1E, 0x1E));
+        colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x1B, 0x1C, 0x20));
         Self {
             id: ThemeId::builtin_dark(),
             name: "DataForge Dark".to_owned(),
@@ -580,6 +580,395 @@ impl ThemeDefinition {
             ThemeAppearance::Dark => Self::builtin_dark(),
             ThemeAppearance::HighContrast => Self::builtin_high_contrast(),
         }
+    }
+
+    /// Returns all built-in UI + syntax highlight theme presets.
+    #[must_use]
+    pub fn builtin_presets() -> Vec<Self> {
+        let mut out = vec![
+            Self::builtin_dark(),
+            Self::builtin_light(),
+            Self::builtin_high_contrast(),
+        ];
+        for spec in BUILTIN_THEME_SPECS {
+            out.push(build_theme_from_spec(spec));
+        }
+        out
+    }
+
+    /// Looks up a built-in preset by `id` (e.g. `"builtin.tokyo_night"`).
+    #[must_use]
+    pub fn from_builtin_id(id: &str) -> Option<Self> {
+        match id {
+            "builtin.light" => Some(Self::builtin_light()),
+            "builtin.dark" => Some(Self::builtin_dark()),
+            "builtin.high_contrast" => Some(Self::builtin_high_contrast()),
+            _ => BUILTIN_THEME_SPECS
+                .iter()
+                .find(|s| s.id == id)
+                .map(build_theme_from_spec),
+        }
+    }
+
+    /// Returns a copy of `self` with all `editor.syntax.*` tokens (and caret/selection)
+    /// replaced by those from `syntax_source`, preserving UI/chrome surfaces.
+    #[must_use]
+    pub fn with_syntax_from(&self, syntax_source: &Self) -> Self {
+        const SYNTAX_SLOTS: &[ThemeSlot] = &[
+            ThemeSlot::EditorSyntaxKeyword,
+            ThemeSlot::EditorSyntaxString,
+            ThemeSlot::EditorSyntaxComment,
+            ThemeSlot::EditorSyntaxNumber,
+            ThemeSlot::EditorSyntaxOperator,
+            ThemeSlot::EditorSyntaxPunctuation,
+            ThemeSlot::EditorSyntaxIdentifier,
+            ThemeSlot::EditorSyntaxQuotedIdentifier,
+            ThemeSlot::EditorSyntaxNull,
+            ThemeSlot::EditorCaret,
+        ];
+        let mut next = self.clone();
+        for &slot in SYNTAX_SLOTS {
+            if let Some(&color) = syntax_source.colors.get(&slot) {
+                next.colors.insert(slot, color);
+            }
+        }
+        next
+    }
+}
+
+struct ThemeSpec {
+    id: &'static str,
+    name: &'static str,
+    appearance: ThemeAppearance,
+    bg: u32,
+    text: u32,
+    selection: u32,
+    caret: u32,
+    current_line: u32,
+    gutter_bg: u32,
+    gutter_text: u32,
+    keyword: u32,
+    string: u32,
+    comment: u32,
+    number: u32,
+    operator: u32,
+    punctuation: u32,
+    identifier: u32,
+    quoted_id: u32,
+    null_color: u32,
+    accent: u32,
+}
+
+const fn rgb24(hex: u32) -> Rgba {
+    Rgba::rgb(
+        ((hex >> 16) & 0xFF) as u8,
+        ((hex >> 8) & 0xFF) as u8,
+        (hex & 0xFF) as u8,
+    )
+}
+
+const fn rgba24(hex: u32, alpha: u8) -> Rgba {
+    Rgba::with_alpha(
+        ((hex >> 16) & 0xFF) as u8,
+        ((hex >> 8) & 0xFF) as u8,
+        (hex & 0xFF) as u8,
+        alpha,
+    )
+}
+
+const BUILTIN_THEME_SPECS: &[ThemeSpec] = &[
+    ThemeSpec {
+        id: "builtin.gaussian_dark",
+        name: "Gaussian Glass Dark",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x10141C,
+        text: 0xE6EDF7,
+        selection: 0x264F78,
+        caret: 0x60A5FA,
+        current_line: 0x192130,
+        gutter_bg: 0x0D1118,
+        gutter_text: 0x64748B,
+        keyword: 0x7DD3FC,
+        string: 0x6EE7B7,
+        comment: 0x64748B,
+        number: 0xFCD34D,
+        operator: 0x38BDF8,
+        punctuation: 0x94A3B8,
+        identifier: 0xE2E8F0,
+        quoted_id: 0xC4B5FD,
+        null_color: 0x64748B,
+        accent: 0x38BDF8,
+    },
+    ThemeSpec {
+        id: "builtin.gaussian_light",
+        name: "Gaussian Glass Light",
+        appearance: ThemeAppearance::Light,
+        bg: 0xF5F7FB,
+        text: 0x1E293B,
+        selection: 0xBFDBFE,
+        caret: 0x0284C7,
+        current_line: 0xEBF1FA,
+        gutter_bg: 0xEDF2F8,
+        gutter_text: 0x94A3B8,
+        keyword: 0x0284C7,
+        string: 0x059669,
+        comment: 0x94A3B8,
+        number: 0xD97706,
+        operator: 0x4F46E5,
+        punctuation: 0x64748B,
+        identifier: 0x1E293B,
+        quoted_id: 0x7C3AED,
+        null_color: 0x94A3B8,
+        accent: 0x0284C7,
+    },
+    ThemeSpec {
+        id: "builtin.tokyo_night",
+        name: "Tokyo Night",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x1A1B26,
+        text: 0xC0CAF5,
+        selection: 0x33467C,
+        caret: 0x7AA2F7,
+        current_line: 0x24283B,
+        gutter_bg: 0x16161E,
+        gutter_text: 0x565F89,
+        keyword: 0xBB9AF7,
+        string: 0x9ECE6A,
+        comment: 0x565F89,
+        number: 0xFF9E64,
+        operator: 0x89DDFF,
+        punctuation: 0x9ABDF5,
+        identifier: 0xC0CAF5,
+        quoted_id: 0x7DCFFF,
+        null_color: 0x565F89,
+        accent: 0x7AA2F7,
+    },
+    ThemeSpec {
+        id: "builtin.dracula",
+        name: "Dracula",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x282A36,
+        text: 0xF8F8F2,
+        selection: 0x44475A,
+        caret: 0xFF79C6,
+        current_line: 0x313442,
+        gutter_bg: 0x21222C,
+        gutter_text: 0x6272A4,
+        keyword: 0xFF79C6,
+        string: 0xF1FA8C,
+        comment: 0x6272A4,
+        number: 0xBD93F9,
+        operator: 0xFF79C6,
+        punctuation: 0xF8F8F2,
+        identifier: 0x8BE9FD,
+        quoted_id: 0x50FA7B,
+        null_color: 0x6272A4,
+        accent: 0xBD93F9,
+    },
+    ThemeSpec {
+        id: "builtin.catppuccin_mocha",
+        name: "Catppuccin Mocha",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x1E1E2E,
+        text: 0xCDD6F4,
+        selection: 0x45475A,
+        caret: 0xF5E0DC,
+        current_line: 0x2A2B3C,
+        gutter_bg: 0x181825,
+        gutter_text: 0x6C7086,
+        keyword: 0xCBA6F7,
+        string: 0xA6E3A1,
+        comment: 0x6C7086,
+        number: 0xFAB387,
+        operator: 0x89DCEB,
+        punctuation: 0x9399B2,
+        identifier: 0x89B4FA,
+        quoted_id: 0xF9E2AF,
+        null_color: 0x6C7086,
+        accent: 0xCBA6F7,
+    },
+    ThemeSpec {
+        id: "builtin.one_dark_pro",
+        name: "One Dark Pro",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x282C34,
+        text: 0xABB2BF,
+        selection: 0x3E4451,
+        caret: 0x528BFF,
+        current_line: 0x2C313C,
+        gutter_bg: 0x21252B,
+        gutter_text: 0x5C6370,
+        keyword: 0xC678DD,
+        string: 0x98C379,
+        comment: 0x5C6370,
+        number: 0xD19A66,
+        operator: 0x56B6C2,
+        punctuation: 0xABB2BF,
+        identifier: 0xE06C75,
+        quoted_id: 0xE5C07B,
+        null_color: 0x5C6370,
+        accent: 0x528BFF,
+    },
+    ThemeSpec {
+        id: "builtin.nord",
+        name: "Nord",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x2E3440,
+        text: 0xD8DEE9,
+        selection: 0x434C5E,
+        caret: 0x88C0D0,
+        current_line: 0x3B4252,
+        gutter_bg: 0x272C36,
+        gutter_text: 0x616E88,
+        keyword: 0x81A1C1,
+        string: 0xA3BE8C,
+        comment: 0x616E88,
+        number: 0xB48EAD,
+        operator: 0x81A1C1,
+        punctuation: 0xECEFF4,
+        identifier: 0x88C0D0,
+        quoted_id: 0xEBCB8B,
+        null_color: 0x616E88,
+        accent: 0x88C0D0,
+    },
+    ThemeSpec {
+        id: "builtin.monokai_pro",
+        name: "Monokai Pro",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x2D2A2E,
+        text: 0xFCFCFA,
+        selection: 0x5B595C,
+        caret: 0xFFD866,
+        current_line: 0x383539,
+        gutter_bg: 0x221F22,
+        gutter_text: 0x727072,
+        keyword: 0xFF6188,
+        string: 0xFFD866,
+        comment: 0x727072,
+        number: 0xAB9DF2,
+        operator: 0xFF6188,
+        punctuation: 0x939293,
+        identifier: 0x78DCE8,
+        quoted_id: 0xA9DC76,
+        null_color: 0x727072,
+        accent: 0xFFD866,
+    },
+    ThemeSpec {
+        id: "builtin.gruvbox_dark",
+        name: "Gruvbox Dark",
+        appearance: ThemeAppearance::Dark,
+        bg: 0x282828,
+        text: 0xEBDBB2,
+        selection: 0x504945,
+        caret: 0xFE8019,
+        current_line: 0x32302F,
+        gutter_bg: 0x1D2021,
+        gutter_text: 0x928374,
+        keyword: 0xFB4934,
+        string: 0xB8BB26,
+        comment: 0x928374,
+        number: 0xD3869B,
+        operator: 0xFE8019,
+        punctuation: 0xA89984,
+        identifier: 0x83A598,
+        quoted_id: 0xFABD2F,
+        null_color: 0x928374,
+        accent: 0xFE8019,
+    },
+    ThemeSpec {
+        id: "builtin.github_light",
+        name: "GitHub Light",
+        appearance: ThemeAppearance::Light,
+        bg: 0xFFFFFF,
+        text: 0x24292F,
+        selection: 0xDDF4FF,
+        caret: 0x0969DA,
+        current_line: 0xF6F8FA,
+        gutter_bg: 0xF6F8FA,
+        gutter_text: 0x8C959F,
+        keyword: 0xCF222E,
+        string: 0x0A3069,
+        comment: 0x6E7781,
+        number: 0x0550AE,
+        operator: 0x0550AE,
+        punctuation: 0x24292F,
+        identifier: 0x953800,
+        quoted_id: 0x8250DF,
+        null_color: 0x6E7781,
+        accent: 0x0969DA,
+    },
+    ThemeSpec {
+        id: "builtin.catppuccin_latte",
+        name: "Catppuccin Latte",
+        appearance: ThemeAppearance::Light,
+        bg: 0xEFF1F5,
+        text: 0x4C4F69,
+        selection: 0xCCD0DA,
+        caret: 0x1E66F5,
+        current_line: 0xE6E9EF,
+        gutter_bg: 0xE6E9EF,
+        gutter_text: 0x8C8FA1,
+        keyword: 0x8839EF,
+        string: 0x40A02B,
+        comment: 0x8C8FA1,
+        number: 0xFE640B,
+        operator: 0x04A5E5,
+        punctuation: 0x6C6F85,
+        identifier: 0x1E66F5,
+        quoted_id: 0xDF8E1D,
+        null_color: 0x8C8FA1,
+        accent: 0x1E66F5,
+    },
+];
+
+fn build_theme_from_spec(spec: &ThemeSpec) -> ThemeDefinition {
+    let mut colors = BTreeMap::new();
+    let is_light = matches!(spec.appearance, ThemeAppearance::Light);
+    colors.insert(ThemeSlot::EditorBackground, rgb24(spec.bg));
+    colors.insert(ThemeSlot::EditorText, rgb24(spec.text));
+    colors.insert(ThemeSlot::EditorSelection, rgb24(spec.selection));
+    colors.insert(ThemeSlot::EditorCaret, rgb24(spec.caret));
+    colors.insert(ThemeSlot::EditorCurrentLine, rgb24(spec.current_line));
+    colors.insert(ThemeSlot::EditorGutterBackground, rgb24(spec.gutter_bg));
+    colors.insert(ThemeSlot::EditorGutterText, rgb24(spec.gutter_text));
+    colors.insert(ThemeSlot::EditorSyntaxKeyword, rgb24(spec.keyword));
+    colors.insert(ThemeSlot::EditorSyntaxString, rgb24(spec.string));
+    colors.insert(ThemeSlot::EditorSyntaxComment, rgb24(spec.comment));
+    colors.insert(ThemeSlot::EditorSyntaxNumber, rgb24(spec.number));
+    colors.insert(ThemeSlot::EditorSyntaxOperator, rgb24(spec.operator));
+    colors.insert(ThemeSlot::EditorSyntaxPunctuation, rgb24(spec.punctuation));
+    colors.insert(ThemeSlot::EditorSyntaxIdentifier, rgb24(spec.identifier));
+    colors.insert(
+        ThemeSlot::EditorSyntaxQuotedIdentifier,
+        rgb24(spec.quoted_id),
+    );
+    colors.insert(ThemeSlot::EditorSyntaxNull, rgb24(spec.null_color));
+    colors.insert(ThemeSlot::DataGridHeaderBackground, rgb24(spec.gutter_bg));
+    colors.insert(ThemeSlot::DataGridHeaderText, rgb24(spec.text));
+    colors.insert(ThemeSlot::DataGridSelection, rgb24(spec.accent));
+    colors.insert(
+        ThemeSlot::DataGridInactiveSelection,
+        rgb24(spec.selection),
+    );
+    colors.insert(
+        ThemeSlot::DataGridSelectionText,
+        if is_light {
+            Rgba::rgb(0xFF, 0xFF, 0xFF)
+        } else {
+            rgb24(spec.text)
+        },
+    );
+    colors.insert(ThemeSlot::DataGridFocusBorder, rgb24(spec.accent));
+    colors.insert(ThemeSlot::DataGridInserted, rgba24(0x2EA043, 0x38));
+    colors.insert(ThemeSlot::DataGridModified, rgba24(0xD29922, 0x38));
+    colors.insert(ThemeSlot::DataGridDeleted, rgba24(0xF85149, 0x38));
+    colors.insert(ThemeSlot::WindowBackground, rgb24(spec.gutter_bg));
+    ThemeDefinition {
+        id: ThemeId(spec.id.to_owned()),
+        name: spec.name.to_owned(),
+        appearance: spec.appearance,
+        is_builtin: true,
+        colors,
     }
 }
 
