@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **app**: Suppress Windows console window on GUI launch while preserving CLI output (`windows_subsystem = "windows"`)
+- **updater**: Separate Velopack event queue from wakeup signal so `Check for Updates` never drops events or stalls indefinitely
 - **ui**: Widen library detail pane for wide windows
 - **ui**: Make settings layout responsive across viewports
 
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **readme**: Rewrite Simplified Chinese README in DBeaver/TablePro style
 - **readme**: Rewrite Vietnamese README in DBeaver/TablePro style
 - **readme**: Rewrite English README in DBeaver/TablePro style
+
 ## [0.1.0] - 2026-11-14
 
 ### Added
