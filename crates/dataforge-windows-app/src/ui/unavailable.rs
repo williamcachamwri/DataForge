@@ -73,21 +73,25 @@ fn render_connecting_banner(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let cancel_label = s.cancel_connection;
+    let cancelled_title = s.connection_cancelled_title;
+    let cancelled_desc = s.connection_cancelled_desc;
     let engine = ws.controller.connection_form.engine;
-    let target = active_target_summary(ws);
     let (title, status, spinner_color) = if reconnecting {
         (
-            "Reconnecting to database...".to_owned(),
+            s.reconnecting_to_db.to_owned(),
             Color::Warning,
             Color::Warning,
         )
     } else {
         (
-            "Connecting to database...".to_owned(),
+            s.connecting_to_db.to_owned(),
             Color::Accent,
             Color::Accent,
         )
     };
+    let target = active_target_summary(ws);
 
     let indicator = if is_reduced_motion(cx) {
         Icon::new(IconName::LoaderCircle)
@@ -102,24 +106,24 @@ fn render_connecting_banner(
     };
 
     let cancel_btn = Button::new("unavailable-cancel-connect")
-        .label("Cancel")
+        .label(cancel_label)
         .variant(Variant::Secondary)
         .size(Size::Sm)
-        .content(|_| {
+        .content(move |_| {
             div()
                 .flex()
                 .items_center()
                 .gap(px(MICRO_GAP_PX))
                 .child(Icon::new(IconName::X).size(IconSize::Xs))
-                .child("Cancel")
+                .child(cancel_label)
                 .into_any_element()
         })
-        .on_press(cx.listener(|ws, _, _, cx| {
+        .on_press(cx.listener(move |ws, _, _, cx| {
             ws.controller.cancel_active_connect();
             ws.notify_toast(
                 ToastSeverity::Info,
-                "Connection Cancelled",
-                Some("Stopped the active connection attempt.".into()),
+                cancelled_title,
+                Some(cancelled_desc.into()),
                 cx,
             );
             cx.notify();
@@ -159,6 +163,16 @@ fn render_error_banner(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let auth_failed_badge = s.auth_failed_badge;
+    let retry_label = s.retry_connection;
+    let retry_failed_title = s.retry_failed;
+    let edit_connection_label = s.edit_connection;
+    let summary = if view.summary.trim().is_empty() || view.summary == "Connection unavailable" {
+        s.unavailable_long.to_owned()
+    } else {
+        view.summary.clone()
+    };
     let target = active_target_summary(ws);
     let detail_text = match view.detail.as_deref().map(str::trim) {
         Some(detail) if !detail.is_empty() => format!("{detail} ({target})"),
@@ -187,7 +201,7 @@ fn render_error_banner(
                                 .size(IconSize::Xs)
                                 .color(colors.warning.color),
                         )
-                        .child(ChipLabel::new().child("Authentication Failed")),
+                        .child(ChipLabel::new().child(auth_failed_badge)),
                 ),
         );
     }
@@ -195,14 +209,14 @@ fn render_error_banner(
     if view.can_retry {
         actions = actions.child(
             Button::new("unavailable-retry-connect")
-                .label("Retry Connection")
+                .label(retry_label)
                 .variant(Variant::Primary)
                 .size(Size::Sm)
-                .on_press(cx.listener(|ws, _, _, cx| {
+                .on_press(cx.listener(move |ws, _, _, cx| {
                     if let Err(err) = ws.controller.retry_unavailable_connection() {
                         ws.notify_toast(
                             ToastSeverity::Error,
-                            "Retry Failed",
+                            retry_failed_title,
                             Some(err.to_string().into()),
                             cx,
                         );
@@ -214,7 +228,7 @@ fn render_error_banner(
 
     actions = actions.child(
         Button::new("unavailable-edit-connection")
-            .label("Edit Connection")
+            .label(edit_connection_label)
             .variant(Variant::Secondary)
             .size(Size::Sm)
             .on_press(cx.listener(|ws, _, _window, cx| {
@@ -232,7 +246,7 @@ fn render_error_banner(
         IconName::TriangleAlert
     };
 
-    let alert = Alert::new(view.summary.clone())
+    let alert = Alert::new(summary)
         .status(Color::Danger)
         .indicator(
             Icon::new(icon)
@@ -267,7 +281,7 @@ fn active_target_summary(ws: &DataForgeWorkspace) -> String {
     } else if !form.database.trim().is_empty() {
         form.database.trim()
     } else {
-        "target endpoint"
+        ws.controller.strings.target_endpoint_fallback
     };
 
     let db = form.database.trim();
