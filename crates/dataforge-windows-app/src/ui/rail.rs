@@ -18,7 +18,8 @@ use dataforge_state::connection_window::ConnectionWindowPhase;
 use super::DataForgeWorkspace;
 use super::engine_icons::engine_icon;
 use super::theme::{
-    HAIRLINE_BORDER_PX, MICRO_GAP_PX, hairline_border_color, is_reduced_motion, panel_surface_bg,
+    HAIRLINE_BORDER_PX, MICRO_GAP_PX, animate_active_indicator, hairline_border_color,
+    is_reduced_motion, panel_surface_bg,
 };
 
 /// Renders the compact left vertical navigation rail.
@@ -378,6 +379,18 @@ fn render_rail_toggle(
         colors.muted
     };
 
+    let mut container = div().relative().flex().items_center().justify_center();
+    if selected {
+        let indicator = div()
+            .w(px(2.5))
+            .h(px(16.0))
+            .rounded(px(99.0))
+            .bg(colors.accent.color);
+        container = container.child(div().absolute().left(px(-6.0)).child(
+            animate_active_indicator(indicator, format!("{id}-active-bar"), cx),
+        ));
+    }
+
     Tooltip::new(tooltip)
         .id(format!("{id}-tip"))
         .placement(TooltipPlacement::Right)
@@ -385,14 +398,16 @@ fn render_rail_toggle(
         .close_delay(80)
         .should_skip_animation(skip_anim)
         .child(
-            ToggleButton::new(id)
-                .variant(ToggleVariant::Ghost)
-                .size(Size::Md)
-                .is_icon_only(true)
-                .is_selected(selected)
-                .aria_label(tooltip)
-                .on_press(on_press)
-                .child(Icon::new(icon).size(px(16.0)).color(fg)),
+            container.child(
+                ToggleButton::new(id)
+                    .variant(ToggleVariant::Ghost)
+                    .size(Size::Md)
+                    .is_icon_only(true)
+                    .is_selected(selected)
+                    .aria_label(tooltip)
+                    .on_press(on_press)
+                    .child(Icon::new(icon).size(px(16.0)).color(fg)),
+            ),
         )
         .into_any_element()
 }
