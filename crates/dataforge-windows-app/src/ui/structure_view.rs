@@ -368,7 +368,10 @@ fn render_structure_subtabs(
     let items = vec![
         TabItem::new("columns", format!("{} ({col_count})", s.columns_button)),
         TabItem::new("indexes", format!("{} ({idx_count})", s.indexes_label)),
-        TabItem::new("foreign-keys", format!("{} ({fk_count})", s.foreign_keys_label)),
+        TabItem::new(
+            "foreign-keys",
+            format!("{} ({fk_count})", s.foreign_keys_label),
+        ),
         TabItem::new("ddl-triggers", s.ddl_triggers_tab),
     ];
     let selected_key = SharedString::from(ws.structure_ui.active_tab.key());
