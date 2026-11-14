@@ -80,32 +80,33 @@ fn render_left_status(
         .gap(px(8.0))
         .min_w(px(0.0));
 
+    let s = &controller.strings;
     let phase_node = match phase {
         Some(ConnectionWindowPhase::Connected) => render_connected_left_status(controller, cx),
         Some(ConnectionWindowPhase::Connecting { .. }) => {
-            render_phase_spinner("status-bar-conn-spin", "Connecting...", colors.foreground)
+            render_phase_spinner("status-bar-conn-spin", s.connecting, colors.foreground)
         }
         Some(ConnectionWindowPhase::Reconnecting { .. }) => render_phase_spinner(
             "status-bar-reconn-spin",
-            "Reconnecting...",
+            s.reconnecting,
             colors.foreground,
         ),
         Some(ConnectionWindowPhase::Unavailable { .. }) => render_phase_dot(
             colors.danger.color,
-            "Connection unavailable",
+            s.unavailable_long,
             colors.danger.color,
         ),
         Some(ConnectionWindowPhase::Disconnected) | None => {
-            render_phase_dot(colors.muted, "Disconnected • Ready", colors.muted)
+            render_phase_dot(colors.muted, s.disconnected_ready, colors.muted)
         }
     };
     left = left.child(phase_node);
 
     let sub_view_label = match ws.workspace_pane.sub_view {
-        WorkspaceSubView::SqlEditor => "SQL Editor",
-        WorkspaceSubView::DataGrid => "Data Grid",
-        WorkspaceSubView::Structure => "Structure",
-        WorkspaceSubView::SplitSqlAndGrid => "Split SQL + Grid",
+        WorkspaceSubView::SqlEditor => s.sql_editor_label,
+        WorkspaceSubView::DataGrid => s.data_grid_label,
+        WorkspaceSubView::Structure => s.structure_tab,
+        WorkspaceSubView::SplitSqlAndGrid => s.split_sql_grid_label,
     };
     left = left
         .child(
@@ -135,7 +136,7 @@ fn render_left_status(
                     div()
                         .truncate()
                         .text_color(colors.muted)
-                        .child(format!("schema: {schema}")),
+                        .child(controller.strings.status_schema_tpl.replace("{schema}", schema)),
                 );
         }
         if let Some(table) = &controller.active_table {
@@ -167,7 +168,11 @@ fn render_left_status(
                         .text_color(colors.muted)
                         .child(format!(
                             "{obj_count} {}",
-                            if obj_count == 1 { "object" } else { "objects" }
+                            if obj_count == 1 {
+                                s.object_singular
+                            } else {
+                                s.object_plural
+                            }
                         )),
                 );
         }
@@ -178,7 +183,7 @@ fn render_left_status(
                     .color(Color::Warning)
                     .size(Size::Sm)
                     .text_size(px(10.0))
-                    .child(ChipLabel::new().child("Safe Mode")),
+                    .child(ChipLabel::new().child(s.safe_mode)),
             );
         }
     }
@@ -236,7 +241,7 @@ fn render_connected_left_status(
                         .size(px(11.0))
                         .color(colors.warning.color),
                 )
-                .child(ChipLabel::new().child("Safe Mode")),
+                .child(ChipLabel::new().child(controller.strings.safe_mode)),
         );
     }
     row.into_any_element()
@@ -296,7 +301,8 @@ fn render_right_metrics(
         .gap(px(8.0))
         .flex_shrink_0();
 
-    if let Some(metric) = render_query_timing_metric(active_result, numeric_font.clone(), cx) {
+    let s = &controller.strings;
+    if let Some(metric) = render_query_timing_metric(controller, active_result, numeric_font.clone(), cx) {
         right = right.child(metric);
     }
 
@@ -315,12 +321,12 @@ fn render_right_metrics(
             div()
                 .font(numeric_font.clone())
                 .text_color(colors.foreground)
-                .child(format!("{count} selected")),
+                .child(format!("{count} {}", s.selected_suffix)),
         );
     }
 
     if pending_edits > 0 {
-        right = right.child(render_pending_edits_chip(pending_edits));
+        right = right.child(render_pending_edits_chip(pending_edits, controller));
     }
 
     if is_connected && (controller.status_bar.total_pages > 1 || !controller.grid_rows.is_empty()) {
@@ -363,7 +369,11 @@ fn render_right_metrics(
                 .text_color(colors.muted)
                 .child(format!(
                     "{tab_count} {}",
-                    if tab_count == 1 { "tab" } else { "tabs" }
+                    if tab_count == 1 {
+                        s.tab_singular
+                    } else {
+                        s.tab_plural
+                    }
                 )),
         )
         .child(
@@ -377,6 +387,7 @@ fn render_right_metrics(
 }
 
 fn render_query_timing_metric(
+    controller: &AppController,
     active_result: Option<&super::shell_state::QueryTabResultState>,
     numeric_font: herogpui::gpui::Font,
     cx: &Context<DataForgeWorkspace>,
@@ -395,7 +406,7 @@ fn render_query_timing_metric(
                         .color(Color::Accent)
                         .sx(|s| s.w(px(56.0))),
                 )
-                .child("Running...")
+                .child(controller.strings.running)
                 .into_any_element(),
         );
     }
@@ -409,7 +420,7 @@ fn render_query_timing_metric(
     )
 }
 
-fn render_pending_edits_chip(pending_edits: usize) -> AnyElement {
+fn render_pending_edits_chip(pending_edits: usize, controller: &AppController) -> AnyElement {
     Chip::new()
         .variant(ChipVariant::Soft)
         .color(Color::Warning)
@@ -417,7 +428,7 @@ fn render_pending_edits_chip(pending_edits: usize) -> AnyElement {
         .text_size(px(10.5))
         .child(ChipLabel::new().child(format!(
             "{pending_edits} {}",
-            if pending_edits == 1 { "edit" } else { "edits" }
+            controller.strings.pending_suffix
         )))
         .into_any_element()
 }
@@ -446,12 +457,13 @@ fn render_pagination_controls(
                 .width(px(18.0))
                 .height(px(18.0))
                 .is_disabled(!can_prev)
-                .aria_label("Previous Page")
+                .aria_label(controller.strings.prev_page_aria)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     if let Err(err) = ws.controller.prev_grid_page_blocking() {
+                        let msg = ws.controller.strings.prev_page_failed_toast;
                         ws.notify_toast(
                             ToastSeverity::Error,
-                            "Previous page failed",
+                            msg,
                             Some(err.to_string().into()),
                             cx,
                         );
@@ -473,7 +485,13 @@ fn render_pagination_controls(
                 .font(numeric_font)
                 .text_size(px(11.0))
                 .text_color(colors.muted)
-                .child(format!("p.{page}/{total}")),
+                .child(
+                    controller
+                        .strings
+                        .page_counter_tpl
+                        .replace("{page}", &page.to_string())
+                        .replace("{total}", &total.to_string()),
+                ),
         )
         .child(
             Button::new("status-next-page")
@@ -483,12 +501,13 @@ fn render_pagination_controls(
                 .width(px(18.0))
                 .height(px(18.0))
                 .is_disabled(!can_next)
-                .aria_label("Next Page")
+                .aria_label(controller.strings.next_page_aria)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     if let Err(err) = ws.controller.next_grid_page_blocking() {
+                        let msg = ws.controller.strings.next_page_failed_toast;
                         ws.notify_toast(
                             ToastSeverity::Error,
-                            "Next page failed",
+                            msg,
                             Some(err.to_string().into()),
                             cx,
                         );
@@ -530,7 +549,13 @@ fn render_cursor_and_vim(
             div()
                 .font(numeric_font)
                 .text_color(colors.muted)
-                .child(format!("Ln {line}, Col {col}")),
+                .child(
+                    controller
+                        .strings
+                        .cursor_pos_tpl
+                        .replace("{line}", &line.to_string())
+                        .replace("{col}", &col.to_string()),
+                ),
         );
 
     if let Some(mode) = controller.vim_mode {
@@ -574,7 +599,7 @@ fn render_panel_quick_toggles(
                 .is_icon_only(true)
                 .sx(|s| s.h(px(20.0)).w(px(22.0)).px(px(0.0)))
                 .is_selected(inspector_on)
-                .aria_label("Toggle Row Inspector")
+                .aria_label(controller.strings.cmd_toggle_inspector)
                 .on_press(cx.listener(|ws, _, window, cx| {
                     ws.execute_key_command(KeyCommand::ToggleInspector, window, cx);
                 }))
@@ -595,7 +620,7 @@ fn render_panel_quick_toggles(
                 .is_icon_only(true)
                 .sx(|s| s.h(px(20.0)).w(px(22.0)).px(px(0.0)))
                 .is_selected(ai_on)
-                .aria_label("Toggle AI Assistant")
+                .aria_label(controller.strings.cmd_toggle_ai)
                 .on_press(cx.listener(|ws, _, window, cx| {
                     ws.execute_key_command(KeyCommand::ToggleAiDrawer, window, cx);
                 }))
@@ -634,7 +659,7 @@ fn format_connection_target(controller: &AppController) -> String {
         (true, true) => format!("{host} / {db}"),
         (true, false) => host.to_owned(),
         (false, true) => db.to_owned(),
-        (false, false) => "Connected".to_owned(),
+        (false, false) => controller.strings.connected.to_owned(),
     }
 }
 
@@ -666,25 +691,27 @@ fn real_row_count_label(
         && let Some(set) = res.accumulator.result_sets.get(res.active_result_set)
     {
         let n = set.total_rows.unwrap_or(set.rows.len() as u64);
-        return Some(pluralize_rows(n));
+        return Some(pluralize_rows(controller, n));
     }
     if let Some(total) = controller.grid_model.page.table_row_count {
-        return Some(pluralize_rows(total));
+        return Some(pluralize_rows(controller, total));
     }
     if !controller.grid_rows.is_empty() {
-        return Some(pluralize_rows(controller.grid_rows.len() as u64));
+        return Some(pluralize_rows(controller, controller.grid_rows.len() as u64));
     }
     if is_connected && controller.active_table.is_some() {
-        return Some("0 rows".to_owned());
+        return Some(controller.strings.showing_rows_zero.to_owned());
     }
     None
 }
 
-fn pluralize_rows(n: u64) -> String {
-    if n == 1 {
-        "1 row".to_owned()
+fn pluralize_rows(controller: &AppController, n: u64) -> String {
+    if n == 0 {
+        controller.strings.showing_rows_zero.to_owned()
+    } else if n == 1 {
+        format!("1 {}", controller.strings.row_singular)
     } else {
-        format!("{n} rows")
+        format!("{n} {}", controller.strings.rows_suffix)
     }
 }
 
