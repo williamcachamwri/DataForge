@@ -115,7 +115,7 @@ pub fn render_tab_strip(
         });
 
     if tabs_snapshot.is_empty() {
-        strip = strip.child(render_empty_tabs_notice(cx));
+        strip = strip.child(render_empty_tabs_notice(&ws.controller.strings, cx));
     } else {
         for tab in &tabs_snapshot {
             let title = ws.tabs_ui.display_title(tab).to_owned();
@@ -133,6 +133,7 @@ pub fn render_tab_strip(
                 is_dirty,
                 tab_count,
                 input_for_tab,
+                &ws.controller.strings,
                 cx,
             ));
         }
@@ -161,20 +162,27 @@ pub fn render_tab_strip(
                 .items_center()
                 .gap(px(4.0))
                 .child(strip)
-                .child(render_tab_strip_actions(skip_anim, cx)),
+                .child(render_tab_strip_actions(&ws.controller.strings, skip_anim, cx)),
         )
-        .child(render_subview_switcher(ws.workspace_pane.sub_view, cx))
+        .child(render_subview_switcher(
+            ws.workspace_pane.sub_view,
+            &ws.controller.strings,
+            cx,
+        ))
         .into_any_element()
 }
 
-fn render_empty_tabs_notice(cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_empty_tabs_notice(
+    s: &crate::i18n::Strings,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
     let colors = cx.colors().clone();
     div()
         .id("tabs-empty-notice")
         .px(px(8.0))
         .text_size(px(12.0))
         .text_color(colors.muted)
-        .child("No open tabs")
+        .child(s.no_open_tabs)
         .into_any_element()
 }
 
@@ -185,6 +193,7 @@ fn render_tab_pill(
     is_dirty: bool,
     total_tabs: usize,
     rename_input: Option<Entity<InputState>>,
+    s: &crate::i18n::Strings,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
@@ -210,7 +219,7 @@ fn render_tab_pill(
         );
     }
 
-    pill = pill.child(render_tab_close_button(tab_id, title, cx));
+    pill = pill.child(render_tab_close_button(tab_id, title, s, cx));
     wrap_tab_context_menu(
         pill.into_any_element(),
         tab_id,
@@ -218,6 +227,7 @@ fn render_tab_pill(
         conn_id,
         menu_tab_kind,
         total_tabs,
+        s,
         cx,
     )
 }
@@ -349,6 +359,7 @@ fn render_tab_rename_input(
 fn render_tab_close_button(
     tab_id: TabId,
     title: &str,
+    s: &crate::i18n::Strings,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
@@ -358,7 +369,7 @@ fn render_tab_close_button(
         .is_icon_only(true)
         .width(px(18.0))
         .height(px(18.0))
-        .aria_label(format!("Close {title}"))
+        .aria_label(s.close_tab_aria_tpl.replace("{title}", title))
         .on_press(cx.listener(move |ws, _, _, cx| {
             cx.stop_propagation();
             close_workspace_tab(ws, tab_id, cx);
@@ -374,9 +385,10 @@ fn wrap_tab_context_menu(
     conn_id: TabConnectionId,
     menu_tab_kind: TabKind,
     total_tabs: usize,
+    s: &crate::i18n::Strings,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
-    let menu_items = build_tab_context_menu_items(total_tabs);
+    let menu_items = build_tab_context_menu_items(total_tabs, s);
     let mut ctx_menu = ContextMenu::new(format!("tab-context-menu-{}", tab_id.0), pill, menu_items)
         .on_action(cx.listener(move |ws, key: &SharedString, _, cx| {
             handle_tab_context_action(
@@ -395,19 +407,19 @@ fn wrap_tab_context_menu(
     ctx_menu.into_any_element()
 }
 
-fn build_tab_context_menu_items(total_tabs: usize) -> Vec<MenuItem> {
+fn build_tab_context_menu_items(total_tabs: usize, s: &crate::i18n::Strings) -> Vec<MenuItem> {
     let mut items = vec![
-        MenuItem::new("save", "Save Query")
+        MenuItem::new("save", s.save_query)
             .icon(IconName::Save.path())
             .shortcut("Ctrl+S"),
-        MenuItem::new("rename", "Rename Tab").icon(IconName::Pencil.path()),
-        MenuItem::new("duplicate", "Duplicate Tab").icon(IconName::Copy.path()),
+        MenuItem::new("rename", s.rename_tab).icon(IconName::Pencil.path()),
+        MenuItem::new("duplicate", s.duplicate_tab).icon(IconName::Copy.path()),
         MenuItem::Separator,
-        MenuItem::new("close", "Close")
+        MenuItem::new("close", s.close_label)
             .icon(IconName::X.path())
             .shortcut("Ctrl+W"),
     ];
-    let mut close_others = MenuItem::new("close-others", "Close Others");
+    let mut close_others = MenuItem::new("close-others", s.close_others_tabs);
     if total_tabs > 1 {
         close_others = close_others.danger();
     }
@@ -415,7 +427,11 @@ fn build_tab_context_menu_items(total_tabs: usize) -> Vec<MenuItem> {
     items
 }
 
-fn render_tab_strip_actions(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_tab_strip_actions(
+    s: &crate::i18n::Strings,
+    skip_anim: bool,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
     let colors = cx.colors().clone();
     div()
         .id("workspace-tab-actions")
@@ -424,7 +440,7 @@ fn render_tab_strip_actions(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -
         .gap(px(2.0))
         .flex_shrink_0()
         .child(
-            Tooltip::new("New Query Tab (Ctrl+T)")
+            Tooltip::new(s.new_query_tab_tooltip)
                 .id("tabs-new-query-tip")
                 .placement(TooltipPlacement::Bottom)
                 .delay(350)
@@ -435,7 +451,7 @@ fn render_tab_strip_actions(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -
                         .variant(Variant::Ghost)
                         .size(Size::Sm)
                         .is_icon_only(true)
-                        .aria_label("New Query Tab")
+                        .aria_label(s.cmd_new_query_tab)
                         .on_press(cx.listener(|ws, _, window, cx| {
                             ws.execute_key_command(KeyCommand::NewQueryTab, window, cx);
                             ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
@@ -449,7 +465,7 @@ fn render_tab_strip_actions(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -
                 ),
         )
         .child(
-            Tooltip::new("Reopen Closed Tab (Ctrl+Shift+T)")
+            Tooltip::new(s.reopen_tab_tooltip)
                 .id("tabs-reopen-tip")
                 .placement(TooltipPlacement::Bottom)
                 .delay(350)
@@ -460,12 +476,13 @@ fn render_tab_strip_actions(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -
                         .variant(Variant::Ghost)
                         .size(Size::Sm)
                         .is_icon_only(true)
-                        .aria_label("Reopen Closed Tab")
+                        .aria_label(s.cmd_reopen_tab)
                         .on_press(cx.listener(|ws, _, _, cx| {
                             if ws.controller.reopen_closed_tab().is_none() {
+                                let msg = ws.controller.strings.no_recent_tab;
                                 ws.notify_toast(
                                     ToastSeverity::Info,
-                                    "No recently closed tab",
+                                    msg,
                                     None,
                                     cx,
                                 );
@@ -484,6 +501,7 @@ fn render_tab_strip_actions(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -
 
 fn render_subview_switcher(
     sub_view: WorkspaceSubView,
+    s: &crate::i18n::Strings,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let selected_key = match sub_view {
@@ -493,13 +511,13 @@ fn render_subview_switcher(
     };
 
     let items = vec![
-        HeroTabItem::new("sql", "SQL")
+        HeroTabItem::new("sql", s.sql_tab)
             .height(px(24.0))
             .padding_x(px(10.0)),
-        HeroTabItem::new("grid", "Grid")
+        HeroTabItem::new("grid", s.grid_tab)
             .height(px(24.0))
             .padding_x(px(10.0)),
-        HeroTabItem::new("structure", "Structure")
+        HeroTabItem::new("structure", s.structure_tab)
             .height(px(24.0))
             .padding_x(px(10.0)),
     ];
@@ -534,9 +552,10 @@ fn apply_subview_selection(
             if let Some(table) = ws.controller.active_table.clone()
                 && let Err(err) = ws.controller.load_table_structure_blocking(&table)
             {
+                let msg = ws.controller.strings.load_structure_failed_toast;
                 ws.notify_toast(
                     ToastSeverity::Error,
-                    "Failed to load table structure",
+                    msg,
                     Some(err.to_string().into()),
                     cx,
                 );
@@ -600,9 +619,10 @@ fn handle_tab_context_action(
     match action {
         "save" => {
             ws.controller.save_current_query(title, None);
+            let saved_msg = ws.controller.strings.query_saved_toast;
             ws.notify_toast(
                 ToastSeverity::Success,
-                "Query saved",
+                saved_msg,
                 Some(title.to_owned().into()),
                 cx,
             );
@@ -643,7 +663,7 @@ fn duplicate_workspace_tab(
     kind: &TabKind,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
-    let copy_title = format!("{title} Copy");
+    let copy_title = format!("{title} {}", ws.controller.strings.copy_suffix);
     match kind {
         TabKind::QueryEditor { sql } => {
             let active_sql = if sql.is_empty() {
@@ -662,9 +682,10 @@ fn duplicate_workspace_tab(
         TabKind::TableData { table_name } | TabKind::Structure { table_name } => {
             let table_ref = parse_table_ref(table_name);
             if let Err(err) = ws.controller.open_table_tab_blocking(table_ref) {
+                let msg = ws.controller.strings.open_table_tab_failed_toast;
                 ws.notify_toast(
                     ToastSeverity::Error,
-                    "Failed to open table tab",
+                    msg,
                     Some(err.to_string().into()),
                     cx,
                 );
