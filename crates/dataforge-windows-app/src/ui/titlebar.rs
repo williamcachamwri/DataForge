@@ -86,7 +86,11 @@ pub fn render_titlebar(
                 .orientation(Orientation::Vertical)
                 .sx(|s| s.h(px(16.0)).flex_shrink_0()),
         )
-        .child(render_quick_search_trigger(&ws.controller.strings, skip_anim, cx))
+        .child(render_quick_search_trigger(
+            &ws.controller.strings,
+            skip_anim,
+            cx,
+        ))
         .child(
             div()
                 .id("titlebar-drag-filler")
@@ -363,9 +367,9 @@ fn format_connected_label(controller: &AppController) -> String {
         (true, false) => host.to_owned(),
         (false, true) => db.to_owned(),
         (false, false) => {
-            let is_not_connected = crate::i18n::Locale::ALL
-                .iter()
-                .any(|loc| status.engine_version == crate::i18n::Strings::for_locale(*loc).not_connected);
+            let is_not_connected = crate::i18n::Locale::ALL.iter().any(|loc| {
+                status.engine_version == crate::i18n::Strings::for_locale(*loc).not_connected
+            });
             if !status.engine_version.is_empty() && !is_not_connected {
                 status.engine_version.clone()
             } else {
