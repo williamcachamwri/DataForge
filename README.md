@@ -12,6 +12,9 @@
 [![Memory](https://img.shields.io/badge/RAM-~55%20MB%20under%20load-F59E0B?style=flat-square)](#real-world-benchmarks)
 [![Startup](https://img.shields.io/badge/Cold%20Startup-~10%20ms-6366F1?style=flat-square)](#real-world-benchmarks)
 [![Windows](https://img.shields.io/badge/Platform-Windows%2011-0078D4?style=flat-square&logo=windows11&logoColor=white)](#building-from-source)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE-MIT)
+
+[English](README.md) · [Tiếng Việt](README.vi.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Español](README.es.md) · [Français](README.fr.md)
 
 </div>
 
@@ -144,3 +147,12 @@ DataForge/
     ├── dataforge-windows-app/    # HeroGPUI desktop UI, titlebar, grid, editor, modals
     └── dataforge-e2e/            # End-to-end SQLite & UI performance benchmarks
 ```
+
+
+---
+
+## Community, Security & License
+
+- **Code of Conduct**: See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- **Security Policy**: See [SECURITY.md](SECURITY.md) for vulnerability reporting and local-first privacy guarantees.
+- **License**: DataForge is available under the [MIT License](LICENSE-MIT) (with upstream core attribution to [TableProApp/TablePro](https://github.com/TableProApp/TablePro), also under MIT) alongside [LICENSE](LICENSE).
