@@ -24,8 +24,8 @@ use super::DataForgeWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::ToastSeverity;
 use super::theme::{
-    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, hairline_border_color, is_reduced_motion,
-    muted_surface_bg,
+    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, HOVER_FEEDBACK_MS, animate_fade_in,
+    hairline_border_color, is_reduced_motion, muted_surface_bg,
 };
 
 const ALL_SCHEMAS_KEY: &str = "__all_schemas__";
@@ -368,17 +368,24 @@ fn render_grid_edit_controls(
     let can_add_row = is_connected && has_grid_columns;
     let can_commit = is_connected && pending_edits > 0;
 
+    let commit_el = render_commit_badge_button(can_commit, pending_edits, skip_anim, cx);
+    let commit_el = if can_commit {
+        animate_fade_in(
+            div().child(commit_el),
+            "toolbar-commit-active",
+            HOVER_FEEDBACK_MS,
+            cx,
+        )
+    } else {
+        commit_el
+    };
+
     div()
         .flex()
         .items_center()
         .gap(px(6.0))
         .child(render_grid_edit_group(can_add_row, pending_edits, cx))
-        .child(render_commit_badge_button(
-            can_commit,
-            pending_edits,
-            skip_anim,
-            cx,
-        ))
+        .child(commit_el)
         .into_any_element()
 }
 
@@ -599,19 +606,8 @@ fn render_connected_right_controls(
                 .is_icon_only(true)
                 .aria_label("Refresh Schema Objects")
                 .on_press(cx.listener(|ws, _, _, cx| {
-                    match ws.controller.refresh_schema_sidebar_blocking() {
-                        Ok(()) => {
-                            ws.notify_toast(ToastSeverity::Success, "Schema refreshed", None, cx);
-                        }
-                        Err(err) => {
-                            ws.notify_toast(
-                                ToastSeverity::Error,
-                                "Schema refresh failed",
-                                Some(err.to_string().into()),
-                                cx,
-                            );
-                        }
-                    }
+                    super::sidebar::refresh_active_schema(ws, cx);
+                    ws.notify_toast(ToastSeverity::Info, "Refreshing schema...", None, cx);
                     cx.notify();
                 }))
                 .child(
