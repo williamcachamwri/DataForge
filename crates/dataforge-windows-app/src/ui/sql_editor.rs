@@ -9,8 +9,9 @@ use std::time::Instant;
 
 use dataforge_gfx::editor_renderer::{CursorMode, EditorCursor, EditorSelection};
 use dataforge_state::editor::{
-    AutocompleteState, CursorPosition, IncrementalLineHighlighter, Rope, SchemaCompletionItem,
-    SchemaCompletionKind, UndoHistory, VimAction, VimMode, VimMotion, VimOperator, VimState,
+    AutocompleteContext, AutocompleteState, CursorPosition, IncrementalLineHighlighter, Rope,
+    SchemaCompletionItem, SchemaCompletionKind, UndoHistory, VimAction, VimMode, VimMotion,
+    VimOperator, VimState,
 };
 use dataforge_state::tabs::{TabId, TabKind};
 use herogpui::components::{
@@ -27,9 +28,9 @@ use herogpui::gpui::{
     Context, Element, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle,
     Font, FontFeatures, FontWeight, GlobalElementId, Hsla, InspectorElementId, InteractiveElement,
     IntoElement, KeyDownEvent, Keystroke, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, ParentElement, Pixels, Point, ScrollEvent, ShapedLine, SharedString, Style,
-    Styled, TextAlign, TextRun, UTF16Selection, WeakEntity, Window, div, fill, outline, point, px,
-    relative, size,
+    MouseUpEvent, ParentElement, Pixels, Point, ScrollEvent, ShapedLine, SharedString,
+    StatefulInteractiveElement, Style, Styled, TextAlign, TextRun, UTF16Selection, WeakEntity,
+    Window, div, fill, outline, point, px, relative, size,
 };
 use herogpui::theme::ActiveTheme;
 use tablepro_core::sql_syntax::SqlGrammar;
@@ -359,11 +360,16 @@ impl SqlEditorDocEntity {
             return;
         }
         let head = self.primary_cursor().head;
-        let Some(prefix) = identifier_prefix_before(&self.rope, head) else {
-            self.autocomplete.dismiss();
-            return;
-        };
-        self.autocomplete.update_prefix(&prefix);
+        let prefix_opt = identifier_prefix_before(&self.rope, head);
+        let context = detect_sql_autocomplete_context(&self.rope, head, prefix_opt.as_deref());
+        match prefix_opt {
+            Some(prefix) => self.autocomplete.update_prefix_with_context(&prefix, context),
+            None if context == AutocompleteContext::TableExpecting => {
+                self.autocomplete
+                    .update_prefix_with_context("", AutocompleteContext::TableExpecting);
+            }
+            None => self.autocomplete.dismiss(),
+        }
     }
 
     fn push_sync_to_workspace(&mut self, cx: &mut Context<Self>) {
@@ -498,11 +504,16 @@ impl SqlEditorDocEntity {
                 cursor.anchor = cursor.head.saturating_sub(prefix_len);
             }
         }
-        self.suppress_autocomplete = true;
+        let should_chain_table_popup = item.kind == SchemaCompletionKind::Snippet
+            && (item.insert_text.ends_with("FROM ") || item.insert_text.ends_with("JOIN "));
+        self.suppress_autocomplete = !should_chain_table_popup;
         self.history
             .apply_multi_caret_insert(&mut self.rope, &mut self.cursors, &item.insert_text);
         dedup_collapsed_cursors(&mut self.cursors);
         self.after_text_mutation(false, cx);
+        if should_chain_table_popup {
+            self.refresh_autocomplete_from_cursor();
+        }
         true
     }
 
@@ -728,10 +739,13 @@ impl SqlEditorDocEntity {
         if ctrl && !ks.modifiers.alt {
             match key {
                 "space" => {
-                    let prefix = identifier_prefix_before(&self.rope, self.primary_cursor().head)
-                        .unwrap_or_default();
+                    let head = self.primary_cursor().head;
+                    let prefix_opt = identifier_prefix_before(&self.rope, head);
+                    let context =
+                        detect_sql_autocomplete_context(&self.rope, head, prefix_opt.as_deref());
                     self.suppress_autocomplete = false;
-                    self.autocomplete.update_prefix(&prefix);
+                    self.autocomplete
+                        .update_prefix_with_context(prefix_opt.as_deref().unwrap_or(""), context);
                     cx.notify();
                     return true;
                 }
@@ -1662,11 +1676,18 @@ fn paint_editor_surface(
     let border_color = cx.colors().border;
     let _ = doc;
 
-    window.paint_quad(fill(bounds, palette.editor_background));
     let gutter_bounds = Bounds::new(
         bounds.origin,
         size(px(state.gutter_width_px), bounds.size.height),
     );
+    let code_bounds = Bounds::new(
+        point(bounds.origin.x + px(state.gutter_width_px), bounds.origin.y),
+        size(
+            bounds.size.width - px(state.gutter_width_px),
+            bounds.size.height,
+        ),
+    );
+    window.paint_quad(fill(code_bounds, palette.editor_background));
     window.paint_quad(fill(gutter_bounds, palette.editor_gutter_background));
     window.paint_quad(fill(
         Bounds::new(
@@ -1679,13 +1700,6 @@ fn paint_editor_surface(
         border_color,
     ));
 
-    let code_bounds = Bounds::new(
-        point(bounds.origin.x + px(state.gutter_width_px), bounds.origin.y),
-        size(
-            bounds.size.width - px(state.gutter_width_px),
-            bounds.size.height,
-        ),
-    );
     window.with_content_mask(
         Some(ContentMask {
             bounds: code_bounds,
@@ -1893,7 +1907,6 @@ fn render_editor_panel_body(
         .size_full()
         .flex()
         .flex_col()
-        .bg(palette.editor_background)
         .child(toolbar)
         .child(main_row);
     attach_editor_actions(root, cx).into_any_element()
@@ -1954,7 +1967,6 @@ fn build_interactive_editor_canvas(
         .h_full()
         .cursor_text()
         .track_focus(focus_handle)
-        .bg(palette.editor_background)
         .on_key_down(move |event, window, cx| {
             key_doc.update(cx, |doc, cx| doc.handle_key_down(event, window, cx));
         })
@@ -2516,30 +2528,26 @@ fn render_autocomplete_overlay(
     let (anchor_x, anchor_y) = doc.caret_overlay_position();
     let _ = doc;
 
-    let selected_key = SharedString::from(format!("ac:{selected_idx}"));
-    let lb_items: Vec<ListBoxItem> = items
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            let icon = match item.kind {
-                SchemaCompletionKind::Schema => IconName::Database,
-                SchemaCompletionKind::Table => IconName::Table,
-                SchemaCompletionKind::Column => IconName::Columns2,
-                SchemaCompletionKind::Function => IconName::Sparkles,
-                SchemaCompletionKind::Keyword => IconName::Code,
-            };
-            let mut row = ListBoxItem::new(format!("ac:{i}"), item.label.clone())
-                .icon(icon)
-                .shortcut(completion_kind_tag(item.kind));
-            if let Some(detail) = &item.detail {
-                row = row.description(detail.clone());
-            }
-            row
-        })
-        .collect();
+    let max_h = (items.len() as f32 * AUTOCOMPLETE_ROW_HEIGHT_PX + 12.0).min(248.0);
+    let mut list_col = div()
+        .id("sql-autocomplete-list")
+        .max_h(px(max_h))
+        .overflow_y_scroll()
+        .p(px(4.0))
+        .flex()
+        .flex_col()
+        .gap(px(2.0));
 
-    let click_doc = doc_entity.clone();
-    let max_h = (items.len() as f32 * AUTOCOMPLETE_ROW_HEIGHT_PX + 16.0).min(248.0);
+    for (i, item) in items.iter().enumerate() {
+        list_col = list_col.child(render_autocomplete_row(
+            i,
+            item,
+            i == selected_idx,
+            doc_entity,
+            cx,
+        ));
+    }
+
     div()
         .id("sql-autocomplete-popup")
         .absolute()
@@ -2552,23 +2560,7 @@ fn render_autocomplete_overlay(
         .border_color(theme::hairline_border_color(cx))
         .shadow_lg()
         .on_mouse_down(MouseButton::Left, |_e, _w, cx| cx.stop_propagation())
-        .child(
-            ListBox::new("sql-autocomplete-listbox", lb_items)
-                .selection_mode(SelectionMode::Single)
-                .selected_key(selected_key)
-                .max_h(px(max_h))
-                .on_action(move |key, window, cx| {
-                    if let Some(idx) = key
-                        .strip_prefix("ac:")
-                        .and_then(|s| s.parse::<usize>().ok())
-                    {
-                        click_doc.update(cx, |doc, cx| {
-                            let _ = doc.accept_autocomplete_at(idx, cx);
-                            window.focus(&doc.focus_handle, cx);
-                        });
-                    }
-                }),
-        )
+        .child(list_col)
         .child(
             div()
                 .px(px(8.0))
@@ -2579,8 +2571,99 @@ fn render_autocomplete_overlay(
                 .justify_between()
                 .text_xs()
                 .text_color(with_alpha(palette.editor_text, 0.55))
-                .child("Tab / Enter to insert")
+                .child("Click / Tab / Enter to insert")
                 .child("Esc to dismiss"),
+        )
+        .into_any_element()
+}
+
+fn render_autocomplete_row(
+    idx: usize,
+    item: &SchemaCompletionItem,
+    is_selected: bool,
+    doc_entity: &Entity<SqlEditorDocEntity>,
+    cx: &App,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let icon = match item.kind {
+        SchemaCompletionKind::Snippet => IconName::Sparkles,
+        SchemaCompletionKind::Schema => IconName::Database,
+        SchemaCompletionKind::Table => IconName::Table,
+        SchemaCompletionKind::Column => IconName::Columns2,
+        SchemaCompletionKind::Function => IconName::Terminal,
+        SchemaCompletionKind::Keyword => IconName::Code,
+    };
+    let row_bg = if is_selected {
+        with_alpha(colors.accent.color, 0.14)
+    } else {
+        herogpui::gpui::transparent_black()
+    };
+    let hover_bg = with_alpha(colors.foreground, 0.06);
+    let click_doc = doc_entity.clone();
+    let mut text_col = div().min_w_0().flex_1().flex().flex_col().child(
+        div()
+            .text_sm()
+            .font_weight(if is_selected {
+                FontWeight::SEMIBOLD
+            } else {
+                FontWeight::MEDIUM
+            })
+            .text_color(colors.foreground)
+            .truncate()
+            .child(item.label.clone()),
+    );
+    if let Some(detail) = item.detail.clone() {
+        text_col = text_col.child(
+            div()
+                .text_xs()
+                .text_color(colors.muted)
+                .truncate()
+                .child(detail),
+        );
+    }
+    div()
+        .id(SharedString::from(format!("ac-item-{idx}")))
+        .w_full()
+        .px(px(8.0))
+        .py(px(5.0))
+        .rounded(px(6.0))
+        .bg(row_bg)
+        .hover(move |s| s.bg(hover_bg))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(8.0))
+        .on_mouse_down(MouseButton::Left, move |_e, window, cx| {
+            cx.stop_propagation();
+            click_doc.update(cx, |doc, cx| {
+                let _ = doc.accept_autocomplete_at(idx, cx);
+                window.focus(&doc.focus_handle, cx);
+            });
+        })
+        .child(
+            div()
+                .min_w_0()
+                .flex_1()
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .child(Icon::new(icon).size(IconSize::Sm).color(if is_selected {
+                    colors.accent.color
+                } else {
+                    colors.muted
+                }))
+                .child(text_col),
+        )
+        .child(
+            div()
+                .px(px(5.0))
+                .py(px(1.0))
+                .rounded(px(4.0))
+                .bg(with_alpha(colors.foreground, 0.06))
+                .text_xs()
+                .text_color(colors.muted)
+                .child(completion_kind_tag(item.kind)),
         )
         .into_any_element()
 }
@@ -3159,8 +3242,101 @@ fn compute_catalog_fingerprint(ws: &DataForgeWorkspace, grammar: SqlGrammar) -> 
     (s << 40) ^ (o << 20) ^ (c << 4) ^ (grammar as u64)
 }
 
+const SQL_SNIPPETS: &[(&str, &str, &str)] = &[
+    (
+        "sel · SELECT * FROM <table>",
+        "Query snippet — auto-suggests table names after FROM",
+        "SELECT *\nFROM ",
+    ),
+    (
+        "sell · SELECT * FROM <table> LIMIT 100",
+        "Paginated table preview snippet",
+        "SELECT *\nFROM \nLIMIT 100;",
+    ),
+    (
+        "selw · SELECT * FROM <table> WHERE ...",
+        "Filtered query snippet",
+        "SELECT *\nFROM \nWHERE ",
+    ),
+    (
+        "cnt · SELECT COUNT(*) FROM <table>",
+        "Row count aggregation snippet",
+        "SELECT COUNT(*) AS total\nFROM ",
+    ),
+    (
+        "ins · INSERT INTO <table> (...) VALUES (...)",
+        "Insert row snippet",
+        "INSERT INTO  ()\nVALUES ();",
+    ),
+    (
+        "upd · UPDATE <table> SET ... WHERE ...",
+        "Update rows snippet",
+        "UPDATE \nSET \nWHERE ;",
+    ),
+    (
+        "del · DELETE FROM <table> WHERE ...",
+        "Delete rows snippet",
+        "DELETE FROM \nWHERE ;",
+    ),
+    (
+        "join · INNER JOIN <table> ON ...",
+        "Inner join snippet",
+        "INNER JOIN  ON ",
+    ),
+    (
+        "ljoin · LEFT JOIN <table> ON ...",
+        "Left outer join snippet",
+        "LEFT JOIN  ON ",
+    ),
+    (
+        "cte · WITH cte AS (...)",
+        "Common Table Expression snippet",
+        "WITH cte AS (\n    SELECT *\n    FROM \n)\nSELECT * FROM cte;",
+    ),
+    (
+        "ct · CREATE TABLE <table> (...)",
+        "Create table DDL snippet",
+        "CREATE TABLE  (\n    id INTEGER PRIMARY KEY\n);",
+    ),
+];
+
+fn detect_sql_autocomplete_context(
+    rope: &Rope,
+    head_char: usize,
+    active_prefix: Option<&str>,
+) -> AutocompleteContext {
+    let prefix_chars = active_prefix.map_or(0, |p| p.chars().count());
+    let before_end = head_char.saturating_sub(prefix_chars);
+    let start_char = before_end.saturating_sub(96);
+    let slice: String = rope.text().chars().skip(start_char).take(before_end - start_char).collect();
+    if active_prefix.is_none() && !slice.chars().last().is_some_and(char::is_whitespace) {
+        return AutocompleteContext::General;
+    }
+    let prev_word = slice
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .rfind(|w| !w.is_empty())
+        .map(str::to_ascii_uppercase);
+    match prev_word.as_deref() {
+        Some("FROM" | "JOIN" | "INTO" | "UPDATE" | "TABLE" | "TRUNCATE" | "DESCRIBE") => {
+            AutocompleteContext::TableExpecting
+        }
+        Some("SELECT" | "WHERE" | "ON" | "SET" | "BY" | "HAVING" | "AND" | "OR") => {
+            AutocompleteContext::ColumnExpecting
+        }
+        _ => AutocompleteContext::General,
+    }
+}
+
 fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
     let mut items = Vec::new();
+    for &(label, detail, insert_text) in SQL_SNIPPETS {
+        items.push(SchemaCompletionItem {
+            label: label.to_owned(),
+            kind: SchemaCompletionKind::Snippet,
+            detail: Some(detail.to_owned()),
+            insert_text: insert_text.to_owned(),
+        });
+    }
     for schema in &ws.controller.cached_schemas {
         items.push(SchemaCompletionItem {
             label: schema.name.clone(),
@@ -3179,6 +3355,12 @@ fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
             kind: SchemaCompletionKind::Table,
             detail: Some(detail),
             insert_text: obj.name.clone(),
+        });
+        items.push(SchemaCompletionItem {
+            label: format!("SELECT * FROM {} LIMIT 100", obj.name),
+            kind: SchemaCompletionKind::Snippet,
+            detail: Some(format!("Quick query · {}", obj.name)),
+            insert_text: format!("SELECT * FROM {} LIMIT 100;", obj.name),
         });
     }
     for col in &ws.controller.structure_columns {
@@ -3210,6 +3392,7 @@ fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
 
 const fn completion_kind_tag(kind: SchemaCompletionKind) -> &'static str {
     match kind {
+        SchemaCompletionKind::Snippet => "SNIP",
         SchemaCompletionKind::Schema => "SCHEMA",
         SchemaCompletionKind::Table => "TABLE",
         SchemaCompletionKind::Column => "COL",
@@ -3218,7 +3401,7 @@ const fn completion_kind_tag(kind: SchemaCompletionKind) -> &'static str {
     }
 }
 
-const fn grammar_label(grammar: SqlGrammar) -> &'static str {
+pub(crate) const fn grammar_label(grammar: SqlGrammar) -> &'static str {
     match grammar {
         SqlGrammar::PostgreSql => "PostgreSQL",
         SqlGrammar::MySql => "MySQL",
