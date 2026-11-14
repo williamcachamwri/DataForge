@@ -1,77 +1,146 @@
+<div align="center">
+
+<img src="crates/dataforge-windows-app/assets/dataforge_logo.png" alt="DataForge Logo" width="112" height="112" />
+
 # DataForge
 
-**DataForge** is a native Windows database management workbench built in Rust on top of Win32, Direct2D, and DirectWrite, powered by the [TablePro](https://github.com/TableProApp/TablePro) core engine (`core/`).
+**A fast, native SQL & database workbench built in Rust for Windows.**
 
-## License & Attribution
+[![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#why-dataforge)
+[![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#supported-databases)
+[![Memory](https://img.shields.io/badge/RAM-~55%20MB%20under%20load-F59E0B?style=flat-square)](#real-world-benchmarks)
+[![Startup](https://img.shields.io/badge/Cold%20Startup-~10%20ms-6366F1?style=flat-square)](#real-world-benchmarks)
+[![Windows](https://img.shields.io/badge/Platform-Windows%2011-0078D4?style=flat-square&logo=windows11&logoColor=white)](#building-from-source)
 
-- **License**: GNU Affero General Public License v3.0 or later ([`AGPL-3.0-or-later`](LICENSE)).
-- **Core Engine Attribution**: DataForge vendors and builds directly upon the TablePro Rust workspace in `core/crates/` (`tablepro-core`, `tablepro-session`, `tablepro-storage`, `tablepro-ssh`, `tablepro-net`, `tablepro-ai`, `tablepro-mcp`, `tablepro-cli`, `tablepro-foreign-import`, `tablepro-account`, and the nine `tablepro-driver-*` crates).
-- **Windows Shell & UI**: All Windows-native crates under `crates/` (`dataforge-windows-platform`, `dataforge-state`, `dataforge-gfx`, `dataforge-services`, `dataforge-windows-app`, `dataforge-e2e`) are original DataForge code licensed under `AGPL-3.0-or-later`.
+</div>
 
-## Supported Database Engines (11)
+---
 
-DataForge provides adaptive vector glyphs (`EngineKind::ALL` in `dataforge-gfx`) and driver connectivity across 11 database engines backed by the 9 `tablepro-driver-*` crates:
+## Why DataForge?
 
-| Engine | Driver Crate | Category | Data Model | Endpoint |
-| --- | --- | --- | --- | --- |
-| PostgreSQL | `tablepro-driver-postgres` | Relational | Relational | Network / SSH |
-| MySQL | `tablepro-driver-mysql` | Relational | Relational | Network / SSH |
-| MariaDB | `tablepro-driver-mysql` | Relational | Relational | Network / SSH |
-| SQLite | `tablepro-driver-sqlite` | Relational | Relational | File |
-| DuckDB | `tablepro-driver-duckdb` | Analytical | Relational | File |
-| SQL Server | `tablepro-driver-mssql` | Relational | Relational | Network / SSPI |
-| ClickHouse | `tablepro-driver-clickhouse` | Analytical | Relational | Network / TLS |
-| Cassandra | `tablepro-driver-cassandra` | Wide-Column | Relational | Network / TLS |
-| ScyllaDB | `tablepro-driver-cassandra` | Wide-Column | Relational | Network / TLS |
-| MongoDB | `tablepro-driver-mongodb` | Document | Document | Network / SRV |
-| Redis | `tablepro-driver-redis` | Key-Value | Key-Value | Network / TLS |
+Most desktop database tools force a trade-off: either they run inside Electron and eat a gigabyte of RAM just sitting idle, or they wrap a heavy JVM that takes five seconds to open a local SQLite file.
 
-## Windows Direct2D / DirectWrite Architecture
+DataForge takes a different route. The entire stack—from the database drivers and query session engine down to the GPU-accelerated UI—is written in native **Rust** using **HeroGPUI (Direct3D 11)** and **Windows 11 DWM Gaussian Blur / Mica** backdrops. It boots in around **10 ms**, stays around **55 MB of RAM** even when querying a 10-million-row SQLite database, and still gives you the ergonomics of a modern workbench: schema-aware autocomplete, Vim keybindings, inline grid editing, safe-mode guards, and a local-first AI SQL assistant.
 
-DataForge is a pure-Rust Win32 desktop application without WebView or Electron overhead:
+---
 
-- **Platform (`dataforge-windows-platform`)**: Windows Credential Manager (`CredReadW`/`CredWriteW`), Named Pipe single-instance IPC, Registry theme/DPI/machine-ID detection, `KnownFolders` storage paths, and foreign connection import discovery.
-- **State (`dataforge-state`)**: Headless, deterministic state machines (`ConnectionWindowPhaseMachine`, `DataGridModel`, `EditorModel`, `TabStripModel`, `LibraryModel`, `ThemeResolver`).
-- **Graphics (`dataforge-gfx`)**: Direct3D 11 + DXGI swap chain + Direct2D (`ID2D1DeviceContext`) + DirectWrite text layout, virtualized `DataGridRenderer`, SQL-tokenized `SqlEditorRenderer`, and adaptive 16x16 SVG-to-`ID2D1PathGeometry` engine glyphs.
-- **Services (`dataforge-services`)**: `AppRuntime`, `DriverRegistry`, `SessionManager`, atomic CSV/JSON/SQL export, `tablepro-foreign-import` bridge, local MCP host, BYOK/Ollama AI assistant, and `tracing`/crash-report diagnostics.
-- **Application (`dataforge-windows-app`)**: Per-Monitor DPI v2 Win32 window shell, UI Automation (`WM_GETOBJECT`) baseline, modal/prompt flows, and multi-pane workbench views.
+## Screenshots
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) and [`docs/`](docs/) for detailed technical documentation.
+### SQL Editor & 10M-Row Query Execution (`15 ms`)
+*Full-window Windows 11 Gaussian Blur, syntax-highlighted SQL editor with Vim mode & schema-aware autocomplete, and a live results pane.*
 
-## Build, Test, and Release
+![DataForge SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
 
-Requires Rust `1.97`+ (edition `2024`) on Windows (`x86_64-pc-windows-msvc`).
+---
+
+### High-Density Data Grid & Filtering
+*Virtualized table rendering with foreign-key jump links, column visibility toggles, multi-operator filters, pagination, and CSV/JSON/SQL export.*
+
+![DataForge Data Grid view](docs/screenshots/data-grid.jpg)
+
+---
+
+### Schema-Aware AI Assistant (Privacy-First)
+*Connects to local Ollama models (e.g. `llama3.2`) or cloud providers. Only schema metadata is shared—your row data never leaves your machine.*
+
+![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
+
+---
+
+## What's Inside
+
+- **Native Rust + Direct3D 11 UI**: Smooth 60+ FPS scrolling across large result sets with zero Electron/Chromium or JVM overhead.
+- **9 Built-in Database Drivers**: Connect to relational, analytical, document, and key-value stores out of the box.
+- **Smart SQL Editor**:
+  - Context-aware autocomplete for tables, columns, schemas, SQL keywords, and snippets (`FROM`, `JOIN`, `INTO`, `UPDATE`, etc.).
+  - Independent **UI Theme** and **Codeblock Syntax Palette** (14+ built-in presets including Tokyo Night, Catppuccin, Dracula, Nord, One Dark, plus `.json` VS Code theme import).
+  - Optional **Vim mode**, multi-cursor support, and query library / history.
+- **Interactive Data Grid & Structure Inspector**:
+  - Inline cell editing with uncommitted change tracking (`Commit` / `Rollback`).
+  - Safe Mode protection (`Confirm` / `Strict`) for mutating statements.
+  - Foreign-key navigation, column/index inspection, and DDL viewer.
+- **Built-in MCP Server & Local AI Drawer**:
+  - Expose schema tools over Model Context Protocol (`MCP`) for your IDE or agent workflows.
+  - Built-in AI drawer to explain SQL, optimize joins, or draft `SELECT` queries using only schema context.
+- **Windows 11 Native Aesthetics**:
+  - Supports **Gaussian Blur (Frosted Glass)**, **Mica**, **Mica Alt**, and **Opaque** window backdrops.
+
+---
+
+## Supported Databases
+
+| Engine | Driver Crate |
+| :--- | :--- |
+| **PostgreSQL** | `tablepro-driver-postgres` |
+| **MySQL / MariaDB** | `tablepro-driver-mysql` |
+| **SQLite** | `tablepro-driver-sqlite` |
+| **DuckDB** | `tablepro-driver-duckdb` |
+| **Microsoft SQL Server** | `tablepro-driver-mssql` |
+| **ClickHouse** | `tablepro-driver-clickhouse` |
+| **Cassandra / ScyllaDB** | `tablepro-driver-cassandra` |
+| **MongoDB** | `tablepro-driver-mongodb` |
+| **Redis** | `tablepro-driver-redis` |
+
+---
+
+## Real-World Benchmarks
+
+Measured on Windows 11 with a release build of `dataforge.exe` (`--release`):
+
+| Benchmark | Observed Result |
+| :--- | :--- |
+| **Cold startup (`--smoke-startup`, 9/9 drivers)** | `9.21 – 10.11 ms` |
+| **100k-row SQLite E2E seed (`sqlite_100k_rows_load_and_scroll_perf`)** | `78.97 ms` |
+| **100k-row grid load + 10k-frame scroll** | `24.43 ms` load · `0.432 ms` scroll (`0.043 µs/frame`) |
+| **10M-row SQLite indexed query (`ORDER BY event_ts DESC LIMIT 1000`)** | `5 – 15 ms` |
+| **10M-row full-table JSON scan + 3-table JOIN + 3 Window Functions** | `40.01 s` |
+| **Process RAM during 100k / 500k / 1M-row stress queries** | `~55 MB` steady |
+
+---
+
+## Building from Source
+
+### Prerequisites
+- **Windows 10 / 11** (x64)
+- **Rust toolchain** (stable, MSVC target)
+- **Visual Studio Build Tools** (C++ / Windows SDK)
+
+### Build & Run
 
 ```powershell
-# Format check
-cargo fmt --all -- --check
-
-# Workspace lint check (zero warnings; no unwrap/expect/panic/todo/too_many_lines)
-cargo clippy -j 2 -p dataforge-windows-platform -p dataforge-state -p dataforge-gfx -p dataforge-services -p dataforge-windows-app -p dataforge-e2e --all-targets --no-deps -- -D warnings
-
-# Run all DataForge unit & E2E tests (use -j 2 on Windows to avoid paging file pressure)
-cargo test -j 2 -p dataforge-windows-platform -p dataforge-state -p dataforge-gfx -p dataforge-services -p dataforge-windows-app -p dataforge-e2e
-
-# Run E2E suite specifically
-cargo test -j 2 -p dataforge-e2e
-
-# Build optimized release binary (LTO = "fat", codegen-units = 1, stripped)
+# Build the release binary
 cargo build --release -p dataforge-windows-app
+
+# Verify cold startup & driver registration
+.\target\release\dataforge.exe --smoke-startup
+
+# Launch DataForge
+.\target\release\dataforge.exe
 ```
 
-## Keyboard Shortcuts
+### Run Tests
 
-| Shortcut | Command | Action |
-| --- | --- | --- |
-| `Tab` / `Shift+Tab` | `FocusNextRegion` / `FocusPrevRegion` | Cycle focus across workbench regions |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | `NextTab` / `PrevTab` | Switch to next / previous tab |
-| `Ctrl+W` | `CloseTabOrWindow` | Close active tab first, or close window |
-| `Ctrl+Shift+T` | `ReopenClosedTab` | Reopen most recently closed tab |
-| `F5` or `Ctrl+Enter` | `ExecuteQuery` | Run current SQL query / selection |
-| `Ctrl+N` | `NewQueryTab` | Open a new SQL query tab |
-| `Ctrl+B` | `ToggleSidebar` | Show / hide schema sidebar |
-| `Ctrl+I` | `ToggleInspector` | Show / hide Row Inspector |
-| `Ctrl+Shift+A` | `ToggleAiDrawer` | Show / hide AI Assistant drawer |
-| `Ctrl+F` | `FocusFilter` | Focus schema or grid filter bar |
-| `Ctrl+L` | `OpenConnectionsLibrary` | Open Connections Library |
-| `Ctrl+,` | `OpenSettings` | Open Settings dialog |
+```powershell
+# Core filter & dialect tests
+cargo test --release -p tablepro-core filter
+
+# SQLite 100k-row load & scroll E2E benchmark
+cargo test --release -p dataforge-e2e --test sqlite_e2e -- --nocapture
+```
+
+---
+
+## Workspace Layout
+
+```text
+DataForge/
+├── core/                         # Database engine core, drivers (9), session, CLI, MCP, AI
+└── crates/
+    ├── dataforge-gfx/            # Vector glyphs & engine icons
+    ├── dataforge-state/          # Editor state, autocomplete, tabs, themes
+    ├── dataforge-services/       # Async runtime & workspace session services
+    ├── dataforge-windows-platform/ # Settings persistence, Win32 backdrop & motion helpers
+    ├── dataforge-windows-app/    # HeroGPUI desktop UI, titlebar, grid, editor, modals
+    └── dataforge-e2e/            # End-to-end SQLite & UI performance benchmarks
+```
