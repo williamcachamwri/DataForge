@@ -946,10 +946,7 @@ fn build_theme_from_spec(spec: &ThemeSpec) -> ThemeDefinition {
     colors.insert(ThemeSlot::DataGridHeaderBackground, rgb24(spec.gutter_bg));
     colors.insert(ThemeSlot::DataGridHeaderText, rgb24(spec.text));
     colors.insert(ThemeSlot::DataGridSelection, rgb24(spec.accent));
-    colors.insert(
-        ThemeSlot::DataGridInactiveSelection,
-        rgb24(spec.selection),
-    );
+    colors.insert(ThemeSlot::DataGridInactiveSelection, rgb24(spec.selection));
     colors.insert(
         ThemeSlot::DataGridSelectionText,
         if is_light {
