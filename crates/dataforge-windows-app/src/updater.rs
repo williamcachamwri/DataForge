@@ -1,7 +1,11 @@
 //! Non-panicking Velopack auto-updater integration backed by GitHub Releases.
 
-use std::sync::mpsc;
+use std::any::Any;
+use std::collections::VecDeque;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::thread;
+use std::time::Duration;
 
 use async_channel::{Receiver, Sender};
 use tracing::{debug, info, warn};
@@ -13,6 +17,9 @@ pub const GITHUB_REPO_URL: &str = "https://github.com/williamcachamwri/DataForge
 
 /// Velopack package identifier (`--packId DataForge`).
 pub const VELOPACK_PACK_ID: &str = "DataForge";
+
+/// Maximum time to wait for a remote update feed check before reporting an error.
+const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(25);
 
 /// Whether the running executable is managed by a Velopack installation or standalone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +80,41 @@ pub enum UpdateEvent {
     },
 }
 
+#[derive(Clone)]
+struct UpdateChannel {
+    events: Arc<Mutex<VecDeque<UpdateEvent>>>,
+    wakeup_tx: Sender<()>,
+    wakeup_rx: Receiver<()>,
+}
+
+impl UpdateChannel {
+    fn new() -> Self {
+        let (wakeup_tx, wakeup_rx) = async_channel::bounded(1);
+        Self {
+            events: Arc::new(Mutex::new(VecDeque::new())),
+            wakeup_tx,
+            wakeup_rx,
+        }
+    }
+
+    fn send(&self, event: UpdateEvent) {
+        {
+            let mut guard = self.events.lock().unwrap_or_else(PoisonError::into_inner);
+            guard.push_back(event);
+        }
+        let _ = self.wakeup_tx.try_send(());
+    }
+
+    fn drain(&self) -> Vec<UpdateEvent> {
+        let mut guard = self.events.lock().unwrap_or_else(PoisonError::into_inner);
+        guard.drain(..).collect()
+    }
+
+    fn subscribe(&self) -> Receiver<()> {
+        self.wakeup_rx.clone()
+    }
+}
+
 /// Non-blocking Velopack update coordinator for [`crate::app::AppController`].
 pub struct UpdaterManager {
     state: UpdateState,
@@ -81,8 +123,7 @@ pub struct UpdaterManager {
     manager: Option<UpdateManager>,
     pending_update: Option<UpdateInfo>,
     ready_asset: Option<VelopackAsset>,
-    tx: Sender<UpdateEvent>,
-    rx: Receiver<UpdateEvent>,
+    channel: UpdateChannel,
     auto_checked: bool,
 }
 
@@ -99,19 +140,15 @@ impl UpdaterManager {
     /// [`InstallMode::Standalone`] and [`UpdateState::StandaloneMode`].
     #[must_use]
     pub fn new() -> Self {
-        let (tx, rx) = async_channel::unbounded();
+        let channel = UpdateChannel::new();
         let source = GithubSource::new(GITHUB_REPO_URL, None, false);
         match UpdateManager::new(source, None, None) {
-            Ok(um) => Self::from_installed_manager(um, tx, rx),
-            Err(err) => Self::from_init_error(&err, tx, rx),
+            Ok(um) => Self::from_installed_manager(um, channel),
+            Err(err) => Self::from_init_error(&err, channel),
         }
     }
 
-    fn from_installed_manager(
-        um: UpdateManager,
-        tx: Sender<UpdateEvent>,
-        rx: Receiver<UpdateEvent>,
-    ) -> Self {
+    fn from_installed_manager(um: UpdateManager, channel: UpdateChannel) -> Self {
         let current_version = um.get_current_version_as_string();
         let pending_restart = um.get_update_pending_restart();
         let (state, ready_asset) = match pending_restart {
@@ -135,17 +172,12 @@ impl UpdaterManager {
             manager: Some(um),
             pending_update: None,
             ready_asset,
-            tx,
-            rx,
+            channel,
             auto_checked: false,
         }
     }
 
-    fn from_init_error(
-        err: &velopack::Error,
-        tx: Sender<UpdateEvent>,
-        rx: Receiver<UpdateEvent>,
-    ) -> Self {
+    fn from_init_error(err: &velopack::Error, channel: UpdateChannel) -> Self {
         let state = map_velopack_error(err);
         match &state {
             UpdateState::StandaloneMode => {
@@ -163,8 +195,7 @@ impl UpdaterManager {
             manager: None,
             pending_update: None,
             ready_asset: None,
-            tx,
-            rx,
+            channel,
             auto_checked: false,
         }
     }
@@ -196,10 +227,10 @@ impl UpdaterManager {
         )
     }
 
-    /// Subscribes to asynchronous [`UpdateEvent`] updates from background workers.
+    /// Subscribes to coalesced wakeup signals emitted when background [`UpdateEvent`]s arrive.
     #[must_use]
-    pub fn subscribe(&self) -> Receiver<UpdateEvent> {
-        self.rx.clone()
+    pub fn subscribe(&self) -> Receiver<()> {
+        self.channel.subscribe()
     }
 
     /// Triggers at most one startup update check when running in Velopack mode.
@@ -227,21 +258,17 @@ impl UpdaterManager {
         }
         let Some(um) = self.manager.clone() else {
             self.state = UpdateState::StandaloneMode;
-            let _ = self
-                .tx
-                .try_send(UpdateEvent::StateChanged(UpdateState::StandaloneMode));
+            self.channel
+                .send(UpdateEvent::StateChanged(UpdateState::StandaloneMode));
             return;
         };
 
         self.state = UpdateState::Checking;
         self.pending_update = None;
-        let tx = self.tx.clone();
+        let channel = self.channel.clone();
         let spawned = thread::Builder::new()
             .name("dataforge-update-check".to_owned())
-            .spawn(move || {
-                let event = event_from_check_result(um.check_for_updates());
-                let _ = tx.try_send(event);
-            });
+            .spawn(move || run_check_with_timeout(um, &channel));
         if let Err(err) = spawned {
             self.state = UpdateState::Error(format!("failed to start update check: {err}"));
         }
@@ -263,23 +290,15 @@ impl UpdaterManager {
 
         self.state = UpdateState::Downloading { percent: 0 };
         let (prog_tx, prog_rx) = mpsc::channel::<i16>();
-        let tx_progress = self.tx.clone();
+        let channel_progress = self.channel.clone();
         let _ = thread::Builder::new()
             .name("dataforge-update-progress".to_owned())
-            .spawn(move || forward_progress_events(&prog_rx, &tx_progress));
+            .spawn(move || forward_progress_events(&prog_rx, &channel_progress));
 
-        let tx_done = self.tx.clone();
+        let channel_done = self.channel.clone();
         let spawned = thread::Builder::new()
             .name("dataforge-update-download".to_owned())
-            .spawn(move || {
-                let event = match um.download_updates(&info, Some(prog_tx)) {
-                    Ok(()) => UpdateEvent::Downloaded {
-                        asset: Box::new(info.TargetFullRelease),
-                    },
-                    Err(err) => UpdateEvent::StateChanged(map_velopack_error(&err)),
-                };
-                let _ = tx_done.try_send(event);
-            });
+            .spawn(move || run_download_worker(um, info, prog_tx, &channel_done));
         if let Err(err) = spawned {
             self.state = UpdateState::Error(format!("failed to start update download: {err}"));
         }
@@ -311,10 +330,10 @@ impl UpdaterManager {
     ///
     /// Returns `true` if at least one event modified state.
     pub fn drain_events(&mut self) -> bool {
-        let mut changed = false;
-        while let Ok(event) = self.rx.try_recv() {
+        let events = self.channel.drain();
+        let changed = !events.is_empty();
+        for event in events {
             self.apply_event(event);
-            changed = true;
         }
         changed
     }
@@ -340,6 +359,111 @@ impl UpdaterManager {
     }
 }
 
+fn run_check_with_timeout(um: UpdateManager, channel: &UpdateChannel) {
+    let (done_tx, done_rx) = mpsc::channel();
+    let spawned = thread::Builder::new()
+        .name("dataforge-update-http".to_owned())
+        .spawn(move || {
+            let outcome = catch_unwind(AssertUnwindSafe(|| um.check_for_updates()));
+            let event = match outcome {
+                Ok(res) => event_from_check_result(res),
+                Err(payload) => UpdateEvent::StateChanged(UpdateState::Error(format!(
+                    "update check panicked: {}",
+                    panic_payload_message(payload)
+                ))),
+            };
+            let _ = done_tx.send(event);
+        });
+    if let Err(err) = spawned {
+        channel.send(UpdateEvent::StateChanged(UpdateState::Error(format!(
+            "failed to spawn update check worker: {err}"
+        ))));
+        return;
+    }
+
+    let event = match done_rx.recv_timeout(UPDATE_CHECK_TIMEOUT) {
+        Ok(event) => event,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            warn!("Velopack update check timed out");
+            UpdateEvent::StateChanged(UpdateState::Error(format!(
+                "Update check timed out after {}s.",
+                UPDATE_CHECK_TIMEOUT.as_secs()
+            )))
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => {
+            warn!("Velopack update check worker terminated unexpectedly");
+            UpdateEvent::StateChanged(UpdateState::Error(
+                "Update check worker exited unexpectedly.".to_owned(),
+            ))
+        }
+    };
+    log_check_event(&event);
+    channel.send(event);
+}
+
+fn run_download_worker(
+    um: UpdateManager,
+    info: UpdateInfo,
+    prog_tx: mpsc::Sender<i16>,
+    channel: &UpdateChannel,
+) {
+    let outcome = catch_unwind(AssertUnwindSafe(|| {
+        um.download_updates(&info, Some(prog_tx))
+    }));
+    let event = match outcome {
+        Ok(Ok(())) => {
+            info!(
+                version = %info.TargetFullRelease.Version,
+                "Velopack update package downloaded"
+            );
+            UpdateEvent::Downloaded {
+                asset: Box::new(info.TargetFullRelease),
+            }
+        }
+        Ok(Err(err)) => {
+            warn!(error = %err, "Velopack update download failed");
+            UpdateEvent::StateChanged(map_velopack_error(&err))
+        }
+        Err(payload) => {
+            let msg = format!(
+                "update download panicked: {}",
+                panic_payload_message(payload)
+            );
+            warn!(error = %msg, "Velopack update download panicked");
+            UpdateEvent::StateChanged(UpdateState::Error(msg))
+        }
+    };
+    channel.send(event);
+}
+
+fn panic_payload_message(payload: Box<dyn Any + Send>) -> String {
+    if let Some(msg) = payload.downcast_ref::<&str>() {
+        (*msg).to_owned()
+    } else if let Some(msg) = payload.downcast_ref::<String>() {
+        msg.clone()
+    } else {
+        "unknown panic".to_owned()
+    }
+}
+
+fn log_check_event(event: &UpdateEvent) {
+    match event {
+        UpdateEvent::Available { info } => {
+            info!(
+                version = %info.TargetFullRelease.Version,
+                "DataForge update available"
+            );
+        }
+        UpdateEvent::StateChanged(UpdateState::UpToDate) => {
+            info!("DataForge is up to date");
+        }
+        UpdateEvent::StateChanged(UpdateState::Error(err)) => {
+            warn!(error = %err, "Velopack update check failed");
+        }
+        _ => {}
+    }
+}
+
 fn event_from_check_result(result: Result<UpdateCheck, velopack::Error>) -> UpdateEvent {
     match result {
         Ok(UpdateCheck::UpdateAvailable(info)) => UpdateEvent::Available { info },
@@ -357,7 +481,7 @@ fn map_velopack_error(err: &velopack::Error) -> UpdateState {
     }
 }
 
-fn forward_progress_events(prog_rx: &mpsc::Receiver<i16>, tx: &Sender<UpdateEvent>) {
+fn forward_progress_events(prog_rx: &mpsc::Receiver<i16>, channel: &UpdateChannel) {
     let mut last_percent: Option<u8> = None;
     while let Ok(raw) = prog_rx.recv() {
         let clamped = u8::try_from(raw.clamp(0, 100)).unwrap_or(100);
@@ -365,7 +489,7 @@ fn forward_progress_events(prog_rx: &mpsc::Receiver<i16>, tx: &Sender<UpdateEven
             continue;
         }
         last_percent = Some(clamped);
-        let _ = tx.try_send(UpdateEvent::StateChanged(UpdateState::Downloading {
+        channel.send(UpdateEvent::StateChanged(UpdateState::Downloading {
             percent: clamped,
         }));
     }
@@ -503,7 +627,8 @@ mod tests {
     #[test]
     fn forward_progress_deduplicates_and_clamps_percentages() {
         let (prog_tx, prog_rx) = mpsc::channel();
-        let (tx, rx) = async_channel::unbounded();
+        let channel = UpdateChannel::new();
+        let wakeup = channel.subscribe();
         let _ = prog_tx.send(-5);
         let _ = prog_tx.send(0);
         let _ = prog_tx.send(42);
@@ -511,14 +636,29 @@ mod tests {
         let _ = prog_tx.send(150);
         drop(prog_tx);
 
-        forward_progress_events(&prog_rx, &tx);
+        forward_progress_events(&prog_rx, &channel);
 
+        assert!(wakeup.try_recv().is_ok());
         let mut percents = Vec::new();
-        while let Ok(UpdateEvent::StateChanged(UpdateState::Downloading { percent })) =
-            rx.try_recv()
-        {
-            percents.push(percent);
+        for event in channel.drain() {
+            if let UpdateEvent::StateChanged(UpdateState::Downloading { percent }) = event {
+                percents.push(percent);
+            }
         }
         assert_eq!(percents, vec![0, 42, 100]);
+    }
+
+    #[test]
+    fn subscribe_wakeup_does_not_consume_queued_events() {
+        let mut mgr = UpdaterManager::new();
+        let wakeup = mgr.subscribe();
+        mgr.apply_event(UpdateEvent::StateChanged(UpdateState::Checking));
+        mgr.channel
+            .send(UpdateEvent::StateChanged(UpdateState::UpToDate));
+
+        // Receiving the wakeup signal must leave queued events intact for drain_events().
+        assert!(wakeup.try_recv().is_ok());
+        assert!(mgr.drain_events());
+        assert_eq!(mgr.state(), &UpdateState::UpToDate);
     }
 }
