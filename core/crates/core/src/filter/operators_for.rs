@@ -16,6 +16,22 @@ const COMPARISON: &[FilterOp] = &[
     FilterOp::IsNull,
     FilterOp::IsNotNull,
 ];
+const NUMERIC_COMPARISON: &[FilterOp] = &[
+    FilterOp::Eq,
+    FilterOp::NotEq,
+    FilterOp::Lt,
+    FilterOp::LtEq,
+    FilterOp::Gt,
+    FilterOp::GtEq,
+    FilterOp::Between,
+    FilterOp::Contains,
+    FilterOp::StartsWith,
+    FilterOp::EndsWith,
+    FilterOp::In,
+    FilterOp::NotIn,
+    FilterOp::IsNull,
+    FilterOp::IsNotNull,
+];
 const TEXTUAL: &[FilterOp] = &[
     FilterOp::Eq,
     FilterOp::NotEq,
@@ -59,8 +75,8 @@ pub fn operators_for(kind: &ColumnKind) -> &'static [FilterOp] {
         ColumnKind::Integer(_)
         | ColumnKind::Decimal { .. }
         | ColumnKind::Money { .. }
-        | ColumnKind::Float(_)
-        | ColumnKind::Date
+        | ColumnKind::Float(_) => NUMERIC_COMPARISON,
+        ColumnKind::Date
         | ColumnKind::Time { .. }
         | ColumnKind::Timestamp { .. }
         | ColumnKind::Interval => COMPARISON,
