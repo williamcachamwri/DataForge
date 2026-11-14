@@ -1,0 +1,48 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+      - skip-changelog
+    authors:
+      - dependabot[bot]
+      - renovate[bot]
+  categories:
+    - title: Features
+      labels:
+        - feat
+        - feature
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - fix
+        - bug
+    - title: Performance
+      labels:
+        - perf
+        - performance
+    - title: Localization (i18n)
+      labels:
+        - i18n
+        - l10n
+        - localization
+    - title: Refactoring
+      labels:
+        - refactor
+    - title: Documentation
+      labels:
+        - docs
+        - documentation
+    - title: CI / CD
+      labels:
+        - ci
+    - title: Build & Dependencies
+      labels:
+        - build
+        - dependencies
+    - title: Maintenance
+      labels:
+        - chore
+        - release
+    - title: Other Changes
+      labels:
+        - "*"
