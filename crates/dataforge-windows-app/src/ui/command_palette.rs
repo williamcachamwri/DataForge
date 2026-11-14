@@ -6,6 +6,7 @@ use herogpui::gpui::{AnyElement, Context, IntoElement, SharedString, Window, px}
 
 use crate::accessibility::KeyCommand;
 use crate::app::{AppController, ScreenMode};
+use crate::i18n::Strings;
 use crate::views::status_bar::TableViewMode;
 use dataforge_state::connection_window::ConnectionWindowPhase;
 use dataforge_state::tabs::{TabConnectionId, TabId, TabKind};
@@ -64,12 +65,13 @@ pub fn render_command_palette(
     _window: &mut Window,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> Option<AnyElement> {
+    let s = &ws.controller.strings;
     let items = build_command_items(&ws.controller);
     let palette = CommandPalette::new("dataforge-command-palette", items)
         .is_open(ws.command_palette_ui.is_open())
-        .placeholder("Search actions, connections, tables, tabs, or queries...")
-        .empty_text("No matching commands or objects")
-        .label("DataForge Command Palette")
+        .placeholder(s.cmd_palette_placeholder)
+        .empty_text(s.cmd_palette_empty)
+        .label(s.cmd_palette_label)
         .width(px(600.0))
         .max_list_height(px(400.0))
         .close_on_select(true)
@@ -88,17 +90,22 @@ pub fn render_command_palette(
 }
 
 fn build_command_items(controller: &AppController) -> Vec<CommandItem> {
+    let s = &controller.strings;
     let mut items = Vec::new();
-    append_action_items(controller, &mut items);
-    append_open_tab_items(controller, &mut items);
-    append_connection_items(controller, &mut items);
-    append_catalog_items(controller, &mut items);
-    append_saved_query_items(controller, &mut items);
-    append_history_items(controller, &mut items);
+    append_action_items(controller, s, &mut items);
+    append_open_tab_items(controller, s, &mut items);
+    append_connection_items(controller, s, &mut items);
+    append_catalog_items(controller, s, &mut items);
+    append_saved_query_items(controller, s, &mut items);
+    append_history_items(controller, s, &mut items);
     items
 }
 
-fn append_action_items(controller: &AppController, items: &mut Vec<CommandItem>) {
+fn append_action_items(
+    controller: &AppController,
+    s: &Strings,
+    items: &mut Vec<CommandItem>,
+) {
     let is_connected = matches!(
         controller.connections.phase(controller.active_workspace),
         Some(ConnectionWindowPhase::Connected)
@@ -108,11 +115,12 @@ fn append_action_items(controller: &AppController, items: &mut Vec<CommandItem>)
     let edits = &controller.grid_model.edits;
     let pending = edits.modified_cells.len() + edits.inserted_rows.len() + edits.deleted_rows.len();
 
-    append_query_action_items(is_connected, has_tabs, has_export, pending, items);
-    append_view_action_items(items);
+    append_query_action_items(s, is_connected, has_tabs, has_export, pending, items);
+    append_view_action_items(s, items);
 }
 
 fn append_query_action_items(
+    s: &Strings,
     is_connected: bool,
     has_tabs: bool,
     has_export: bool,
@@ -120,95 +128,95 @@ fn append_query_action_items(
     items: &mut Vec<CommandItem>,
 ) {
     items.extend([
-        CommandItem::new("act:run", "Run SQL Query")
-            .group("Actions")
+        CommandItem::new("act:run", s.cmd_run_sql)
+            .group(s.cmd_group_actions)
             .icon(IconName::Play)
             .shortcut(["Ctrl", "Enter"])
             .keywords(["execute", "query", "sql"])
             .is_disabled(!is_connected),
-        CommandItem::new("act:new-tab", "New Query Tab")
-            .group("Actions")
+        CommandItem::new("act:new-tab", s.cmd_new_query_tab)
+            .group(s.cmd_group_actions)
             .icon(IconName::FilePlus)
             .shortcut(["Ctrl", "T"])
             .keywords(["editor", "sql", "tab"]),
-        CommandItem::new("act:save-sql", "Save Active SQL Query")
-            .group("Actions")
+        CommandItem::new("act:save-sql", s.cmd_save_sql)
+            .group(s.cmd_group_actions)
             .icon(IconName::Save)
             .shortcut(["Ctrl", "S"])
             .keywords(["save", "snippet", "query"]),
-        CommandItem::new("act:close-tab", "Close Active Tab")
-            .group("Actions")
+        CommandItem::new("act:close-tab", s.cmd_close_tab)
+            .group(s.cmd_group_actions)
             .icon(IconName::X)
             .shortcut(["Ctrl", "W"])
             .is_disabled(!has_tabs),
-        CommandItem::new("act:reopen-tab", "Reopen Closed Tab")
-            .group("Actions")
+        CommandItem::new("act:reopen-tab", s.cmd_reopen_tab)
+            .group(s.cmd_group_actions)
             .icon(IconName::Undo2)
             .shortcut(["Ctrl", "Shift", "T"])
             .keywords(["restore", "undo"]),
-        CommandItem::new("act:export", "Export Table or Query Results")
-            .group("Actions")
+        CommandItem::new("act:export", s.cmd_export)
+            .group(s.cmd_group_actions)
             .icon(IconName::Download)
             .keywords(["csv", "json", "sql", "dump"])
             .is_disabled(!has_export),
-        CommandItem::new("act:refresh-schema", "Refresh Database Schemas & Objects")
-            .group("Actions")
+        CommandItem::new("act:refresh-schema", s.cmd_refresh_schema)
+            .group(s.cmd_group_actions)
             .icon(IconName::RefreshCw)
             .keywords(["reload", "catalog", "tables"])
             .is_disabled(!is_connected),
-        CommandItem::new("act:commit", "Commit Uncommitted Grid Edits")
-            .group("Actions")
+        CommandItem::new("act:commit", s.cmd_commit_edits)
+            .group(s.cmd_group_actions)
             .icon(IconName::Check)
             .keywords(["apply", "save", "transaction"])
             .is_disabled(!is_connected || pending == 0),
-        CommandItem::new("act:rollback", "Rollback Uncommitted Grid Edits")
-            .group("Actions")
+        CommandItem::new("act:rollback", s.cmd_rollback_edits)
+            .group(s.cmd_group_actions)
             .icon(IconName::RotateCcw)
             .keywords(["discard", "revert"])
             .is_disabled(pending == 0),
     ]);
 }
 
-fn append_view_action_items(items: &mut Vec<CommandItem>) {
+fn append_view_action_items(s: &Strings, items: &mut Vec<CommandItem>) {
     items.extend([
-        CommandItem::new("act:toggle-sidebar", "Toggle Schema Sidebar")
-            .group("View")
+        CommandItem::new("act:toggle-sidebar", s.cmd_toggle_sidebar)
+            .group(s.cmd_group_view)
             .icon(IconName::PanelLeft)
             .shortcut(["Ctrl", "B"])
             .keywords(["browser", "objects"]),
-        CommandItem::new("act:toggle-inspector", "Toggle Row Inspector")
-            .group("View")
+        CommandItem::new("act:toggle-inspector", s.cmd_toggle_inspector)
+            .group(s.cmd_group_view)
             .icon(IconName::Columns2)
             .shortcut(["Ctrl", "I"])
             .keywords(["details", "cell"]),
-        CommandItem::new("act:toggle-ai", "Toggle AI Assistant Drawer")
-            .group("View")
+        CommandItem::new("act:toggle-ai", s.cmd_toggle_ai)
+            .group(s.cmd_group_view)
             .icon(IconName::Sparkles)
             .shortcut(["Ctrl", "Shift", "A"])
             .keywords(["copilot", "llm", "sql"]),
-        CommandItem::new("act:toggle-vim", "Toggle SQL Vim Keybindings")
-            .group("View")
+        CommandItem::new("act:toggle-vim", s.cmd_toggle_vim)
+            .group(s.cmd_group_view)
             .icon(IconName::Terminal)
             .keywords(["modal", "editor", "vim"]),
-        CommandItem::new("act:toggle-theme", "Switch Light / Dark Theme")
-            .group("View")
+        CommandItem::new("act:toggle-theme", s.cmd_toggle_theme)
+            .group(s.cmd_group_view)
             .icon(IconName::SunMoon)
             .shortcut(["Ctrl", "Shift", "M"])
             .keywords(["appearance", "color", "dark", "light"]),
-        CommandItem::new("act:connections", "Open Connections Library")
-            .group("Navigation")
+        CommandItem::new("act:connections", s.cmd_open_connections)
+            .group(s.cmd_group_navigation)
             .icon(IconName::Server)
             .shortcut(["Ctrl", "Shift", "C"])
             .keywords(["connect", "servers", "import"]),
-        CommandItem::new("act:settings", "Open Application Settings")
-            .group("Navigation")
+        CommandItem::new("act:settings", s.cmd_open_settings)
+            .group(s.cmd_group_navigation)
             .icon(IconName::Settings)
             .shortcut(["Ctrl", ","])
             .keywords(["preferences", "fonts", "mcp", "theme"]),
     ]);
 }
 
-fn append_open_tab_items(controller: &AppController, items: &mut Vec<CommandItem>) {
+fn append_open_tab_items(controller: &AppController, s: &Strings, items: &mut Vec<CommandItem>) {
     let active = controller.tabs.active_tab();
     for tab in controller.tabs.tabs() {
         let icon = match tab.kind {
@@ -217,17 +225,17 @@ fn append_open_tab_items(controller: &AppController, items: &mut Vec<CommandItem
             TabKind::Structure { .. } => IconName::Layers,
         };
         let desc = if active == Some(tab.id) {
-            "Active Tab"
+            s.cmd_desc_active_tab
         } else {
             match tab.kind {
-                TabKind::QueryEditor { .. } => "Query Editor",
-                TabKind::TableData { .. } => "Table Data",
-                TabKind::Structure { .. } => "Table Structure",
+                TabKind::QueryEditor { .. } => s.cmd_desc_query_editor,
+                TabKind::TableData { .. } => s.cmd_desc_table_data,
+                TabKind::Structure { .. } => s.cmd_desc_table_structure,
             }
         };
         items.push(
             CommandItem::new(format!("tab:{}", tab.id.0), tab.title.clone())
-                .group("Open Tabs")
+                .group(s.cmd_group_open_tabs)
                 .description(desc)
                 .icon(icon)
                 .keywords([desc]),
@@ -235,12 +243,16 @@ fn append_open_tab_items(controller: &AppController, items: &mut Vec<CommandItem
     }
 }
 
-fn append_connection_items(controller: &AppController, items: &mut Vec<CommandItem>) {
+fn append_connection_items(
+    controller: &AppController,
+    s: &Strings,
+    items: &mut Vec<CommandItem>,
+) {
     for conn in controller.library.storage().connections.values() {
         let desc = format!("{} · {} / {}", conn.driver_id, conn.host, conn.database);
         items.push(
             CommandItem::new(format!("conn:{}", conn.id.0), conn.name.clone())
-                .group("Saved Connections")
+                .group(s.cmd_group_saved_connections)
                 .description(desc)
                 .icon(IconName::Database)
                 .keywords([
@@ -252,7 +264,7 @@ fn append_connection_items(controller: &AppController, items: &mut Vec<CommandIt
     }
 }
 
-fn append_catalog_items(controller: &AppController, items: &mut Vec<CommandItem>) {
+fn append_catalog_items(controller: &AppController, s: &Strings, items: &mut Vec<CommandItem>) {
     for (idx, obj) in controller.cached_objects.iter().enumerate() {
         let qualified = match &obj.schema {
             Some(schema) => format!("{schema}.{}", obj.name),
@@ -260,14 +272,14 @@ fn append_catalog_items(controller: &AppController, items: &mut Vec<CommandItem>
         };
         let (icon, kind_label) = match obj.kind {
             ObjectKind::Table | ObjectKind::PartitionedTable | ObjectKind::ForeignTable => {
-                (IconName::Table, "Table")
+                (IconName::Table, s.obj_kind_table)
             }
-            ObjectKind::View | ObjectKind::MaterializedView => (IconName::Layers, "View"),
-            _ => (IconName::Code, "Object"),
+            ObjectKind::View | ObjectKind::MaterializedView => (IconName::Layers, s.obj_kind_view),
+            _ => (IconName::Code, s.obj_kind_object),
         };
         items.push(
             CommandItem::new(format!("obj:{idx}"), qualified)
-                .group("Schema Objects")
+                .group(s.cmd_group_schema_objects)
                 .description(kind_label)
                 .icon(icon)
                 .keywords([
@@ -279,12 +291,16 @@ fn append_catalog_items(controller: &AppController, items: &mut Vec<CommandItem>
     }
 }
 
-fn append_saved_query_items(controller: &AppController, items: &mut Vec<CommandItem>) {
+fn append_saved_query_items(
+    controller: &AppController,
+    s: &Strings,
+    items: &mut Vec<CommandItem>,
+) {
     for (idx, saved) in controller.saved_queries.iter().enumerate() {
-        let snippet = compact_sql_preview(&saved.sql);
+        let snippet = compact_sql_preview(&saved.sql, s.empty_sql_preview);
         items.push(
             CommandItem::new(format!("saved:{idx}"), saved.name.clone())
-                .group("Saved Queries")
+                .group(s.cmd_group_saved_queries)
                 .description(snippet)
                 .icon(IconName::Bookmark)
                 .keywords([saved.folder.as_deref().unwrap_or(""), saved.sql.as_str()]),
@@ -292,16 +308,20 @@ fn append_saved_query_items(controller: &AppController, items: &mut Vec<CommandI
     }
 }
 
-fn append_history_items(controller: &AppController, items: &mut Vec<CommandItem>) {
+fn append_history_items(controller: &AppController, s: &Strings, items: &mut Vec<CommandItem>) {
     let total = controller.query_history.len();
     for (offset, entry) in controller.query_history.iter().rev().take(15).enumerate() {
         let idx = total.saturating_sub(1 + offset);
-        let title = compact_sql_preview(&entry.sql);
-        let status = if entry.succeeded { "OK" } else { "Error" };
+        let title = compact_sql_preview(&entry.sql, s.empty_sql_preview);
+        let status = if entry.succeeded {
+            s.status_ok
+        } else {
+            s.status_error
+        };
         let desc = format!("{} · {} ms · {status}", entry.database, entry.elapsed_ms);
         items.push(
             CommandItem::new(format!("hist:{idx}"), title)
-                .group("Recent Queries")
+                .group(s.cmd_group_recent_queries)
                 .description(desc)
                 .icon(IconName::History)
                 .keywords([entry.sql.as_str(), entry.database.as_str()]),
@@ -309,13 +329,13 @@ fn append_history_items(controller: &AppController, items: &mut Vec<CommandItem>
     }
 }
 
-fn compact_sql_preview(sql: &str) -> String {
+fn compact_sql_preview(sql: &str, empty_preview: &str) -> String {
     let single_line: String = sql.split_whitespace().collect::<Vec<_>>().join(" ");
     if single_line.len() > 72 {
         let truncated: String = single_line.chars().take(69).collect();
         format!("{truncated}...")
     } else if single_line.is_empty() {
-        "(Empty SQL)".to_owned()
+        empty_preview.to_owned()
     } else {
         single_line
     }
@@ -340,7 +360,7 @@ fn execute_palette_item(
         if let Err(err) = ws.controller.connect_library_item_blocking(conn_id) {
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Connection failed",
+                ws.controller.strings.connection_failed,
                 Some(err.to_string().into()),
                 cx,
             );
@@ -356,7 +376,7 @@ fn execute_palette_item(
             if let Err(err) = ws.controller.open_table_tab_blocking(table) {
                 ws.notify_toast(
                     ToastSeverity::Error,
-                    "Failed to open table",
+                    ws.controller.strings.failed_to_open_table,
                     Some(err.to_string().into()),
                     cx,
                 );
@@ -372,7 +392,8 @@ fn execute_palette_item(
         && let Ok(idx) = raw_idx.parse::<usize>()
         && let Some(entry) = ws.controller.query_history.get(idx).cloned()
     {
-        open_sql_in_new_tab(ws, "History Query", &entry.sql);
+        let title = ws.controller.strings.history_query_tab;
+        open_sql_in_new_tab(ws, title, &entry.sql);
     }
 
     cx.notify();
@@ -404,7 +425,7 @@ fn execute_named_action(
                     }
                     ws.notify_toast(
                         ToastSeverity::Error,
-                        "Query failed",
+                        ws.controller.strings.query_failed,
                         Some(err.to_string().into()),
                         cx,
                     );
@@ -416,8 +437,10 @@ fn execute_named_action(
             ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
         }
         "save-sql" => {
-            ws.controller.save_current_query("Query", None);
-            ws.notify_toast(ToastSeverity::Success, "Query saved", None, cx);
+            let default_name = ws.controller.strings.new_query_tab;
+            let saved_toast = ws.controller.strings.query_saved_toast;
+            ws.controller.save_current_query(default_name, None);
+            ws.notify_toast(ToastSeverity::Success, saved_toast, None, cx);
         }
         "close-tab" => ws.execute_key_command(KeyCommand::CloseTabOrWindow, window, cx),
         "reopen-tab" => ws.execute_key_command(KeyCommand::ReopenClosedTab, window, cx),
