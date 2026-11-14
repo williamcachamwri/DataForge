@@ -165,6 +165,9 @@ pub struct AppSettings {
     pub mcp: McpSettings,
     /// Whether to restore open tabs on startup.
     pub restore_session: bool,
+    /// Optional UI locale tag override (e.g. `en-US`, `fr-FR`, or `None` for auto/OS detection).
+    #[serde(default)]
+    pub locale: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -179,6 +182,7 @@ impl Default for AppSettings {
             window: WindowGeometry::default(),
             mcp: McpSettings::default(),
             restore_session: true,
+            locale: None,
         }
     }
 }
