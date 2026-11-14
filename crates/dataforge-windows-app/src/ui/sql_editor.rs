@@ -356,7 +356,9 @@ impl SqlEditorDocEntity {
         let prefix_opt = identifier_prefix_before(&self.rope, head);
         let context = detect_sql_autocomplete_context(&self.rope, head, prefix_opt.as_deref());
         match prefix_opt {
-            Some(prefix) => self.autocomplete.update_prefix_with_context(&prefix, context),
+            Some(prefix) => self
+                .autocomplete
+                .update_prefix_with_context(&prefix, context),
             None if context == AutocompleteContext::TableExpecting => {
                 self.autocomplete
                     .update_prefix_with_context("", AutocompleteContext::TableExpecting);
@@ -2253,12 +2255,7 @@ fn commit_save_query(
     if trimmed.is_empty() {
         let title = ws.controller.strings.enter_query_name_toast;
         let desc = ws.controller.strings.enter_query_name_desc;
-        ws.notify_toast(
-            ToastSeverity::Warning,
-            title,
-            Some(desc.into()),
-            cx,
-        );
+        ws.notify_toast(ToastSeverity::Warning, title, Some(desc.into()), cx);
         return;
     }
     let sql = ws.sql_editor_ui.doc.read(cx).rope.text();
@@ -2272,12 +2269,7 @@ fn commit_save_query(
         .strings
         .saved_query_named_tpl
         .replace("{name}", trimmed);
-    ws.notify_toast(
-        ToastSeverity::Success,
-        saved_msg,
-        None,
-        cx,
-    );
+    ws.notify_toast(ToastSeverity::Success, saved_msg, None, cx);
     cx.notify();
 }
 
@@ -2864,12 +2856,7 @@ pub(crate) fn trigger_run_query(
     if sql.trim().is_empty() {
         let title = ws.controller.strings.nothing_to_execute_toast;
         let desc = ws.controller.strings.enter_sql_before_running;
-        ws.notify_toast(
-            ToastSeverity::Info,
-            title,
-            Some(desc.into()),
-            cx,
-        );
+        ws.notify_toast(ToastSeverity::Info, title, Some(desc.into()), cx);
         return;
     }
     let Some(tab_id) = ws.controller.tabs.active_tab() else {
@@ -3360,7 +3347,12 @@ fn detect_sql_autocomplete_context(
     let prefix_chars = active_prefix.map_or(0, |p| p.chars().count());
     let before_end = head_char.saturating_sub(prefix_chars);
     let start_char = before_end.saturating_sub(96);
-    let slice: String = rope.text().chars().skip(start_char).take(before_end - start_char).collect();
+    let slice: String = rope
+        .text()
+        .chars()
+        .skip(start_char)
+        .take(before_end - start_char)
+        .collect();
     if active_prefix.is_none() && !slice.chars().last().is_some_and(char::is_whitespace) {
         return AutocompleteContext::General;
     }
