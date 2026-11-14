@@ -8,7 +8,6 @@ use dataforge_services::REGISTERED_ENGINE_IDS;
 use dataforge_windows_platform::AppSettings;
 
 use crate::app::AppController;
-use crate::i18n::Locale;
 
 /// Result of handling top-level application flags before GUI or `tablepro-cli` dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,7 +64,7 @@ fn run_smoke_startup(out: &mut dyn Write) -> AppFlagOutcome {
         env!("CARGO_PKG_VERSION"),
         driver_count,
         REGISTERED_ENGINE_IDS.len(),
-        Locale::EnUs,
+        controller.locale,
     );
     if driver_count == REGISTERED_ENGINE_IDS.len() {
         AppFlagOutcome::Exit(0)
