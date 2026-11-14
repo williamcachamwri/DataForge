@@ -120,6 +120,49 @@ impl SettingsCategory {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SettingsLayoutMetrics {
+    sidebar_width: f32,
+    content_max_width: f32,
+    horizontal_padding: f32,
+    columns: usize,
+}
+
+impl SettingsLayoutMetrics {
+    fn from_viewport_width(viewport_width: f32) -> Self {
+        let width = if viewport_width.is_finite() {
+            viewport_width.max(320.0)
+        } else {
+            1280.0
+        };
+        let sidebar_width = if width < 920.0 {
+            216.0
+        } else if width < 1080.0 {
+            230.0
+        } else if width < 1500.0 {
+            264.0
+        } else {
+            272.0
+        };
+        let horizontal_padding = if width < 1080.0 {
+            20.0
+        } else if width < 1440.0 {
+            28.0
+        } else {
+            32.0
+        };
+        let available_body_width = (width - sidebar_width).max(0.0);
+        let columns = if available_body_width >= 1020.0 { 2 } else { 1 };
+        let content_max_width = if columns >= 2 { 1320.0 } else { 960.0 };
+        Self {
+            sidebar_width,
+            content_max_width,
+            horizontal_padding,
+            columns,
+        }
+    }
+}
+
 /// Persistent UI state for the Settings screen.
 pub struct SettingsScreenState {
     pub dirty: bool,
@@ -320,19 +363,24 @@ fn sync_settings_from_controller(ws: &mut DataForgeWorkspace, cx: &mut App) {
 #[must_use]
 pub fn render_settings_screen(
     ws: &mut DataForgeWorkspace,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     sync_settings_from_controller(ws, cx);
 
+    let rem_scale = (f32::from(window.rem_size()) / 16.0).clamp(0.75, 2.0);
+    let viewport_width = f32::from(window.viewport_size().width) / rem_scale;
+    let layout = SettingsLayoutMetrics::from_viewport_width(viewport_width);
+
     let header = render_top_header(ws, cx);
-    let sidebar = render_sidebar(ws, cx);
-    let body = render_category_body(ws, cx);
+    let sidebar = render_sidebar(ws, layout.sidebar_width, cx);
+    let body = render_category_body(ws, layout, cx);
 
     div()
         .id("workspace-settings-screen")
         .flex_1()
         .size_full()
+        .min_w(px(0.0))
         .flex()
         .flex_col()
         .bg(panel_surface_bg(cx))
@@ -341,6 +389,7 @@ pub fn render_settings_screen(
         .child(
             div()
                 .flex_1()
+                .min_w(px(0.0))
                 .min_h(px(0.0))
                 .flex()
                 .flex_row()
@@ -521,7 +570,11 @@ fn render_sidebar_nav_item(
         .into_any_element()
 }
 
-fn render_sidebar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_sidebar(
+    ws: &DataForgeWorkspace,
+    sidebar_width: f32,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
     let active_cat = ws.settings_ui.active_category;
     let nav_motion = Motion {
         ms: effective_duration_ms(140, cx),
@@ -549,7 +602,7 @@ fn render_sidebar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
     }
 
     div()
-        .w(px(224.0))
+        .w(px(sidebar_width))
         .h_full()
         .flex_shrink_0()
         .p(px(10.0))
@@ -562,6 +615,7 @@ fn render_sidebar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
 
 fn render_category_body(
     ws: &DataForgeWorkspace,
+    layout: SettingsLayoutMetrics,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
@@ -569,19 +623,18 @@ fn render_category_body(
     let category = ws.settings_ui.active_category;
 
     let section_el = match category {
-        SettingsCategory::Appearance => render_appearance_section(ws, cx),
-        SettingsCategory::EditorAndFonts => render_editor_fonts_section(ws, cx),
+        SettingsCategory::Appearance => render_appearance_section(ws, layout.columns, cx),
+        SettingsCategory::EditorAndFonts => render_editor_fonts_section(ws, layout.columns, cx),
         SettingsCategory::BehaviorAndSafety => render_behavior_safety_section(ws, cx),
-        SettingsCategory::McpServer => render_mcp_section(ws, cx),
-        SettingsCategory::Diagnostics => render_diagnostics_section(ws, cx),
-        SettingsCategory::About => render_about_section(ws, cx),
+        SettingsCategory::McpServer => render_mcp_section(ws, layout.columns, cx),
+        SettingsCategory::Diagnostics => render_diagnostics_section(ws, layout.columns, cx),
+        SettingsCategory::About => render_about_section(ws, layout.columns, cx),
     };
 
     let s = ws.controller.strings.clone();
     let container = div()
         .w_full()
-        .max_w(px(740.0))
-        .p(px(24.0))
+        .min_w(px(0.0))
         .flex()
         .flex_col()
         .gap(px(18.0))
@@ -623,6 +676,7 @@ fn render_category_body(
     div()
         .relative()
         .flex_1()
+        .min_w(px(0.0))
         .min_h(px(0.0))
         .child(
             div()
@@ -630,10 +684,65 @@ fn render_category_body(
                 .size_full()
                 .overflow_y_scroll()
                 .track_scroll(&scroll_handle)
-                .child(animated_container),
+                .child(
+                    div()
+                        .w_full()
+                        .px(px(layout.horizontal_padding))
+                        .py(px(24.0))
+                        .child(
+                            div()
+                                .w_full()
+                                .max_w(px(layout.content_max_width))
+                                .mx_auto()
+                                .child(animated_container),
+                        ),
+                ),
         )
         .child(Scrollbar::new("settings-scrollbar", scroll_handle))
         .into_any_element()
+}
+
+fn render_two_column_grid(
+    columns: usize,
+    left: Vec<AnyElement>,
+    right: Vec<AnyElement>,
+) -> AnyElement {
+    if columns >= 2 {
+        div()
+            .w_full()
+            .flex()
+            .flex_row()
+            .items_start()
+            .gap(px(16.0))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(14.0))
+                    .children(left),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.0))
+                    .flex()
+                    .flex_col()
+                    .gap(px(14.0))
+                    .children(right),
+            )
+            .into_any_element()
+    } else {
+        div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(px(14.0))
+            .children(left)
+            .children(right)
+            .into_any_element()
+    }
 }
 
 fn settings_row(
@@ -645,15 +754,18 @@ fn settings_row(
     let colors = cx.colors().clone();
     div()
         .w_full()
+        .min_w(px(0.0))
         .overflow_hidden()
         .flex()
+        .flex_wrap()
         .items_center()
         .justify_between()
-        .gap(px(16.0))
+        .gap_x(px(16.0))
+        .gap_y(px(8.0))
         .child(
             div()
                 .flex_1()
-                .min_w(px(0.0))
+                .min_w(px(160.0))
                 .flex()
                 .flex_col()
                 .gap(px(2.0))
@@ -674,6 +786,16 @@ fn settings_row(
 
 fn render_appearance_section(
     ws: &DataForgeWorkspace,
+    columns: usize,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let appearance_card = render_appearance_card(ws, cx);
+    let importer_card = render_vscode_theme_import_card(ws, cx);
+    render_two_column_grid(columns, vec![appearance_card], vec![importer_card])
+}
+
+fn render_appearance_card(
+    ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -681,7 +803,7 @@ fn render_appearance_section(
         .into_iter()
         .map(|loc| PickerItem::new(loc.code(), loc.native_name()))
         .collect();
-    let language_select = div().w(px(230.0)).flex_shrink_0().child(
+    let language_select = div().w(px(230.0)).max_w_full().flex_shrink_0().child(
         Select::new("settings-interface-language", language_items)
             .full_width(true)
             .value(Some(SharedString::from(ws.controller.locale.code())))
@@ -700,7 +822,7 @@ fn render_appearance_section(
         PickerItem::new("dark", s.theme_pref_dark),
         PickerItem::new("high-contrast", s.theme_pref_high_contrast),
     ];
-    let pref_select = div().w(px(230.0)).flex_shrink_0().child(
+    let pref_select = div().w(px(230.0)).max_w_full().flex_shrink_0().child(
         Select::new("settings-theme-pref", pref_items)
             .full_width(true)
             .value(Some(SharedString::from(pref_key)))
@@ -713,8 +835,8 @@ fn render_appearance_section(
 
     let (backdrop_select, preset_select, syntax_select) = render_theme_and_blur_selects(ws, cx);
 
-    let appearance_card = Card::new()
-        .sx(|s| s.overflow_hidden())
+    Card::new()
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.theme_card_title))
@@ -757,16 +879,7 @@ fn render_appearance_section(
                     syntax_select,
                     cx,
                 )),
-        );
-
-    let importer_card = render_vscode_theme_import_card(ws, cx);
-
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(14.0))
-        .child(appearance_card)
-        .child(importer_card)
+        )
         .into_any_element()
 }
 
@@ -784,6 +897,7 @@ fn render_theme_and_blur_selects(
     ];
     let backdrop_select = div()
         .w(px(230.0))
+        .max_w_full()
         .flex_shrink_0()
         .child(
             Select::new("settings-window-backdrop", backdrop_items)
@@ -810,6 +924,7 @@ fn render_theme_and_blur_selects(
         .collect();
     let preset_select = div()
         .w(px(230.0))
+        .max_w_full()
         .flex_shrink_0()
         .child(
             Select::new("settings-content-preset", preset_items)
@@ -835,6 +950,7 @@ fn render_theme_and_blur_selects(
     }
     let syntax_select = div()
         .w(px(230.0))
+        .max_w_full()
         .flex_shrink_0()
         .child(
             Select::new("settings-syntax-palette", syntax_items)
@@ -855,6 +971,8 @@ fn render_vscode_theme_preview(ws: &DataForgeWorkspace, cx: &App) -> AnyElement 
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let sql_preview = div()
+        .w_full()
+        .overflow_hidden()
         .p(px(12.0))
         .rounded(px(CONTROL_RADIUS_PX))
         .bg(ws.content_palette.editor_background)
@@ -952,6 +1070,7 @@ fn render_vscode_theme_import_card(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap(px(8.0))
                 .child(browse_btn)
@@ -961,7 +1080,7 @@ fn render_vscode_theme_import_card(
         .child(render_vscode_theme_preview(ws, cx));
 
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.vscode_import_title))
@@ -1011,20 +1130,18 @@ fn render_26_slot_swatches(palette: &ContentThemePalette, cx: &App) -> AnyElemen
 
 fn render_editor_fonts_section(
     ws: &DataForgeWorkspace,
+    columns: usize,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let editor_font_card = render_editor_font_card(ws, cx);
     let value_font_card = render_value_font_card(ws, cx);
     let editor_behavior_card = render_editor_behavior_card(ws, cx);
 
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(14.0))
-        .child(editor_font_card)
-        .child(value_font_card)
-        .child(editor_behavior_card)
-        .into_any_element()
+    render_two_column_grid(
+        columns,
+        vec![editor_font_card],
+        vec![value_font_card, editor_behavior_card],
+    )
 }
 
 const EDITOR_FONT_FAMILIES: [&str; 5] = [
@@ -1044,7 +1161,7 @@ fn render_editor_font_card(
         .into_iter()
         .map(|f| PickerItem::new(f, f))
         .collect();
-    let family_select = div().w(px(230.0)).flex_shrink_0().child(
+    let family_select = div().w(px(230.0)).max_w_full().flex_shrink_0().child(
         Select::new("settings-editor-font-family", family_items)
             .full_width(true)
             .value(Some(SharedString::from(spec.family.clone())))
@@ -1056,29 +1173,39 @@ fn render_editor_font_card(
             })),
     );
 
-    let size_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
-        NumberField::new(&ws.settings_ui.editor_size_state)
-            .full_width(true)
-            .min_value(9.0)
-            .max_value(28.0)
-            .step(0.5)
-            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                ws.controller.settings.editor_font.size = (val as f32).clamp(9.0, 28.0);
-                persist_settings(ws, cx);
-            })),
-    );
+    let size_field = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.editor_size_state)
+                .full_width(true)
+                .min_value(9.0)
+                .max_value(28.0)
+                .step(0.5)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.controller.settings.editor_font.size = (val as f32).clamp(9.0, 28.0);
+                    persist_settings(ws, cx);
+                })),
+        );
 
-    let line_height_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
-        NumberField::new(&ws.settings_ui.editor_line_height_state)
-            .full_width(true)
-            .min_value(1.0)
-            .max_value(2.2)
-            .step(0.05)
-            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                ws.controller.settings.editor_font.line_height = (val as f32).clamp(1.0, 2.2);
-                persist_settings(ws, cx);
-            })),
-    );
+    let line_height_field = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.editor_line_height_state)
+                .full_width(true)
+                .min_value(1.0)
+                .max_value(2.2)
+                .step(0.05)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.controller.settings.editor_font.line_height = (val as f32).clamp(1.0, 2.2);
+                    persist_settings(ws, cx);
+                })),
+        );
 
     let ligatures_switch = Switch::new("settings-editor-ligatures")
         .is_selected(spec.ligatures)
@@ -1089,7 +1216,7 @@ fn render_editor_font_card(
 
     let s = &ws.controller.strings;
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.editor_font_title))
@@ -1136,7 +1263,7 @@ fn render_value_font_card(
         PickerItem::new("Consolas", "Consolas"),
         PickerItem::new("Inter", "Inter"),
     ];
-    let family_select = div().w(px(230.0)).flex_shrink_0().child(
+    let family_select = div().w(px(230.0)).max_w_full().flex_shrink_0().child(
         Select::new("settings-value-font-family", family_items)
             .full_width(true)
             .value(Some(SharedString::from(spec.family.clone())))
@@ -1148,19 +1275,26 @@ fn render_value_font_card(
             })),
     );
 
-    let size_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
-        NumberField::new(&ws.settings_ui.value_size_state)
-            .full_width(true)
-            .min_value(9.0)
-            .max_value(24.0)
-            .step(0.5)
-            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                ws.controller.settings.value_font.size = (val as f32).clamp(9.0, 24.0);
-                persist_settings(ws, cx);
-            })),
-    );
+    let size_field = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.value_size_state)
+                .full_width(true)
+                .min_value(9.0)
+                .max_value(24.0)
+                .step(0.5)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.controller.settings.value_font.size = (val as f32).clamp(9.0, 24.0);
+                    persist_settings(ws, cx);
+                })),
+        );
 
     let sample_text = div()
+        .w_full()
+        .overflow_hidden()
         .px(px(10.0))
         .py(px(8.0))
         .rounded(px(CONTROL_RADIUS_PX))
@@ -1173,7 +1307,7 @@ fn render_value_font_card(
 
     let s = &ws.controller.strings;
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.value_font_title))
@@ -1227,7 +1361,7 @@ fn render_editor_behavior_card(
         }));
 
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.editing_access_title))
@@ -1272,32 +1406,42 @@ fn render_behavior_safety_section(
             cx.notify();
         }));
 
-    let fetch_limit = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
-        NumberField::new(&ws.settings_ui.fetch_limit_state)
-            .full_width(true)
-            .min_value(10.0)
-            .max_value(10_000.0)
-            .step(50.0)
-            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                ws.controller.grid_model.page.limit = (val.round() as u64).clamp(10, 10_000);
-                cx.notify();
-            })),
-    );
+    let fetch_limit = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.fetch_limit_state)
+                .full_width(true)
+                .min_value(10.0)
+                .max_value(10_000.0)
+                .step(50.0)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.controller.grid_model.page.limit = (val.round() as u64).clamp(10, 10_000);
+                    cx.notify();
+                })),
+        );
 
-    let timeout_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
-        NumberField::new(&ws.settings_ui.query_timeout_state)
-            .full_width(true)
-            .min_value(5.0)
-            .max_value(600.0)
-            .step(5.0)
-            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                ws.settings_ui.query_timeout_secs = (val.round() as u32).clamp(5, 600);
-                cx.notify();
-            })),
-    );
+    let timeout_field = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.query_timeout_state)
+                .full_width(true)
+                .min_value(5.0)
+                .max_value(600.0)
+                .step(5.0)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.settings_ui.query_timeout_secs = (val.round() as u32).clamp(5, 600);
+                    cx.notify();
+                })),
+        );
 
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.behavior_card_title))
@@ -1337,7 +1481,11 @@ fn render_behavior_safety_section(
         .into_any_element()
 }
 
-fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_mcp_section(
+    ws: &DataForgeWorkspace,
+    columns: usize,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
     let running = ws.controller.is_mcp_server_running();
     let live_addr = ws
         .controller
@@ -1353,6 +1501,18 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
         s.mcp_stopped.to_owned()
     };
 
+    let lifecycle_card = render_mcp_lifecycle_card(ws, running, &status_label, cx);
+    let token_card = render_mcp_token_and_snippets_card(ws, &endpoint_url, cx);
+
+    render_two_column_grid(columns, vec![lifecycle_card], vec![token_card])
+}
+
+fn render_mcp_lifecycle_card(
+    ws: &DataForgeWorkspace,
+    running: bool,
+    status_label: &str,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
     let enable_switch = Switch::new("settings-mcp-enable")
         .is_selected(running)
         .is_disabled(ws.settings_ui.mcp_loading)
@@ -1360,30 +1520,36 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
             toggle_mcp_with_vault_token(ws, enable, cx);
         }));
 
-    let port_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
-        NumberField::new(&ws.settings_ui.mcp_port_state)
-            .full_width(true)
-            .min_value(1024.0)
-            .max_value(65535.0)
-            .step(1.0)
-            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                ws.controller.settings.mcp.port = (val.round() as u16).clamp(1024, u16::MAX);
-                persist_settings(ws, cx);
-            })),
-    );
-
-    let token_card = render_mcp_token_and_snippets_card(ws, &endpoint_url, cx);
+    let port_field = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.mcp_port_state)
+                .full_width(true)
+                .min_value(1024.0)
+                .max_value(65535.0)
+                .step(1.0)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.controller.settings.mcp.port = (val.round() as u16).clamp(1024, u16::MAX);
+                    persist_settings(ws, cx);
+                })),
+        );
 
     let s = &ws.controller.strings;
-    let lifecycle_card = Card::new()
-        .sx(|s| s.overflow_hidden())
+    Card::new()
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(
                     div()
+                        .w_full()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .justify_between()
+                        .gap(px(8.0))
                         .child(CardTitle::new().child(s.mcp_card_title))
                         .child(
                             Chip::new()
@@ -1394,7 +1560,7 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
                                     HeroColor::Default
                                 })
                                 .size(HeroSize::Sm)
-                                .child(ChipLabel::new().child(status_label)),
+                                .child(ChipLabel::new().child(status_label.to_owned())),
                         ),
                 )
                 .child(CardDescription::new().child(s.mcp_card_desc)),
@@ -1415,14 +1581,7 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
                     port_field,
                     cx,
                 )),
-        );
-
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(14.0))
-        .child(lifecycle_card)
-        .child(token_card)
+        )
         .into_any_element()
 }
 
@@ -1444,18 +1603,20 @@ fn render_mcp_token_row(
     let token_copied = ws.settings_ui.copied_key.as_deref() == Some("mcp-token");
 
     div()
+        .w_full()
         .p(px(8.0))
         .rounded(px(CONTROL_RADIUS_PX))
         .bg(muted_surface_bg(cx))
         .border_1()
         .border_color(hairline_border_color(cx))
         .flex()
+        .flex_wrap()
         .items_center()
         .justify_between()
         .gap(px(8.0))
         .child(
             div()
-                .min_w(px(0.0))
+                .min_w(px(140.0))
                 .flex_1()
                 .font(editor_gpui_font(&ws.controller.settings))
                 .text_xs()
@@ -1465,6 +1626,7 @@ fn render_mcp_token_row(
         )
         .child(
             div()
+                .flex_shrink_0()
                 .flex()
                 .items_center()
                 .gap(px(4.0))
@@ -1530,7 +1692,7 @@ fn render_mcp_token_and_snippets_card(
     let claude_preview = claude_json.clone();
 
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.mcp_tokens_title))
@@ -1543,6 +1705,7 @@ fn render_mcp_token_and_snippets_card(
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap(px(8.0))
                         .child(copy_chip_button(
@@ -1578,6 +1741,8 @@ fn render_mcp_token_and_snippets_card(
                 )
                 .child(
                     div()
+                        .w_full()
+                        .overflow_hidden()
                         .p(px(10.0))
                         .rounded(px(CONTROL_RADIUS_PX))
                         .bg(ws.content_palette.editor_background)
@@ -1607,7 +1772,7 @@ fn render_diagnostics_logs_card(
     let log_open_path = log_dir.clone();
 
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.diag_logs_title))
@@ -1618,6 +1783,8 @@ fn render_diagnostics_logs_card(
                 .sx(|d| d.gap(px(10.0)))
                 .child(
                     div()
+                        .w_full()
+                        .overflow_hidden()
                         .px(px(10.0))
                         .py(px(8.0))
                         .rounded(px(CONTROL_RADIUS_PX))
@@ -1632,6 +1799,7 @@ fn render_diagnostics_logs_card(
                 .child(
                     div()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .gap(px(8.0))
                         .child(
@@ -1683,6 +1851,7 @@ fn render_diagnostics_logs_card(
 
 fn render_diagnostics_section(
     ws: &DataForgeWorkspace,
+    columns: usize,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -1697,8 +1866,9 @@ fn render_diagnostics_section(
         ws.controller.toolbar_status.host.clone()
     };
 
+    let logs_card = render_diagnostics_logs_card(ws, cx);
     let versions_card = Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.diag_runtime_title))
@@ -1729,21 +1899,16 @@ fn render_diagnostics_section(
                         .to_string(),
                     cx,
                 )),
-        );
+        )
+        .into_any_element();
 
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(14.0))
-        .child(render_diagnostics_logs_card(ws, cx))
-        .child(versions_card)
-        .into_any_element()
+    render_two_column_grid(columns, vec![logs_card], vec![versions_card])
 }
 
 fn render_about_hero_card(version: &str, strings: &Strings, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardContent::new().sx(|d| d.py(px(18.0))).child(
                 div()
@@ -1766,6 +1931,7 @@ fn render_about_hero_card(version: &str, strings: &Strings, cx: &App) -> AnyElem
                             .child(
                                 div()
                                     .flex()
+                                    .flex_wrap()
                                     .items_center()
                                     .gap(px(8.0))
                                     .child(
@@ -1803,6 +1969,7 @@ fn render_about_hero_card(version: &str, strings: &Strings, cx: &App) -> AnyElem
 
 fn render_about_section(
     ws: &DataForgeWorkspace,
+    columns: usize,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -1813,15 +1980,32 @@ fn render_about_section(
     let license_card = render_about_license_card(ws, version, cx);
     let runtime_card = render_about_runtime_card(ws, version, cx);
 
+    let cards_grid = if columns >= 2 {
+        render_two_column_grid(
+            columns,
+            vec![updates_card, runtime_card],
+            vec![security_card, license_card],
+        )
+    } else {
+        div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(px(14.0))
+            .child(updates_card)
+            .child(security_card)
+            .child(license_card)
+            .child(runtime_card)
+            .into_any_element()
+    };
+
     div()
+        .w_full()
         .flex()
         .flex_col()
         .gap(px(14.0))
         .child(hero_card)
-        .child(updates_card)
-        .child(security_card)
-        .child(license_card)
-        .child(runtime_card)
+        .child(cards_grid)
         .into_any_element()
 }
 
@@ -1829,7 +2013,7 @@ fn render_about_runtime_card(
     ws: &DataForgeWorkspace,
     version: &str,
     cx: &mut Context<DataForgeWorkspace>,
-) -> Card {
+) -> AnyElement {
     let s = &ws.controller.strings;
     let os_arch = format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH);
     let ui_stack = "Rust + HeroGPUI (Direct3D 11)";
@@ -1853,7 +2037,7 @@ fn render_about_runtime_card(
     let sys_info_copied = ws.settings_ui.copied_key.as_deref() == Some("about-sys-info");
 
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child(s.about_runtime_title))
@@ -1894,22 +2078,26 @@ fn render_about_runtime_card(
                     ),
                 )),
         )
+        .into_any_element()
 }
 
-fn render_about_security_card(s: &Strings, cx: &App) -> Card {
+fn render_about_security_card(s: &Strings, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(
                     div()
+                        .w_full()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .justify_between()
                         .gap(px(8.0))
                         .child(
                             div()
+                                .min_w(px(0.0))
                                 .flex()
                                 .items_center()
                                 .gap(px(8.0))
@@ -1943,13 +2131,14 @@ fn render_about_security_card(s: &Strings, cx: &App) -> Card {
                 .child(Separator::new())
                 .child(diag_kv_row(s.sec_disclosure_k, s.sec_disclosure_v, cx)),
         )
+        .into_any_element()
 }
 
 fn render_about_license_card(
     ws: &DataForgeWorkspace,
     version: &str,
     cx: &mut Context<DataForgeWorkspace>,
-) -> Card {
+) -> AnyElement {
     let s = &ws.controller.strings;
     let license_payload = format!(
         "{} v{version}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}:\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}",
@@ -1977,12 +2166,14 @@ fn render_about_license_card(
     let license_copied = ws.settings_ui.copied_key.as_deref() == Some("about-license-info");
 
     Card::new()
-        .sx(|s| s.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(
             CardHeader::new()
                 .child(
                     div()
+                        .w_full()
                         .flex()
+                        .flex_wrap()
                         .items_center()
                         .justify_between()
                         .gap(px(8.0))
@@ -2026,6 +2217,7 @@ fn render_about_license_card(
                     ),
                 )),
         )
+        .into_any_element()
 }
 
 fn render_about_updates_card(
@@ -2050,7 +2242,7 @@ fn render_about_updates_card(
         }));
 
     Card::new()
-        .sx(|c| c.overflow_hidden())
+        .sx(|c| c.w_full().overflow_hidden())
         .child(render_updates_card_header(install_mode, mode_label, s, cx))
         .child(
             CardContent::new()
@@ -2086,12 +2278,15 @@ fn render_updates_card_header(
     CardHeader::new()
         .child(
             div()
+                .w_full()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .justify_between()
                 .gap(px(8.0))
                 .child(
                     div()
+                        .min_w(px(0.0))
                         .flex()
                         .items_center()
                         .gap(px(8.0))
@@ -2244,6 +2439,7 @@ fn render_updates_actions(
     let mut row = div()
         .pt(px(2.0))
         .flex()
+        .flex_wrap()
         .items_center()
         .justify_end()
         .gap(px(8.0))
@@ -2304,13 +2500,25 @@ fn render_updates_actions(
 fn diag_kv_row(label: &str, value: &str, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     div()
+        .w_full()
+        .min_w(px(0.0))
         .flex()
-        .items_center()
+        .flex_wrap()
+        .items_baseline()
         .justify_between()
+        .gap_x(px(16.0))
+        .gap_y(px(2.0))
         .text_xs()
-        .child(div().text_color(colors.muted).child(label.to_owned()))
         .child(
             div()
+                .flex_shrink_0()
+                .text_color(colors.muted)
+                .child(label.to_owned()),
+        )
+        .child(
+            div()
+                .min_w(px(0.0))
+                .max_w_full()
                 .font_weight(herogpui::gpui::FontWeight::MEDIUM)
                 .text_color(colors.foreground)
                 .child(value.to_owned()),
@@ -2772,5 +2980,55 @@ fn parse_backdrop_pref(key: &str) -> Option<WindowBackdropPreference> {
         "mica" => Some(WindowBackdropPreference::Mica),
         "mica_alt" => Some(WindowBackdropPreference::MicaAlt),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SettingsLayoutMetrics;
+
+    #[test]
+    fn narrow_viewport_collapses_to_single_column_with_compact_sidebar() {
+        let m = SettingsLayoutMetrics::from_viewport_width(800.0);
+        assert!((210.0..=232.0).contains(&m.sidebar_width));
+        assert_eq!(m.columns, 1);
+        assert_eq!(m.horizontal_padding, 20.0);
+        assert!(m.content_max_width >= 760.0);
+    }
+
+    #[test]
+    fn standard_viewport_gives_full_sidebar_and_single_column() {
+        let m = SettingsLayoutMetrics::from_viewport_width(1280.0);
+        assert!((252.0..=272.0).contains(&m.sidebar_width));
+        assert!(1280.0 - m.sidebar_width < 1020.0);
+        assert_eq!(m.columns, 1);
+        assert_eq!(m.horizontal_padding, 28.0);
+        assert!(m.content_max_width >= 900.0);
+    }
+
+    #[test]
+    fn wide_viewport_enables_two_columns_and_generous_width() {
+        let m = SettingsLayoutMetrics::from_viewport_width(1600.0);
+        assert!((252.0..=272.0).contains(&m.sidebar_width));
+        assert!(1600.0 - m.sidebar_width >= 1020.0);
+        assert_eq!(m.columns, 2);
+        assert_eq!(m.horizontal_padding, 32.0);
+        assert!((1180.0..=1380.0).contains(&m.content_max_width));
+    }
+
+    #[test]
+    fn ultrawide_viewport_caps_centered_content_width_and_uses_two_columns() {
+        let m = SettingsLayoutMetrics::from_viewport_width(2560.0);
+        assert!((252.0..=272.0).contains(&m.sidebar_width));
+        assert_eq!(m.columns, 2);
+        assert_eq!(m.horizontal_padding, 32.0);
+        assert!((1180.0..=1380.0).contains(&m.content_max_width));
+    }
+
+    #[test]
+    fn non_finite_viewport_falls_back_safely() {
+        let m = SettingsLayoutMetrics::from_viewport_width(f32::NAN);
+        assert!((252.0..=272.0).contains(&m.sidebar_width));
+        assert_eq!(m.columns, 1);
     }
 }
