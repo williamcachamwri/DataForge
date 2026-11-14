@@ -231,7 +231,7 @@ pub fn render_inspector(
     let header = render_header(ws, inspected.is_some(), cx);
     let body = match inspected {
         Some(ref cell) => render_cell_body(ws, cell, cx),
-        None => render_empty_state(cx),
+        None => render_empty_state(&ws.controller.strings, cx),
     };
 
     let drawer = div()
@@ -290,7 +290,7 @@ fn render_header(
                         .text_xs()
                         .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
-                        .child("Inspector"),
+                        .child(ws.controller.strings.inspector_short),
                 )
                 .when_some(table_label, |el, tbl| {
                     el.child(
@@ -306,6 +306,11 @@ fn render_header(
     let mut actions = div().flex().items_center().gap(px(MICRO_GAP_PX));
     if has_cell {
         let pretty = ws.inspector_ui.raw_pretty_mode;
+        let mode_text = if pretty {
+            ws.controller.strings.pretty_mode
+        } else {
+            ws.controller.strings.raw_mode
+        };
         actions = actions.child(
             Button::new("inspector-pretty-toggle")
                 .variant(if pretty {
@@ -324,7 +329,7 @@ fn render_header(
                         .items_center()
                         .gap(px(4.0))
                         .child(Icon::new(IconName::Code).size(IconSize::Xs))
-                        .child(if pretty { "Pretty" } else { "Raw" }),
+                        .child(mode_text),
                 ),
         );
     }
@@ -334,7 +339,7 @@ fn render_header(
             .variant(Variant::Ghost)
             .size(HeroSize::Sm)
             .is_icon_only(true)
-            .aria_label("Close Inspector")
+            .aria_label(ws.controller.strings.close_inspector_aria)
             .on_press(cx.listener(|ws, _, _window, cx| {
                 ws.controller.layout_config.inspector_visible = false;
                 ws.controller.toolbar_status.inspector_open = false;
@@ -348,7 +353,7 @@ fn render_header(
     row.into_any_element()
 }
 
-fn render_empty_state(cx: &App) -> AnyElement {
+fn render_empty_state(s: &crate::i18n::Strings, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     div()
         .flex_1()
@@ -379,14 +384,14 @@ fn render_empty_state(cx: &App) -> AnyElement {
                 .font_weight(herogpui::gpui::FontWeight::MEDIUM)
                 .text_color(colors.foreground)
                 .text_center()
-                .child("Select a row in the Data Grid to inspect values"),
+                .child(s.inspector_empty_title),
         )
         .child(
             div()
                 .text_xs()
                 .text_color(colors.muted)
                 .text_center()
-                .child("Full untruncated text, NULL toggle, and FK jumps sync live to the active cell."),
+                .child(s.inspector_empty_desc),
         )
         .into_any_element()
 }
@@ -403,7 +408,7 @@ fn render_cell_body(
         .flex()
         .flex_col()
         .gap(px(12.0))
-        .child(render_column_header_block(cell, cx))
+        .child(render_column_header_block(cell, &ws.controller.strings, cx))
         .child(render_value_viewer_card(ws, cell, cx))
         .when_some(render_fk_jump_row(ws, cell, cx), |el, fk_row| {
             el.child(fk_row)
@@ -428,19 +433,19 @@ fn render_cell_body(
         .into_any_element()
 }
 
-fn build_column_chips(cell: &InspectedCell) -> AnyElement {
+fn build_column_chips(cell: &InspectedCell, s: &crate::i18n::Strings) -> AnyElement {
     let mut chips = div().flex().flex_wrap().gap(px(MICRO_GAP_PX));
     let type_label = if cell.col_type.name.is_empty() {
-        "UNKNOWN".to_owned()
+        s.tx_unknown.to_owned()
     } else {
         cell.col_type.name.clone()
     };
     chips = chips.child(meta_chip(type_label, HeroColor::Default));
     chips = chips.child(meta_chip(
         if cell.col_info.nullable {
-            "NULLABLE"
+            s.nullable_badge
         } else {
-            "NOT NULL"
+            s.not_null_badge
         },
         if cell.col_info.nullable {
             HeroColor::Default
@@ -455,11 +460,11 @@ fn build_column_chips(cell: &InspectedCell) -> AnyElement {
         chips = chips.child(meta_chip("FK", HeroColor::Accent));
     }
     if cell.is_modified {
-        chips = chips.child(meta_chip("Modified", HeroColor::Warning));
+        chips = chips.child(meta_chip(s.cell_state_modified, HeroColor::Warning));
     } else if cell.is_inserted {
-        chips = chips.child(meta_chip("Inserted", HeroColor::Success));
+        chips = chips.child(meta_chip(s.cell_state_inserted, HeroColor::Success));
     } else if cell.is_deleted {
-        chips = chips.child(meta_chip("Deleted", HeroColor::Danger));
+        chips = chips.child(meta_chip(s.cell_state_deleted, HeroColor::Danger));
     }
     chips.into_any_element()
 }
@@ -473,7 +478,11 @@ fn meta_chip(label: impl Into<SharedString>, color: HeroColor) -> AnyElement {
         .into_any_element()
 }
 
-fn render_column_header_block(cell: &InspectedCell, cx: &App) -> AnyElement {
+fn render_column_header_block(
+    cell: &InspectedCell,
+    s: &crate::i18n::Strings,
+    cx: &App,
+) -> AnyElement {
     let colors = cx.colors().clone();
     div()
         .flex()
@@ -497,10 +506,10 @@ fn render_column_header_block(cell: &InspectedCell, cx: &App) -> AnyElement {
                     div()
                         .text_xs()
                         .text_color(colors.muted)
-                        .child(format!("Row {}", cell.row_idx + 1)),
+                        .child(s.row_number_tpl.replace("{num}", &(cell.row_idx + 1).to_string())),
                 ),
         )
-        .child(build_column_chips(cell))
+        .child(build_column_chips(cell, s))
         .into_any_element()
 }
 
@@ -547,7 +556,11 @@ fn render_copy_value_button(
                         colors.foreground
                     }),
                 )
-                .child(if copied { "Copied" } else { "Copy" }),
+                .child(if copied {
+                    ws.controller.strings.copied
+                } else {
+                    ws.controller.strings.copy_label
+                }),
         )
         .into_any_element()
 }
@@ -583,10 +596,16 @@ fn render_value_viewer_card(
         .child(if cell.is_null {
             "NULL".to_owned()
         } else if display_text.is_empty() {
-            "(empty string)".to_owned()
+            ws.controller.strings.empty_string_placeholder.to_owned()
         } else {
             display_text
         });
+
+    let value_char_count = if cell.is_null {
+        0
+    } else {
+        cell.full_text.chars().count()
+    };
 
     Card::new()
         .child(
@@ -602,14 +621,12 @@ fn render_value_viewer_card(
                                 .text_xs()
                                 .font_weight(herogpui::gpui::FontWeight::MEDIUM)
                                 .text_color(colors.muted)
-                                .child(format!(
-                                    "Value ({} chars)",
-                                    if cell.is_null {
-                                        0
-                                    } else {
-                                        cell.full_text.chars().count()
-                                    }
-                                )),
+                                .child(
+                                    ws.controller
+                                        .strings
+                                        .inspector_value_chars_tpl
+                                        .replace("{count}", &value_char_count.to_string()),
+                                ),
                         )
                         .child(copy_button),
                 )
@@ -652,9 +669,15 @@ fn render_fk_jump_row(
                         .gap(px(6.0))
                         .child(Icon::new(IconName::Link2).size(IconSize::Xs))
                         .child(if can_jump {
-                            format!("Jump to {target_label}")
+                            ws.controller
+                                .strings
+                                .fk_jump_to_tpl
+                                .replace("{target}", &target_label)
                         } else {
-                            format!("NULL FK -> {target_label}")
+                            ws.controller
+                                .strings
+                                .fk_null_target_tpl
+                                .replace("{target}", &target_label)
                         }),
                 )
                 .into_any_element(),
@@ -672,9 +695,9 @@ fn render_fk_jump_row(
                 .text_xs()
                 .text_color(colors.muted)
                 .child(if ws.inspector_ui.metadata_loading {
-                    "Resolving foreign key metadata..."
+                    ws.controller.strings.fk_resolving_metadata
                 } else {
-                    "Foreign key metadata unavailable for ad-hoc result"
+                    ws.controller.strings.fk_metadata_unavailable_adhoc
                 })
                 .into_any_element(),
         );
@@ -695,7 +718,7 @@ fn jump_to_foreign_key(
         Ok(r) => r,
         Err(err) => {
             push_error_toast(
-                "Foreign key jump unavailable",
+                ws.controller.strings.fk_jump_unavailable_toast,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -707,7 +730,7 @@ fn jump_to_foreign_key(
         .open_table_tab_blocking(reference.table.clone())
     {
         push_error_toast(
-            "Failed to open referenced table",
+            ws.controller.strings.fk_open_failed_toast,
             Some(SharedString::from(err.to_string())),
             cx,
         );
@@ -725,7 +748,7 @@ fn jump_to_foreign_key(
             .add_grid_filter_blocking(&rule.column, rule.op, val)
         {
             push_error_toast(
-                "FK filter failed",
+                ws.controller.strings.fk_filter_failed_toast,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -733,7 +756,7 @@ fn jump_to_foreign_key(
         }
     }
     push_success_toast(
-        "Opened referenced row",
+        ws.controller.strings.fk_opened_row_toast,
         Some(SharedString::from(reference.table.name)),
         cx,
     );
@@ -757,7 +780,7 @@ fn render_inline_editor_section(
         .size(HeroSize::Sm)
         .is_selected(cell.is_null)
         .is_disabled(!cell.col_info.nullable || cell.is_read_only || cell.is_deleted)
-        .label("Set NULL")
+        .label(ws.controller.strings.set_null)
         .on_change(cx.listener(move |ws, &make_null: &bool, _window, cx| {
             let next_val = if make_null {
                 Value::Null
@@ -801,7 +824,7 @@ fn render_inline_editor_section(
                         .text_xs()
                         .font_weight(herogpui::gpui::FontWeight::MEDIUM)
                         .text_color(colors.muted)
-                        .child("Edit Cell"),
+                        .child(ws.controller.strings.edit_cell),
                 )
                 .child(null_switch),
         )
@@ -839,7 +862,7 @@ fn render_inline_editor_actions(
                 }
             }
         }))
-        .child("Apply Edit");
+        .child(ws.controller.strings.apply_edit_label);
 
     let revert_orig = cell.original_value.clone();
     let show_revert = cell.is_modified || ws.inspector_ui.parse_error.is_some();
@@ -860,7 +883,7 @@ fn render_inline_editor_actions(
                         ws.inspector_ui.last_sync_sig = None;
                         cx.notify();
                     }))
-                    .child("Revert"),
+                    .child(ws.controller.strings.revert_label),
             )
         })
         .into_any_element()
@@ -878,7 +901,12 @@ fn render_row_summary_list(
             .text_xs()
             .font_weight(herogpui::gpui::FontWeight::MEDIUM)
             .text_color(colors.muted)
-            .child(format!("Row Fields ({})", active.row_columns.len())),
+            .child(
+                ws.controller
+                    .strings
+                    .inspector_row_fields_tpl
+                    .replace("{count}", &active.row_columns.len().to_string()),
+            ),
     );
 
     for (idx, (col, val)) in active
@@ -1024,11 +1052,16 @@ fn resolve_inspected_cell(ws: &DataForgeWorkspace) -> Option<InspectedCell> {
         EditText::Editable(s) => (s, None),
         EditText::ReadOnly(reason) => (
             value_text(&value, &rcol.column_type).unwrap_or_else(|| format!("{value:?}")),
-            Some(format!("Read-only ({reason:?})")),
+            Some(
+                ws.controller
+                    .strings
+                    .read_only_reason_tpl
+                    .replace("{reason}", &format!("{reason:?}")),
+            ),
         ),
     };
-    let generated_hint =
-        (!col_info.is_writable()).then(|| "Generated column (read-only)".to_owned());
+    let generated_hint = (!col_info.is_writable())
+        .then(|| ws.controller.strings.generated_col_readonly.to_owned());
     let read_only_hint = type_read_only_hint.or(generated_hint);
     let is_read_only = read_only_hint.is_some();
 
