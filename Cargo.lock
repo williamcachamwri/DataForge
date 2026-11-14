@@ -2241,7 +2241,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
 name = "dataforge-e2e"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2278,7 +2278,7 @@ dependencies = [
 
 [[package]]
 name = "dataforge-gfx"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror 2.0.20",
  "tracing",
@@ -2288,7 +2288,7 @@ dependencies = [
 
 [[package]]
 name = "dataforge-services"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2329,7 +2329,7 @@ dependencies = [
 
 [[package]]
 name = "dataforge-state"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "proptest",
@@ -2349,7 +2349,7 @@ dependencies = [
 
 [[package]]
 name = "dataforge-windows-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-channel",
  "dataforge-gfx",
@@ -2383,7 +2383,7 @@ dependencies = [
 
 [[package]]
 name = "dataforge-windows-platform"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "futures",
