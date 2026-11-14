@@ -46,6 +46,14 @@ pub fn show_native_dialog(
     kind: &DialogKind,
     strings: &Strings,
 ) -> DialogOutcome {
+    let (title, body, warning) = format_dialog_content(kind, strings);
+    confirm_box(parent, title, &body, warning)
+}
+
+pub(crate) fn format_dialog_content(
+    kind: &DialogKind,
+    strings: &Strings,
+) -> (&'static str, String, bool) {
     match kind {
         DialogKind::SshHostKey {
             host,
@@ -53,30 +61,38 @@ pub fn show_native_dialog(
             algorithm,
             fingerprint,
         } => {
-            let body = format!(
-                "The authenticity of host '{host}:{port}' cannot be established.\n\n\
-                 {algorithm} key fingerprint:\n{fingerprint}\n\n\
-                 Trust this host key and continue?"
-            );
-            confirm_box(parent, strings.ssh_host_key_title, &body, false)
+            let body = strings
+                .ssh_host_key_prompt
+                .replace("{host}", host)
+                .replace("{port}", &port.to_string())
+                .replace("{algorithm}", algorithm)
+                .replace("{fingerprint}", fingerprint);
+            (strings.ssh_host_key_title, body, false)
         }
         DialogKind::SafeModeConfirmation { summary } => {
-            let body = format!("{}\n\n{summary}", strings.safe_mode_prompt);
-            confirm_box(parent, strings.safe_mode_title, &body, true)
+            let body = if summary.trim().is_empty() {
+                strings.safe_mode_prompt.to_owned()
+            } else {
+                format!("{}\n\n{summary}", strings.safe_mode_prompt)
+            };
+            (strings.safe_mode_title, body, true)
         }
         DialogKind::CloseTransactionGuard { connection_name } => {
-            let body = format!("[{connection_name}] {}", strings.open_tx_prompt);
-            confirm_box(parent, strings.open_tx_title, &body, true)
+            let body = if connection_name.trim().is_empty() {
+                strings.open_tx_prompt.to_owned()
+            } else {
+                format!("[{connection_name}] {}", strings.open_tx_prompt)
+            };
+            (strings.open_tx_title, body, true)
         }
         DialogKind::SshPassphrase { key_label } => {
-            let body = format!(
-                "Passphrase required for SSH key '{key_label}'.\n\n\
-                 Proceed with empty passphrase or cancel to abort?"
-            );
-            confirm_box(parent, strings.ssh_passphrase_title, &body, false)
+            let body = strings
+                .ssh_passphrase_prompt
+                .replace("{key_label}", key_label);
+            (strings.ssh_passphrase_title, body, false)
         }
         DialogKind::InteractiveAuth { prompt, .. } => {
-            confirm_box(parent, strings.interactive_auth_title, prompt, false)
+            (strings.interactive_auth_title, prompt.clone(), false)
         }
     }
 }
@@ -108,4 +124,87 @@ fn confirm_box(parent: Option<HWND>, title: &str, body: &str, warning: bool) -> 
 
 fn to_wide_null(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::Locale;
+
+    #[test]
+    fn native_dialogs_format_across_all_locales_without_unsubstituted_tokens() {
+        for locale in Locale::ALL {
+            let s = Strings::for_locale(locale);
+
+            let (title, body, warn) = format_dialog_content(
+                &DialogKind::SshHostKey {
+                    host: "db.example.com".to_owned(),
+                    port: 2222,
+                    algorithm: "ed25519".to_owned(),
+                    fingerprint: "SHA256:abc".to_owned(),
+                },
+                &s,
+            );
+            assert_eq!(title, s.ssh_host_key_title);
+            assert!(!warn);
+            assert!(body.contains("db.example.com:2222"));
+            assert!(body.contains("ed25519"));
+            assert!(body.contains("SHA256:abc"));
+            assert!(!body.contains("{host}") && !body.contains("{port}"));
+
+            let (title, body, warn) = format_dialog_content(
+                &DialogKind::SshPassphrase {
+                    key_label: "id_ed25519".to_owned(),
+                },
+                &s,
+            );
+            assert_eq!(title, s.ssh_passphrase_title);
+            assert!(!warn);
+            assert!(body.contains("id_ed25519"));
+            assert!(!body.contains("{key_label}"));
+
+            let (title, body, warn) = format_dialog_content(
+                &DialogKind::SafeModeConfirmation {
+                    summary: "DELETE FROM users".to_owned(),
+                },
+                &s,
+            );
+            assert_eq!(title, s.safe_mode_title);
+            assert!(warn);
+            assert!(body.contains(s.safe_mode_prompt));
+            assert!(body.contains("DELETE FROM users"));
+
+            let (title, body, warn) = format_dialog_content(
+                &DialogKind::CloseTransactionGuard {
+                    connection_name: "prod".to_owned(),
+                },
+                &s,
+            );
+            assert_eq!(title, s.open_tx_title);
+            assert!(warn);
+            assert!(body.contains("[prod]"));
+            assert!(body.contains(s.open_tx_prompt));
+
+            let (title, body, warn) = format_dialog_content(
+                &DialogKind::CloseTransactionGuard {
+                    connection_name: String::new(),
+                },
+                &s,
+            );
+            assert_eq!(title, s.open_tx_title);
+            assert!(warn);
+            assert_eq!(body, s.open_tx_prompt);
+
+            let (title, body, warn) = format_dialog_content(
+                &DialogKind::InteractiveAuth {
+                    prompt: "OTP code".to_owned(),
+                    masked: true,
+                },
+                &s,
+            );
+            assert_eq!(title, s.interactive_auth_title);
+            assert!(!warn);
+            assert_eq!(body, "OTP code");
+        }
+    }
 }
