@@ -127,13 +127,15 @@ pub fn render_tab_strip(
                 None
             };
             strip = strip.child(render_tab_pill(
-                tab,
-                &title,
-                is_active,
-                is_dirty,
-                tab_count,
-                input_for_tab,
-                &ws.controller.strings,
+                TabPillProps {
+                    tab,
+                    title: &title,
+                    is_active,
+                    is_dirty,
+                    total_tabs: tab_count,
+                    rename_input: input_for_tab,
+                    strings: &ws.controller.strings,
+                },
                 cx,
             ));
         }
@@ -162,7 +164,11 @@ pub fn render_tab_strip(
                 .items_center()
                 .gap(px(4.0))
                 .child(strip)
-                .child(render_tab_strip_actions(&ws.controller.strings, skip_anim, cx)),
+                .child(render_tab_strip_actions(
+                    &ws.controller.strings,
+                    skip_anim,
+                    cx,
+                )),
         )
         .child(render_subview_switcher(
             ws.workspace_pane.sub_view,
@@ -186,28 +192,25 @@ fn render_empty_tabs_notice(
         .into_any_element()
 }
 
-fn render_tab_pill(
-    tab: &TabItem,
-    title: &str,
+struct TabPillProps<'a> {
+    tab: &'a TabItem,
+    title: &'a str,
     is_active: bool,
     is_dirty: bool,
     total_tabs: usize,
     rename_input: Option<Entity<InputState>>,
-    s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
-) -> AnyElement {
-    let colors = cx.colors().clone();
-    let tab_id = tab.id;
-    let tab_kind = tab.kind.clone();
-    let menu_tab_kind = tab.kind.clone();
-    let current_title = title.to_owned();
-    let conn_id = tab.connection_id.clone();
+    strings: &'a crate::i18n::Strings,
+}
 
-    let mut pill = build_tab_pill_shell(tab_id, &tab_kind, is_active, cx).child(
-        render_tab_title_slot(tab_id, title, is_active, rename_input, cx),
+fn render_tab_pill(props: TabPillProps<'_>, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+    let colors = cx.colors().clone();
+    let tab_id = props.tab.id;
+
+    let mut pill = build_tab_pill_shell(tab_id, &props.tab.kind, props.is_active, cx).child(
+        render_tab_title_slot(tab_id, props.title, props.is_active, props.rename_input, cx),
     );
 
-    if is_dirty {
+    if props.is_dirty {
         pill = pill.child(
             div()
                 .id(format!("workspace-tab-dirty-{}", tab_id.0))
@@ -219,15 +222,18 @@ fn render_tab_pill(
         );
     }
 
-    pill = pill.child(render_tab_close_button(tab_id, title, s, cx));
+    pill = pill.child(render_tab_close_button(
+        tab_id,
+        props.title,
+        props.strings,
+        cx,
+    ));
     wrap_tab_context_menu(
         pill.into_any_element(),
-        tab_id,
-        current_title,
-        conn_id,
-        menu_tab_kind,
-        total_tabs,
-        s,
+        props.tab,
+        props.title,
+        props.total_tabs,
+        props.strings,
         cx,
     )
 }
@@ -380,14 +386,16 @@ fn render_tab_close_button(
 
 fn wrap_tab_context_menu(
     pill: AnyElement,
-    tab_id: TabId,
-    current_title: String,
-    conn_id: TabConnectionId,
-    menu_tab_kind: TabKind,
+    tab: &TabItem,
+    title: &str,
     total_tabs: usize,
     s: &crate::i18n::Strings,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let tab_id = tab.id;
+    let current_title = title.to_owned();
+    let conn_id = tab.connection_id.clone();
+    let menu_tab_kind = tab.kind.clone();
     let menu_items = build_tab_context_menu_items(total_tabs, s);
     let mut ctx_menu = ContextMenu::new(format!("tab-context-menu-{}", tab_id.0), pill, menu_items)
         .on_action(cx.listener(move |ws, key: &SharedString, _, cx| {
@@ -480,12 +488,7 @@ fn render_tab_strip_actions(
                         .on_press(cx.listener(|ws, _, _, cx| {
                             if ws.controller.reopen_closed_tab().is_none() {
                                 let msg = ws.controller.strings.no_recent_tab;
-                                ws.notify_toast(
-                                    ToastSeverity::Info,
-                                    msg,
-                                    None,
-                                    cx,
-                                );
+                                ws.notify_toast(ToastSeverity::Info, msg, None, cx);
                             }
                             cx.notify();
                         }))
@@ -553,12 +556,7 @@ fn apply_subview_selection(
                 && let Err(err) = ws.controller.load_table_structure_blocking(&table)
             {
                 let msg = ws.controller.strings.load_structure_failed_toast;
-                ws.notify_toast(
-                    ToastSeverity::Error,
-                    msg,
-                    Some(err.to_string().into()),
-                    cx,
-                );
+                ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
             }
         }
         _ => {}
@@ -683,12 +681,7 @@ fn duplicate_workspace_tab(
             let table_ref = parse_table_ref(table_name);
             if let Err(err) = ws.controller.open_table_tab_blocking(table_ref) {
                 let msg = ws.controller.strings.open_table_tab_failed_toast;
-                ws.notify_toast(
-                    ToastSeverity::Error,
-                    msg,
-                    Some(err.to_string().into()),
-                    cx,
-                );
+                ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
             }
         }
     }
