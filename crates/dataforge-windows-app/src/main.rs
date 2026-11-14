@@ -60,7 +60,6 @@ fn launch_gui(gui_args: &[OsString]) -> Result<()> {
     enable_per_monitor_dpi();
     let paths = storage_paths()?;
     init_logging_and_crash_reports(&paths.state.join("logs"))?;
-    let _locale = init_locale(None);
 
     let Some(_lock) = acquire_or_forward(DEFAULT_MUTEX_NAME, DEFAULT_PIPE_NAME, gui_args)? else {
         return Ok(());
@@ -71,6 +70,7 @@ fn launch_gui(gui_args: &[OsString]) -> Result<()> {
 
     let settings_path = paths.config.join(SETTINGS_FILENAME);
     let settings = AppSettings::load(&settings_path).unwrap_or_default();
+    let _locale = init_locale(settings.locale.as_deref());
     let mut controller = AppController::with_detected_theme(settings);
 
     let initial_targets = extract_forward_targets(gui_args);
