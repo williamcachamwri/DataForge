@@ -7,8 +7,10 @@ use herogpui::components::{
     ToastViewport, clear_toasts, dismiss_toast, toast_store,
 };
 use herogpui::gpui::{
-    AnyElement, App, Context, ElementId, IntoElement, SharedString, WeakEntity, Window, px,
+    AnyElement, App, Bounds, Context, Element, ElementId, GlobalElementId, InspectorElementId,
+    IntoElement, LayoutId, Pixels, SharedString, WeakEntity, Window, deferred, px,
 };
+use herogpui::theme::ThemeProvider;
 
 use crate::app::ScreenMode;
 use crate::i18n::Strings;
@@ -16,7 +18,12 @@ use crate::services::resolve_active_strings;
 
 use super::DataForgeWorkspace;
 use super::shell_state::ToastSeverity;
-use super::theme::{OVERLAY_EXIT_MS, effective_duration_ms};
+use super::theme::{OVERLAY_EXIT_MS, effective_duration_ms, toast_opaque_theme};
+
+/// Deferred paint priority above HeroGPUI's default overlays (`0`) so floating
+/// toast notifications always layer above workspace controls (`Select` triggers
+/// and popovers, grid footer, toolbars, modals, and command palette).
+const TOAST_DEFERRED_PRIORITY: usize = 10;
 
 /// Renders the non-blocking bottom-right HeroGPUI [`ToastViewport`] and subscribes
 /// [`DataForgeWorkspace`] to live [`ToastStore`] changes so queued, updated, and
@@ -44,7 +51,7 @@ pub fn render_toast_viewport(
 
     let exit_duration = Duration::from_millis(effective_duration_ms(OVERLAY_EXIT_MS, cx));
 
-    ToastViewport::new()
+    let viewport = ToastViewport::new()
         .id("dataforge-toast-viewport")
         .placement(ToastPlacement::BottomEnd)
         .gap(px(8.0))
@@ -53,8 +60,101 @@ pub fn render_toast_viewport(
         .scale_factor(0.05)
         .max_visible_toasts(4)
         .exit_duration(exit_duration)
-        .hotkey(ToastHotkey::ALT_T)
+        .hotkey(ToastHotkey::ALT_T);
+
+    deferred(OpaqueToastThemeScope::new(viewport))
+        .with_priority(TOAST_DEFERRED_PRIORITY)
         .into_any_element()
+}
+
+/// Runs `f` while `ThemeProvider`'s active theme uses opaque overlay tokens,
+/// then restores the previous theme in place without triggering window refreshes.
+fn with_opaque_toast_theme<R>(cx: &mut App, f: impl FnOnce(&mut App) -> R) -> R {
+    let previous = cx
+        .try_global::<ThemeProvider>()
+        .map(|provider| provider.theme().clone());
+    if let Some(ref base) = previous {
+        let opaque = toast_opaque_theme(base);
+        cx.global_mut::<ThemeProvider>().insert(opaque);
+    }
+    let result = f(cx);
+    if let Some(base) = previous {
+        cx.global_mut::<ThemeProvider>().insert(base);
+    }
+    result
+}
+
+/// Element wrapper that isolates [`ToastViewport`] inside an opaque overlay theme
+/// snapshot across layout, prepaint, and paint while preserving workspace translucency.
+struct OpaqueToastThemeScope {
+    child: AnyElement,
+}
+
+impl OpaqueToastThemeScope {
+    fn new(child: impl IntoElement) -> Self {
+        Self {
+            child: child.into_any_element(),
+        }
+    }
+}
+
+impl IntoElement for OpaqueToastThemeScope {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for OpaqueToastThemeScope {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let layout_id = with_opaque_toast_theme(cx, |cx| self.child.request_layout(window, cx));
+        (layout_id, ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        with_opaque_toast_theme(cx, |cx| {
+            let _ = self.child.prepaint(window, cx);
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        with_opaque_toast_theme(cx, |cx| self.child.paint(window, cx));
+    }
 }
 
 /// Dispatches a dismissible HeroGPUI [`Toast`] with an optional trailing action link.
