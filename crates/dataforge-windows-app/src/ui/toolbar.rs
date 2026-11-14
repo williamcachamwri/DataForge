@@ -202,7 +202,13 @@ fn render_execution_controls(
     if !state.is_connected {
         return render_disconnected_execution(s, state.is_connecting, state.skip_anim, cx);
     }
-    render_connected_execution(s, state.is_running, state.has_selection, state.skip_anim, cx)
+    render_connected_execution(
+        s,
+        state.is_running,
+        state.has_selection,
+        state.skip_anim,
+        cx,
+    )
 }
 
 fn render_disconnected_execution(
@@ -983,12 +989,7 @@ fn save_active_tab_query(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForge
         .and_then(|id| ws.controller.tabs.tabs().iter().find(|t| t.id == id))
         .map_or_else(|| default_title.to_owned(), |t| t.title.clone());
     ws.controller.save_current_query(&title, None);
-    ws.notify_toast(
-        ToastSeverity::Success,
-        saved_toast,
-        Some(title.into()),
-        cx,
-    );
+    ws.notify_toast(ToastSeverity::Success, saved_toast, Some(title.into()), cx);
     cx.notify();
 }
 
@@ -1014,12 +1015,7 @@ fn run_active_or_selected_sql(ws: &mut DataForgeWorkspace, cx: &mut Context<Data
                 ws.ensure_tab_result(tab_id).fail(err.to_string());
             }
             let msg = ws.controller.strings.query_failed;
-            ws.notify_toast(
-                ToastSeverity::Error,
-                msg,
-                Some(err.to_string().into()),
-                cx,
-            );
+            ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
         }
     }
     cx.notify();
@@ -1055,12 +1051,7 @@ fn reload_objects_for_scope(
         }
         Err(err) => {
             let msg = ws.controller.strings.load_schema_objects_failed_toast;
-            ws.notify_toast(
-                ToastSeverity::Error,
-                msg,
-                Some(err.into()),
-                cx,
-            );
+            ws.notify_toast(ToastSeverity::Error, msg, Some(err.into()), cx);
         }
     }
     cx.notify();
