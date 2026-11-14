@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use dataforge_gfx::glyphs::EngineKind;
 use dataforge_services::import_bridge::{SUPPORTED_IMPORT_APPS, parse_connection_url};
@@ -13,18 +13,19 @@ use dataforge_state::library::{
 };
 use dataforge_windows_platform::foreign_app_dirs;
 use herogpui::components::{
-    Alert, Badge, BadgeLabel, BadgeVariant, Button, Card, CardContent, CardDescription, CardHeader,
-    CardTitle, CardVariant, Checkbox, Chip, ChipLabel, ChipVariant, Color, DisclosureGroup,
-    FieldVariant, Form, Icon, IconName, IconSize, Input, InputState, InputType, InteractiveState,
-    ListBox, ListBoxItem, PickerItem, SearchField, Select, SelectionMode, SelectionValue, Size,
-    Spinner, SpinnerSize, Switch, TabItem, Tabs, TabsSize, TabsVariant, Variant,
+    Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant,
+    Checkbox, Chip, ChipLabel, ChipVariant, Color, FieldVariant, Form, Icon, IconName, IconSize,
+    Input, InputState, InputType, InteractiveState, ListBox, ListBoxItem, PickerItem, SearchField,
+    Select, SelectionMode, SelectionValue, Separator, Size, Spinner, SpinnerSize, Switch, TabItem,
+    Tabs, TabsSize, TabsVariant, Variant,
 };
 use herogpui::core::with_alpha;
 use herogpui::gpui::prelude::FluentBuilder as _;
 use herogpui::gpui::{
-    AnyElement, App, AppContext as _, AsyncApp, Context, Entity, FontFeatures, FontWeight, Hsla,
-    InteractiveElement, IntoElement, ParentElement, PathPromptOptions, SharedString,
-    StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
+    Animation, AnimationExt as _, AnyElement, App, AppContext as _, AsyncApp, Context, Entity,
+    FontFeatures, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    PathPromptOptions, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, div,
+    px,
 };
 use herogpui::theme::ActiveTheme;
 use secrecy::{ExposeSecret, SecretString};
@@ -46,8 +47,8 @@ use super::DataForgeWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::ToastSeverity;
 use super::theme::{
-    COMPACT_GAP_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, hairline_border_color, is_reduced_motion,
-    panel_surface_bg,
+    COMPACT_GAP_PX, CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, ease_out_quad,
+    hairline_border_color, is_reduced_motion, overlay_duration, panel_surface_bg,
 };
 use crate::app::ScreenMode;
 use crate::services::{build_connect_request, default_port_for_engine, driver_id_from_engine};
@@ -384,12 +385,16 @@ fn render_library_rail_title_row(
     total_count: usize,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
-    let count_badge = Badge::new()
-        .variant(BadgeVariant::Soft)
-        .color(Color::Default)
-        .size(Size::Sm)
-        .sx(|d| d.font_features(tabular_font_features()))
-        .child(BadgeLabel::new().child(total_count.to_string()));
+    let count_pill = div()
+        .flex_shrink_0()
+        .font_features(tabular_font_features())
+        .child(
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .color(Color::Default)
+                .size(Size::Sm)
+                .child(ChipLabel::new().child(total_count.to_string())),
+        );
 
     div()
         .flex()
@@ -401,13 +406,14 @@ fn render_library_rail_title_row(
                 .flex()
                 .items_center()
                 .gap(px(MICRO_GAP_PX + 2.0))
+                .min_w_0()
                 .child(
                     div()
                         .text_sm()
                         .font_weight(FontWeight::SEMIBOLD)
                         .child("Connections"),
                 )
-                .child(count_badge),
+                .child(count_pill),
         )
         .child(
             Button::new("library-new-btn")
@@ -513,6 +519,7 @@ fn render_library_rail_body(
         .unwrap_or_default();
 
     let colors = cx.colors().clone();
+    let reduced_motion = is_reduced_motion(cx);
     let row_meta = Arc::new(row_meta);
     let row_meta_for_render = row_meta.clone();
 
@@ -520,7 +527,7 @@ fn render_library_rail_body(
         .selection_mode(SelectionMode::Single)
         .selected_keys(selected_keys)
         .item_content(move |key: &SharedString, state: InteractiveState| {
-            render_listbox_row(key, state, &row_meta_for_render, &colors)
+            render_listbox_row(key, state, &row_meta_for_render, &colors, reduced_motion)
         })
         .on_selection_change(cx.listener(|ws, keys: &HashSet<SharedString>, _, cx| {
             let Some(first_key) = keys.iter().next() else {
@@ -777,6 +784,7 @@ fn render_listbox_row(
     state: InteractiveState,
     meta_map: &HashMap<SharedString, ListRowMeta>,
     colors: &herogpui::theme::ThemeColors,
+    reduced_motion: bool,
 ) -> AnyElement {
     let Some(meta) = meta_map.get(key) else {
         return div().child(key.clone()).into_any_element();
@@ -795,6 +803,17 @@ fn render_listbox_row(
         .flex()
         .items_center()
         .gap(px(COMPACT_GAP_PX))
+        .when(state.is_pressed, |d| d.opacity(0.84))
+        .when(state.is_selected, |d| {
+            d.child(
+                div()
+                    .w(px(2.5))
+                    .h(px(18.0))
+                    .flex_shrink_0()
+                    .rounded_full()
+                    .bg(colors.accent.color),
+            )
+        })
         .child(engine_icon(meta.engine, px(16.0), icon_color))
         .child(
             div()
@@ -835,6 +854,16 @@ fn render_listbox_row(
         );
     }
 
+    if state.is_selected && !reduced_motion {
+        return row
+            .with_animation(
+                SharedString::from(format!("lib-row-sel:{key}")),
+                Animation::new(Duration::from_millis(140)).with_easing(ease_out_quad),
+                |el, delta| el.opacity(0.82 + 0.18 * delta).pl(px(2.0 * (1.0 - delta))),
+            )
+            .into_any_element();
+    }
+
     row.into_any_element()
 }
 
@@ -846,6 +875,33 @@ fn render_detail_pane(
         render_foreign_importers_tab(ws, cx)
     } else {
         render_configure_tab(ws, cx)
+    };
+
+    let content = div()
+        .w_full()
+        .max_w(px(760.0))
+        .mx_auto()
+        .flex()
+        .flex_col()
+        .gap(px(16.0))
+        .child(body);
+
+    let animated_content = if is_reduced_motion(cx) {
+        content.into_any_element()
+    } else {
+        let sel_key = ws
+            .library_ui
+            .selected_connection_id
+            .as_deref()
+            .unwrap_or("new");
+        let tab_key = ws.library_ui.active_tab.as_ref();
+        content
+            .with_animation(
+                SharedString::from(format!("library-detail-enter:{tab_key}:{sel_key}")),
+                Animation::new(overlay_duration(cx)).with_easing(ease_out_quad),
+                |el, delta| el.opacity(delta).pt(px(4.0 * (1.0 - delta))),
+            )
+            .into_any_element()
     };
 
     div()
@@ -862,16 +918,7 @@ fn render_detail_pane(
                 .min_h_0()
                 .overflow_y_scroll()
                 .p(px(20.0))
-                .child(
-                    div()
-                        .w_full()
-                        .max_w(px(760.0))
-                        .mx_auto()
-                        .flex()
-                        .flex_col()
-                        .gap(px(16.0))
-                        .child(body),
-                ),
+                .child(animated_content),
         )
         .into_any_element()
 }
@@ -1575,33 +1622,120 @@ fn render_advanced_disclosures(
         ws.controller.connection_form.engine,
         EngineKind::Sqlite | EngineKind::Duckdb
     );
-    let mut group = DisclosureGroup::new("library-advanced-disclosures")
-        .allows_multiple_expanded(true)
-        .expanded_keys(ws.library_ui.expanded_disclosures.iter().cloned())
-        .on_expanded_change(cx.listener(|ws, keys: &HashSet<SharedString>, _, cx| {
-            ws.library_ui.expanded_disclosures = keys.clone();
-            cx.notify();
-        }));
-
+    let mut sections: Vec<(&'static str, &'static str, AnyElement)> = Vec::new();
     if is_network {
-        group = group
-            .item(
-                "tls",
-                "TLS / SSL & Client Certificates",
-                render_tls_panel(ws, cx),
-            )
-            .item("ssh", "SSH Tunnel", render_ssh_panel(ws, cx));
+        sections.push((
+            "tls",
+            "TLS / SSL & Client Certificates",
+            render_tls_panel(ws, cx),
+        ));
+        sections.push(("ssh", "SSH Tunnel", render_ssh_panel(ws, cx)));
     }
-    group = group.item(
+    sections.push((
         "options",
         "Tags, Timeouts & Extra Parameters",
         render_options_panel(ws, cx),
-    );
+    ));
+
+    let total = sections.len();
+    let mut stack = div().w_full().flex().flex_col();
+    for (idx, (key, title, panel)) in sections.into_iter().enumerate() {
+        let is_expanded = ws
+            .library_ui
+            .expanded_disclosures
+            .iter()
+            .any(|k| k.as_ref() == key);
+        stack = stack.child(render_accordion_section(
+            key,
+            title,
+            is_expanded,
+            panel,
+            idx + 1 < total,
+            cx,
+        ));
+    }
 
     Card::new()
         .variant(CardVariant::Default)
-        .child(CardContent::new().child(group))
+        .child(CardContent::new().child(stack))
         .into_any_element()
+}
+
+fn render_accordion_section(
+    key: &'static str,
+    title: &'static str,
+    is_expanded: bool,
+    panel: AnyElement,
+    show_separator: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let reduced_motion = is_reduced_motion(cx);
+    let hover_bg = with_alpha(colors.foreground, 0.04);
+    let active_bg = with_alpha(colors.foreground, 0.08);
+
+    let header = div()
+        .id(SharedString::from(format!("library-accordion-{key}")))
+        .w_full()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(COMPACT_GAP_PX))
+        .py(px(10.0))
+        .px(px(6.0))
+        .rounded(px(CONTROL_RADIUS_PX))
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover_bg))
+        .active(move |s| s.bg(active_bg))
+        .on_click(cx.listener(move |ws, _, _, cx| {
+            let shared_key = SharedString::from(key);
+            if ws.library_ui.expanded_disclosures.contains(&shared_key) {
+                ws.library_ui.expanded_disclosures.remove(&shared_key);
+            } else {
+                ws.library_ui.expanded_disclosures.insert(shared_key);
+            }
+            cx.notify();
+        }))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_sm()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(colors.foreground)
+                .child(title),
+        )
+        .child(
+            Icon::new(if is_expanded {
+                IconName::ChevronDown
+            } else {
+                IconName::ChevronRight
+            })
+            .size(IconSize::Sm)
+            .color(colors.muted),
+        );
+
+    let mut section = div().w_full().flex().flex_col().child(header);
+    if is_expanded {
+        let body = div().w_full().px(px(6.0)).child(panel);
+        let animated_body = if reduced_motion {
+            body.pt(px(6.0)).pb(px(12.0)).into_any_element()
+        } else {
+            body.with_animation(
+                SharedString::from(format!("library-accordion-body:{key}")),
+                Animation::new(overlay_duration(cx)).with_easing(ease_out_quad),
+                |el, delta| el.opacity(delta).pt(px(6.0 * delta)).pb(px(12.0 * delta)),
+            )
+            .into_any_element()
+        };
+        section = section.child(animated_body);
+    }
+
+    if show_separator {
+        section = section.child(Separator::new());
+    }
+
+    section.into_any_element()
 }
 
 fn render_tls_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
@@ -2127,69 +2261,74 @@ fn render_importer_card(
         importer_card_copy(app, &inv);
     let btn_id = format!("import-app-{}", app.id());
 
-    Card::new()
-        .variant(CardVariant::Default)
-        .child(
-            CardContent::new().child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap(px(12.0))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(4.0))
-                            .min_w_0()
-                            .child(
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(COMPACT_GAP_PX))
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child(app.display_name()),
-                                    )
-                                    .child(
-                                        Chip::new()
-                                            .variant(ChipVariant::Soft)
-                                            .color(if inv.connections > 0 {
-                                                Color::Accent
-                                            } else {
-                                                Color::Default
-                                            })
-                                            .size(Size::Sm)
-                                            .child(ChipLabel::new().child(pwd_note)),
-                                    ),
-                            )
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(cx.colors().muted)
-                                    .font_features(tabular_font_features())
-                                    .child(count_summary),
-                            ),
-                    )
-                    .child(
-                        Button::new(SharedString::from(btn_id))
-                            .variant(if can_import {
-                                Variant::Primary
-                            } else {
-                                Variant::Secondary
-                            })
-                            .size(Size::Sm)
-                            .is_disabled(!windows_supported)
-                            .label(btn_label)
-                            .child(Icon::new(IconName::Download).size(IconSize::Sm))
-                            .on_press(cx.listener(move |ws, _, _, cx| {
-                                trigger_foreign_import(ws, app, cx);
-                            })),
-                    ),
-            ),
-        )
+    let card = Card::new().variant(CardVariant::Default).child(
+        CardContent::new().child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(12.0))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(4.0))
+                        .min_w_0()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(COMPACT_GAP_PX))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .child(app.display_name()),
+                                )
+                                .child(
+                                    Chip::new()
+                                        .variant(ChipVariant::Soft)
+                                        .color(if inv.connections > 0 {
+                                            Color::Accent
+                                        } else {
+                                            Color::Default
+                                        })
+                                        .size(Size::Sm)
+                                        .child(ChipLabel::new().child(pwd_note)),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.colors().muted)
+                                .font_features(tabular_font_features())
+                                .child(count_summary),
+                        ),
+                )
+                .child(
+                    Button::new(SharedString::from(btn_id))
+                        .variant(if can_import {
+                            Variant::Primary
+                        } else {
+                            Variant::Secondary
+                        })
+                        .size(Size::Sm)
+                        .is_disabled(!windows_supported)
+                        .label(btn_label)
+                        .child(Icon::new(IconName::Download).size(IconSize::Sm))
+                        .on_press(cx.listener(move |ws, _, _, cx| {
+                            trigger_foreign_import(ws, app, cx);
+                        })),
+                ),
+        ),
+    );
+
+    div()
+        .id(SharedString::from(format!("importer-card-{}", app.id())))
+        .rounded(px(CONTROL_RADIUS_PX))
+        .hover(|s| s.opacity(0.96))
+        .active(|s| s.opacity(0.90))
+        .child(card)
         .into_any_element()
 }
 
