@@ -16,7 +16,7 @@ use dataforge_services::{
 use dataforge_state::connection_window::{AttemptToken, WorkspaceId};
 use dataforge_state::library::LibraryConnection;
 use dataforge_windows_platform::{
-    DEFAULT_CREDENTIAL_PREFIX, WindowsCredentialStore, storage_paths,
+    AppSettings, DEFAULT_CREDENTIAL_PREFIX, WindowsCredentialStore, storage_paths,
 };
 use futures::future::BoxFuture;
 use secrecy::SecretString;
@@ -39,7 +39,7 @@ use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_APP};
 
 use crate::dialogs::{DialogKind, DialogOutcome, show_native_dialog};
-use crate::i18n::{Locale, Strings};
+use crate::i18n::{Locale, Strings, init_locale};
 use crate::ipc::WakeupSignal;
 use crate::views::library::{AuthMode, ConnectionFormDraft, TlsMode};
 
@@ -110,36 +110,69 @@ pub enum ServiceEvent {
     },
 }
 
+/// Resolves the active localized [`Strings`] catalog from persisted [`AppSettings`]
+/// or OS/environment locale variables via [`init_locale`].
+#[must_use]
+pub fn resolve_active_strings() -> Strings {
+    let preferred = storage_paths()
+        .ok()
+        .and_then(|paths| AppSettings::load(&AppSettings::file_path(&paths)).ok())
+        .and_then(|settings| settings.locale);
+    Strings::for_locale(init_locale(preferred.as_deref()))
+}
+
 /// [`CredentialPrompter`] backed by Win32 native confirmation dialogs (or headless auto-decline).
 pub struct DialogCredentialPrompter {
     headless: bool,
     strings: Strings,
+    custom_locale: bool,
 }
 
 impl DialogCredentialPrompter {
-    /// Creates a prompter; when `headless` is `true`, prompts decline safely without blocking UI.
+    /// Creates a prompter using the active persisted/environment locale;
+    /// when `headless` is `true`, prompts decline safely without blocking UI.
     #[must_use]
     pub fn new(headless: bool) -> Self {
         Self {
             headless,
-            strings: Strings::for_locale(Locale::EnUs),
+            strings: resolve_active_strings(),
+            custom_locale: false,
         }
     }
+
+    /// Creates a prompter pinned to an explicit [`Locale`].
+    #[must_use]
+    pub fn with_locale(headless: bool, locale: Locale) -> Self {
+        Self {
+            headless,
+            strings: Strings::for_locale(locale),
+            custom_locale: true,
+        }
+    }
+}
+
+fn format_credential_prompt_text(request: &CredentialPrompt, strings: &Strings) -> String {
+    request
+        .fields
+        .first()
+        .map(|f| f.label.clone())
+        .unwrap_or_else(|| {
+            strings
+                .auth_for_target_template
+                .replace("{target}", &request.target)
+        })
 }
 
 impl CredentialPrompter for DialogCredentialPrompter {
     fn prompt(&self, request: CredentialPrompt) -> BoxFuture<'static, PromptReply> {
         let headless = self.headless;
-        let strings = self.strings.clone();
+        let pinned_strings = self.custom_locale.then(|| self.strings.clone());
         Box::pin(async move {
             if headless {
                 return PromptReply::Cancelled;
             }
-            let prompt_text = request
-                .fields
-                .first()
-                .map(|f| f.label.clone())
-                .unwrap_or_else(|| format!("Authentication for {}", request.target));
+            let strings = pinned_strings.unwrap_or_else(resolve_active_strings);
+            let prompt_text = format_credential_prompt_text(&request, &strings);
             let masked = request.fields.first().is_some_and(|f| f.secret);
             let kind = DialogKind::InteractiveAuth {
                 prompt: prompt_text,
@@ -498,5 +531,31 @@ mod tests {
         assert_eq!(shared.try_recv(), Ok(()));
         assert_eq!(hub.drain_events().len(), 1);
         Ok(())
+    }
+
+    #[test]
+    fn dialog_credential_prompter_uses_locale_and_formats_fallback_prompt() {
+        use tablepro_core::credentials::PromptPurpose;
+
+        for locale in Locale::ALL {
+            let prompter = DialogCredentialPrompter::with_locale(true, locale);
+            let expected = Strings::for_locale(locale);
+            assert_eq!(
+                prompter.strings.interactive_auth_title,
+                expected.interactive_auth_title
+            );
+
+            let req = CredentialPrompt {
+                purpose: PromptPurpose::SshConfirmation {
+                    text: "Verify".to_owned(),
+                },
+                target: "prod-pg.internal".to_owned(),
+                fields: Vec::new(),
+                offer_remember: false,
+            };
+            let text = format_credential_prompt_text(&req, &prompter.strings);
+            assert!(text.contains("prod-pg.internal"));
+            assert!(!text.contains("{target}"));
+        }
     }
 }
