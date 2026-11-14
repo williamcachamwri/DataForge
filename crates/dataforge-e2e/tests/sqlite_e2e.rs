@@ -454,3 +454,111 @@ async fn sqlite_export_csv_json_sql() -> E2eResult<()> {
     shutdown_session(&session).await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn sqlite_100k_rows_load_and_scroll_perf() -> E2eResult<()> {
+    let dir = tempfile::tempdir()?;
+    let db_path = dir.path().join("bench_100k.sqlite");
+    let session = open_file_session(
+        dir.path(),
+        &db_path,
+        Arc::new(SqliteDriver),
+        "sqlite",
+        true,
+        false,
+    )
+    .await?;
+
+    let seed_start = std::time::Instant::now();
+    let seed_sql = "
+        CREATE TABLE bench_rows (
+            id INTEGER PRIMARY KEY,
+            label TEXT NOT NULL,
+            score INTEGER NOT NULL
+        );
+        WITH RECURSIVE cnt(x) AS (
+            SELECT 1
+            UNION ALL
+            SELECT x + 1 FROM cnt WHERE x < 100000
+        )
+        INSERT INTO bench_rows (id, label, score)
+        SELECT x, 'row_' || x, x * 7 FROM cnt;
+    ";
+    let seed_out = run_sql(&session, seed_sql).await?;
+    if !matches!(seed_out.summary.end, RunEnd::Completed) {
+        return Err(format!("seed failed: {:?}", seed_out.summary.end).into());
+    }
+    let seed_ms = seed_start.elapsed().as_secs_f64() * 1000.0;
+
+    let table = TableRef::unqualified("bench_rows");
+    let cols = session
+        .columns(table.clone())
+        .await
+        .map_err(|e| format!("columns failed: {e}"))?;
+    let filter = FilterSet::default();
+
+    let query_start = std::time::Instant::now();
+    let page = session
+        .run(OperationKind::Page, |lease, opts| {
+            let table = table.clone();
+            let cols = cols.clone();
+            let filter = filter.clone();
+            async move {
+                let conn = lease.connection();
+                let identity = conn.row_identity(&table, opts.clone()).await?;
+                let req = PageRequest {
+                    table: &table,
+                    columns: &cols,
+                    filter: &filter,
+                    sort: &[],
+                    identity: &identity,
+                    position: &PagePosition::First,
+                    limit: 100_000,
+                };
+                read_page::<OperationError>(conn.as_ref(), &req, &opts).await
+            }
+        })
+        .await?;
+    let query_100k_ms = query_start.elapsed().as_secs_f64() * 1000.0;
+    assert_eq!(page.result.rows.len(), 100_000);
+
+    let rows = page.result.rows;
+    let grid_start = std::time::Instant::now();
+    let mut grid = DataGridModel::new(DataGridLayoutScope::Table("bench_rows".to_owned()), 100_000);
+    grid.reload_rows(page.result.columns.to_vec(), rows.clone(), Some(100_000));
+    let grid_load_100k_ms = grid_start.elapsed().as_secs_f64() * 1000.0;
+    assert_eq!(grid.row_order.len(), 100_000);
+
+    let row_height_px: f32 = 28.0;
+    let view_h: f32 = 720.0;
+    let overscan: usize = 4;
+    let total_rows = grid.row_order.len();
+    let max_scroll_y = (total_rows as f32 * row_height_px - view_h).max(0.0);
+    let vis_count = (view_h / row_height_px).ceil() as usize + overscan * 2;
+    let frames: usize = 10_000;
+
+    let scroll_start = std::time::Instant::now();
+    let mut checksum: usize = 0;
+    for frame in 0..frames {
+        let scroll_y = max_scroll_y * (frame as f32 / (frames - 1) as f32);
+        let first_row = ((scroll_y / row_height_px).floor() as usize).saturating_sub(overscan);
+        let last_row = (first_row + vis_count).min(total_rows);
+        for row_idx in first_row..last_row {
+            if let Some(row_id) = grid.row_order.row_id(row_idx)
+                && let Some(row) = rows.get(row_idx)
+            {
+                checksum = checksum.wrapping_add(row_id.0 as usize + row.len());
+            }
+        }
+    }
+    std::hint::black_box(checksum);
+    let scroll_10k_frames_ms = scroll_start.elapsed().as_secs_f64() * 1000.0;
+    let us_per_frame = (scroll_10k_frames_ms * 1000.0) / frames as f64;
+
+    println!(
+        "BENCH_100K: seed_ms={seed_ms:.2} query_100k_ms={query_100k_ms:.2} grid_load_100k_ms={grid_load_100k_ms:.2} scroll_10k_frames_ms={scroll_10k_frames_ms:.3} us_per_frame={us_per_frame:.3}"
+    );
+
+    shutdown_session(&session).await?;
+    Ok(())
+}
