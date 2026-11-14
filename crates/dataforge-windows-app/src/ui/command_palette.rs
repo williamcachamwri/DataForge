@@ -423,14 +423,7 @@ fn execute_named_action(
         "reopen-tab" => ws.execute_key_command(KeyCommand::ReopenClosedTab, window, cx),
         "export" => ws.modals_ui.open_export(window, cx),
         "refresh-schema" => {
-            if let Err(err) = ws.controller.refresh_schema_sidebar_blocking() {
-                ws.notify_toast(
-                    ToastSeverity::Error,
-                    "Schema refresh failed",
-                    Some(err.to_string().into()),
-                    cx,
-                );
-            }
+            super::sidebar::refresh_active_schema(ws, cx);
         }
         "commit" => ws.workspace_pane.confirm_commit_open = true,
         "rollback" => {
