@@ -124,7 +124,7 @@ pub fn render_data_grid(
     let has_data = !ws.controller.grid_columns.is_empty() || !ws.controller.grid_rows.is_empty();
 
     if !has_data && ws.controller.active_table.is_none() {
-        return render_grid_empty_state(phase.as_ref(), cx);
+        return render_grid_empty_state(phase.as_ref(), &ws.controller.strings, cx);
     }
 
     let toolbar = render_grid_toolbar(ws, cx);
@@ -150,24 +150,22 @@ pub fn render_data_grid(
         .into_any_element()
 }
 
-fn render_grid_empty_state(phase: Option<&ConnectionWindowPhase>, cx: &App) -> AnyElement {
+fn render_grid_empty_state(
+    phase: Option<&ConnectionWindowPhase>,
+    s: &crate::i18n::Strings,
+    cx: &App,
+) -> AnyElement {
     let (title, detail) = match phase {
-        Some(ConnectionWindowPhase::Disconnected) | None => (
-            "No database connection",
-            "Connect to a database in Connections, then pick a table from the Schema Browser.",
-        ),
-        Some(ConnectionWindowPhase::Connecting { .. }) => (
-            "Connecting to server...",
-            "Schema objects will appear in the Schema Browser once connected.",
-        ),
-        Some(ConnectionWindowPhase::Reconnecting { .. }) => (
-            "Reconnecting...",
-            "Waiting for connection recovery before browsing table rows.",
-        ),
-        _ => (
-            "No table open",
-            "Select a table in the Schema Browser or execute a query in the SQL Editor.",
-        ),
+        Some(ConnectionWindowPhase::Disconnected) | None => {
+            (s.grid_no_connection_title, s.grid_no_connection_desc)
+        }
+        Some(ConnectionWindowPhase::Connecting { .. }) => {
+            (s.grid_connecting_title, s.grid_connecting_desc)
+        }
+        Some(ConnectionWindowPhase::Reconnecting { .. }) => {
+            (s.reconnecting, s.grid_reconnecting_desc)
+        }
+        _ => (s.grid_no_table_title, s.grid_no_table_desc),
     };
 
     div()
@@ -231,19 +229,23 @@ fn render_grid_toolbar_left(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
         + ws.controller.grid_model.edits.inserted_rows.len()
         + ws.controller.grid_model.edits.deleted_rows.len();
 
+    let s = &ws.controller.strings;
     let table_chip_label = ws
         .controller
         .active_table
         .as_ref()
         .map(|t| match &t.schema {
-            Some(s) => format!("{s}.{}", t.name),
+            Some(schema) => format!("{schema}.{}", t.name),
             None => t.name.clone(),
         })
-        .unwrap_or_else(|| "Query Result".to_owned());
-
+        .unwrap_or_else(|| s.query_result_label.to_owned());
     let row_count_text = match ws.controller.grid_model.page.table_row_count {
-        Some(total) => format!("{} rows ({total} total)", ws.controller.grid_rows.len()),
-        None => format!("{} rows", ws.controller.grid_rows.len()),
+        Some(total) => format!(
+            "{} {} ({total})",
+            ws.controller.grid_rows.len(),
+            s.rows_suffix
+        ),
+        None => format!("{} {}", ws.controller.grid_rows.len(), s.rows_suffix),
     };
 
     div()
@@ -269,7 +271,10 @@ fn render_grid_toolbar_left(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
                     .variant(ChipVariant::Soft)
                     .size(HeroSize::Sm)
                     .color(HeroColor::Warning)
-                    .child(ChipLabel::new().child(format!("{pending_count} pending"))),
+                    .child(
+                        ChipLabel::new()
+                            .child(format!("{pending_count} {}", s.pending_suffix)),
+                    ),
             )
         })
         .into_any_element()
@@ -279,6 +284,7 @@ fn render_grid_toolbar_right(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let has_table = ws.controller.active_table.is_some();
     let has_pending = ws.controller.grid_model.edits.has_pending_edits();
     let has_selected_row = ws.controller.grid_selection.focused.is_some();
@@ -293,7 +299,7 @@ fn render_grid_toolbar_right(
                 .size(HeroSize::Sm)
                 .is_disabled(ws.controller.grid_columns.is_empty())
                 .child(Icon::new(IconName::Plus).size(IconSize::Xs))
-                .label("Row")
+                .label(s.row_short)
                 .on_press(cx.listener(|ws, _ev, _w, cx| {
                     let count = ws.controller.grid_model.columns.columns().len();
                     if count > 0 {
@@ -311,7 +317,7 @@ fn render_grid_toolbar_right(
                 .size(HeroSize::Sm)
                 .is_disabled(!has_selected_row)
                 .child(Icon::new(IconName::Trash2).size(IconSize::Xs))
-                .label("Delete")
+                .label(s.delete)
                 .on_press(cx.listener(|ws, _ev, _w, cx| {
                     if let Some((row_idx, _)) = ws.controller.grid_selection.focused {
                         delete_row_at_index(ws, row_idx);
@@ -321,7 +327,7 @@ fn render_grid_toolbar_right(
         );
 
     if has_pending {
-        right = append_pending_edit_buttons(right, has_table, cx);
+        right = append_pending_edit_buttons(right, has_table, s, cx);
     }
 
     right
@@ -333,7 +339,7 @@ fn render_grid_toolbar_right(
                 .size(HeroSize::Sm)
                 .is_disabled(ws.controller.grid_columns.is_empty())
                 .child(Icon::new(IconName::Download).size(IconSize::Xs))
-                .label("Export")
+                .label(s.export)
                 .on_press(cx.listener(|ws, _ev, window, cx| {
                     ws.modals_ui.open_export(window, cx);
                     cx.notify();
@@ -345,6 +351,7 @@ fn render_grid_toolbar_right(
 fn append_pending_edit_buttons(
     row: gpui::Div,
     has_table: bool,
+    s: &crate::i18n::Strings,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> gpui::Div {
     row.child(
@@ -352,16 +359,12 @@ fn append_pending_edit_buttons(
             .variant(Variant::Secondary)
             .size(HeroSize::Sm)
             .child(Icon::new(IconName::RotateCcw).size(IconSize::Xs))
-            .label("Rollback")
+            .label(s.rollback)
             .on_press(cx.listener(|ws, _ev, _w, cx| {
                 ws.controller.rollback_grid_edits();
                 ws.workspace_pane.inline_edit = None;
-                ws.notify_toast(
-                    ToastSeverity::Info,
-                    "Rolled back pending row edits",
-                    None,
-                    cx,
-                );
+                let msg = ws.controller.strings.grid_rollback_toast;
+                ws.notify_toast(ToastSeverity::Info, msg, None, cx);
                 cx.notify();
             })),
     )
@@ -371,21 +374,23 @@ fn append_pending_edit_buttons(
             .size(HeroSize::Sm)
             .is_disabled(!has_table)
             .child(Icon::new(IconName::Check).size(IconSize::Xs))
-            .label("Commit")
+            .label(s.commit)
             .on_press(cx.listener(|ws, _ev, _w, cx| {
                 match ws.controller.commit_grid_edits_blocking() {
                     Ok(applied) => {
+                        let s = &ws.controller.strings;
                         ws.notify_toast(
                             ToastSeverity::Success,
-                            format!("Committed {applied} statement(s)"),
+                            format!("{}: {applied} {}", s.committed_prefix, s.statements_unit),
                             None,
                             cx,
                         );
                     }
                     Err(err) => {
+                        let msg = ws.controller.strings.grid_commit_failed_toast;
                         ws.notify_toast(
                             ToastSeverity::Error,
-                            "Commit failed",
+                            msg,
                             Some(SharedString::from(err.to_string())),
                             cx,
                         );
@@ -400,16 +405,18 @@ fn render_columns_popover(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let cols = ws.controller.grid_model.columns.columns().to_vec();
     let hidden_count = ws.data_grid_ui.hidden_columns.len();
     let trigger_label = if hidden_count > 0 {
         format!(
-            "Columns ({}/{})",
+            "{} ({}/{})",
+            s.columns_button,
             cols.len().saturating_sub(hidden_count),
             cols.len()
         )
     } else {
-        "Columns".to_owned()
+        s.columns_button.to_owned()
     };
 
     let trigger = Button::new("grid-columns-trigger")
@@ -420,13 +427,13 @@ fn render_columns_popover(
 
     let entity_open = cx.entity().clone();
     let list = build_column_visibility_list(ws, cols, cx);
-    let footer_actions = render_columns_popover_footer(cx);
+    let footer_actions = render_columns_popover_footer(s, cx);
 
     Popover::new(trigger)
         .id("grid-columns-popover")
         .placement(PopoverPlacement::BottomEnd)
         .panel_width(px(260.0))
-        .title("Visible Columns")
+        .title(s.visible_columns)
         .is_open(ws.data_grid_ui.columns_popover_open)
         .on_open_change(move |open, _w, cx| {
             let next = *open;
@@ -453,12 +460,13 @@ fn build_column_visibility_list(
         .id("grid-columns-popover-scroll")
         .overflow_y_scroll();
 
+    let pinned_label = ws.controller.strings.pinned_label;
     for col in cols {
         let col_id = col.id;
         let visible = !ws.data_grid_ui.hidden_columns.contains(&col_id);
         let entity_cb = cx.entity().clone();
         let label_text = if col.is_frozen {
-            format!("{} (Pinned)", col.name)
+            format!("{} ({})", col.name, pinned_label)
         } else {
             col.name
         };
@@ -536,7 +544,10 @@ fn build_column_visibility_list(
     list.into_any_element()
 }
 
-fn render_columns_popover_footer(cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_columns_popover_footer(
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
     div()
         .pt(px(6.0))
         .border_t_1()
@@ -548,7 +559,7 @@ fn render_columns_popover_footer(cx: &mut Context<DataForgeWorkspace>) -> AnyEle
             Button::new("grid-cols-show-all")
                 .variant(Variant::Tertiary)
                 .size(HeroSize::Sm)
-                .label("Show All")
+                .label(s.show_all)
                 .on_press(cx.listener(|ws, _ev, _w, cx| {
                     ws.data_grid_ui.hidden_columns.clear();
                     cx.notify();
@@ -558,7 +569,7 @@ fn render_columns_popover_footer(cx: &mut Context<DataForgeWorkspace>) -> AnyEle
             Button::new("grid-cols-unfreeze")
                 .variant(Variant::Tertiary)
                 .size(HeroSize::Sm)
-                .label("Unfreeze All")
+                .label(s.unfreeze_all)
                 .on_press(cx.listener(|ws, _ev, _w, cx| {
                     ws.controller.grid_model.columns.unfreeze_all();
                     ws.controller.sync_grid_view_from_model();
@@ -572,11 +583,12 @@ fn render_filters_popover(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let active_count = ws.controller.grid_model.filter_bar.filter_set.rules.len();
     let label = if active_count > 0 {
-        format!("Filters ({active_count})")
+        format!("{} ({active_count})", s.filters_button)
     } else {
-        "Filters".to_owned()
+        s.filters_button.to_owned()
     };
 
     let trigger = Button::new("grid-filters-trigger")
@@ -596,7 +608,7 @@ fn render_filters_popover(
         .id("grid-filters-popover")
         .placement(PopoverPlacement::BottomEnd)
         .panel_width(px(280.0))
-        .title("Filter Rows")
+        .title(s.filter_rows)
         .is_open(ws.data_grid_ui.filters_popover_open)
         .on_open_change(move |open, _w, cx| {
             let next = *open;
@@ -625,7 +637,7 @@ fn build_filters_popover_form(
         .get(ws.data_grid_ui.filter_col_idx)
         .map(|item| item.key().clone());
 
-    let op_items = filter_op_picker_items();
+    let op_items = filter_op_picker_items(&ws.controller.strings);
     let selected_op_key = Some(SharedString::from(filter_op_key(ws.data_grid_ui.filter_op)));
     let needs_value = !matches!(
         ws.data_grid_ui.filter_op,
@@ -643,7 +655,7 @@ fn build_filters_popover_form(
         .child(
             Select::new("filter-col-select", col_items)
                 .value(selected_col_key)
-                .placeholder("Select column")
+                .placeholder(ws.controller.strings.select_column)
                 .on_selection_change(move |key_opt, _w, cx| {
                     if let Some(k) = key_opt
                         && let Ok(idx) = k.parse::<usize>()
@@ -672,7 +684,7 @@ fn build_filters_popover_form(
         .when(needs_value, |el| {
             el.child(
                 Input::new(&ws.data_grid_ui.filter_value_input)
-                    .placeholder("Filter value...")
+                    .placeholder(ws.controller.strings.filter_value_placeholder)
                     .on_submit(move |_val, _w, cx| {
                         entity_submit.update(cx, |ws, cx| {
                             apply_pending_filter(ws, cx);
@@ -689,6 +701,7 @@ fn render_filters_form_actions(
     active_count: usize,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     div()
         .flex()
         .items_center()
@@ -699,7 +712,7 @@ fn render_filters_form_actions(
                 .variant(Variant::Tertiary)
                 .size(HeroSize::Sm)
                 .is_disabled(active_count == 0)
-                .label("Clear All")
+                .label(s.clear_all)
                 .on_press(cx.listener(|ws, _ev, _w, cx| {
                     let _ = ws.controller.clear_grid_filters_blocking();
                     ws.data_grid_ui.filters_popover_open = false;
@@ -711,7 +724,7 @@ fn render_filters_form_actions(
                 .variant(Variant::Primary)
                 .size(HeroSize::Sm)
                 .is_disabled(ws.controller.grid_columns.is_empty())
-                .label("Apply")
+                .label(s.apply)
                 .on_press(cx.listener(|ws, _ev, _w, cx| {
                     apply_pending_filter(ws, cx);
                 })),
@@ -746,12 +759,18 @@ fn render_active_filter_strip(
                 .child("WHERE"),
         );
 
+    let s = &ws.controller.strings;
     for (idx, rule) in rules.iter().enumerate() {
         let val_str = match &rule.value {
             Some(tablepro_core::filter::FilterValue::Single(v)) => format!(" '{v}'"),
             _ => String::new(),
         };
-        let summary = format!("{} {}{}", rule.column, filter_op_label(rule.op), val_str);
+        let summary = format!(
+            "{} {}{}",
+            rule.column,
+            filter_op_label(rule.op, s),
+            val_str
+        );
         row = row.child(
             Chip::new()
                 .variant(ChipVariant::Soft)
@@ -800,7 +819,7 @@ fn render_grid_viewport(
             .justify_center()
             .text_size(px(12.0))
             .text_color(cx.colors().muted)
-            .child("All columns are hidden. Open Columns to restore visibility.")
+            .child(ws.controller.strings.grid_all_columns_hidden)
             .into_any_element();
     }
 
@@ -1059,7 +1078,13 @@ fn render_grid_header_cell(
         .map(|k| k.direction);
     let col_width = col.width as f32;
     let is_resizing = ws.data_grid_ui.resizing_col_idx == Some(display_pos);
-    let menu_btn = render_header_column_menu(display_pos, col, viewport_w, cx);
+    let menu_btn = render_header_column_menu(
+        display_pos,
+        col,
+        viewport_w,
+        &ws.controller.strings,
+        cx,
+    );
     let resize_handle = render_header_resize_handle(display_pos, col_width, is_resizing, cx);
 
     div()
@@ -1119,23 +1144,24 @@ fn render_header_column_menu(
     display_pos: usize,
     col: &DataGridColumn,
     viewport_w: f32,
+    s: &crate::i18n::Strings,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let menu_items = vec![
-        MenuItem::new("sort-asc", "Sort Ascending"),
-        MenuItem::new("sort-desc", "Sort Descending"),
-        MenuItem::new("sort-clear", "Clear Sort"),
+        MenuItem::new("sort-asc", s.sort_ascending),
+        MenuItem::new("sort-desc", s.sort_descending),
+        MenuItem::new("sort-clear", s.clear_sort),
         MenuItem::Separator,
         MenuItem::new(
             "freeze",
             if col.is_frozen {
-                "Unfreeze All"
+                s.unfreeze_all
             } else {
-                "Freeze Up to Column"
+                s.freeze_up_to_column
             },
         ),
-        MenuItem::new("auto-fit", "Auto-Fit Width"),
-        MenuItem::new("hide", "Hide Column"),
+        MenuItem::new("auto-fit", s.auto_fit_width),
+        MenuItem::new("hide", s.hide_column),
     ];
 
     let entity_menu = cx.entity().clone();
@@ -1420,7 +1446,14 @@ fn render_grid_cell(
         }))
         .child(inner);
 
-    wrap_grid_cell_context_menu(cell_id, cell_box, row_idx, display_pos, cx)
+    wrap_grid_cell_context_menu(
+        cell_id,
+        cell_box,
+        row_idx,
+        display_pos,
+        &ws.controller.strings,
+        cx,
+    )
 }
 
 fn build_grid_cell_content(
@@ -1542,16 +1575,17 @@ fn wrap_grid_cell_context_menu(
     cell_box: gpui::Stateful<gpui::Div>,
     row_idx: usize,
     display_pos: usize,
+    s: &crate::i18n::Strings,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let ctx_items = vec![
-        MenuItem::new("edit", "Edit Cell"),
-        MenuItem::new("set-null", "Set NULL"),
+        MenuItem::new("edit", s.edit_cell),
+        MenuItem::new("set-null", s.set_null),
         MenuItem::Separator,
-        MenuItem::new("copy-cell", "Copy Cell"),
-        MenuItem::new("copy-row", "Copy Row (TSV)"),
+        MenuItem::new("copy-cell", s.copy_cell),
+        MenuItem::new("copy-row", s.copy_row_tsv),
         MenuItem::Separator,
-        MenuItem::new("delete-row", "Delete Row").danger(),
+        MenuItem::new("delete-row", s.delete_row).danger(),
     ];
     let entity_ctx = cx.entity().clone();
 
@@ -1625,19 +1659,20 @@ fn render_inline_edit_cell(
 }
 
 fn render_grid_footer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+    let s = &ws.controller.strings;
     let page = ws.controller.grid_model.page;
     let (current_page, total_pages_opt) = page.page_info();
     let total_pages = total_pages_opt.unwrap_or(current_page.max(1));
 
     let shown = ws.controller.grid_rows.len() as u64;
     let range_text = if shown == 0 {
-        "0 rows".to_owned()
+        s.showing_rows_zero.to_owned()
     } else {
         let start = page.offset + 1;
         let end = page.offset + shown;
         match page.table_row_count {
-            Some(total) => format!("Showing {start}–{end} of {total}"),
-            None => format!("Showing {start}–{end}"),
+            Some(total) => format!("{} {start}–{end} {} {total}", s.showing_prefix, s.of_prep),
+            None => format!("{} {start}–{end}", s.showing_prefix),
         }
     };
 
@@ -1664,10 +1699,10 @@ fn render_grid_footer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
     });
 
     let size_items = vec![
-        PickerItem::new("50", "50 rows"),
-        PickerItem::new("100", "100 rows"),
-        PickerItem::new("250", "250 rows"),
-        PickerItem::new("500", "500 rows"),
+        PickerItem::new("50", format!("50 {}", s.rows_suffix)),
+        PickerItem::new("100", format!("100 {}", s.rows_suffix)),
+        PickerItem::new("250", format!("250 {}", s.rows_suffix)),
+        PickerItem::new("500", format!("500 {}", s.rows_suffix)),
     ];
     let current_limit = SharedString::from(format!("{}", page.limit));
     let entity_limit = cx.entity().clone();
@@ -1884,12 +1919,8 @@ fn handle_column_menu_action(
                 .columns
                 .freeze_up_to(display_pos, f64::from(viewport_w))
             {
-                ws.notify_toast(
-                    ToastSeverity::Warning,
-                    "Frozen columns cannot exceed 2/3 of viewport width",
-                    None,
-                    cx,
-                );
+                let msg = ws.controller.strings.frozen_columns_limit_toast;
+                ws.notify_toast(ToastSeverity::Warning, msg, None, cx);
             }
             ws.controller.sync_grid_view_from_model();
         }
@@ -1926,8 +1957,9 @@ fn handle_cell_context_action(
         "set-null" => set_edited_cell_value(ws, row_idx, col_idx, Value::Null),
         "copy-cell" => {
             let text = resolve_cell_text(ws, row_idx, col_idx);
+            let msg = ws.controller.strings.cell_copied_toast;
             cx.write_to_clipboard(ClipboardItem::new_string(text));
-            ws.notify_toast(ToastSeverity::Info, "Cell copied", None, cx);
+            ws.notify_toast(ToastSeverity::Info, msg, None, cx);
         }
         "copy-row" => {
             if let Some(row) = ws.controller.grid_rows.get(row_idx) {
@@ -1943,8 +1975,9 @@ fn handle_cell_context_action(
                     })
                     .collect::<Vec<_>>()
                     .join("\t");
+                let msg = ws.controller.strings.row_copied_tsv_toast;
                 cx.write_to_clipboard(ClipboardItem::new_string(line));
-                ws.notify_toast(ToastSeverity::Info, "Row copied as TSV", None, cx);
+                ws.notify_toast(ToastSeverity::Info, msg, None, cx);
             }
         }
         "delete-row" => delete_row_at_index(ws, row_idx),
@@ -2072,9 +2105,10 @@ fn apply_pending_filter(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeW
             });
         }
         Err(err) => {
+            let title = ws.controller.strings.filter_error_title;
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Filter error",
+                title,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -2094,9 +2128,10 @@ fn navigate_to_foreign_key(
         name: fk.ref_table.clone(),
     };
     if let Err(err) = ws.controller.open_table_tab_blocking(target) {
+        let title = ws.controller.strings.fk_open_failed_toast;
         ws.notify_toast(
             ToastSeverity::Error,
-            "Failed to open referenced table",
+            title,
             Some(SharedString::from(err.to_string())),
             cx,
         );
@@ -2214,7 +2249,7 @@ fn compute_variable_col_slice(
     (start, end, left_pad, right_pad)
 }
 
-fn filter_op_picker_items() -> Vec<PickerItem> {
+fn filter_op_picker_items(s: &crate::i18n::Strings) -> Vec<PickerItem> {
     [
         FilterOp::Eq,
         FilterOp::NotEq,
@@ -2229,7 +2264,7 @@ fn filter_op_picker_items() -> Vec<PickerItem> {
         FilterOp::IsNotNull,
     ]
     .into_iter()
-    .map(|op| PickerItem::new(filter_op_key(op), filter_op_label(op)))
+    .map(|op| PickerItem::new(filter_op_key(op), filter_op_label(op, s)))
     .collect()
 }
 
@@ -2267,13 +2302,13 @@ fn parse_filter_op_key(key: &str) -> Option<FilterOp> {
     }
 }
 
-fn filter_op_label(op: FilterOp) -> &'static str {
+fn filter_op_label(op: FilterOp, s: &crate::i18n::Strings) -> &'static str {
     match op {
         FilterOp::Eq => "=",
         FilterOp::NotEq => "!=",
-        FilterOp::Contains => "contains",
-        FilterOp::StartsWith => "starts with",
-        FilterOp::EndsWith => "ends with",
+        FilterOp::Contains => s.filter_op_contains,
+        FilterOp::StartsWith => s.filter_op_starts_with,
+        FilterOp::EndsWith => s.filter_op_ends_with,
         FilterOp::Lt => "<",
         FilterOp::LtEq => "<=",
         FilterOp::Gt => ">",
