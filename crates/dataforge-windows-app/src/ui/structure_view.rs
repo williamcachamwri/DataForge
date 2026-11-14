@@ -11,10 +11,11 @@ use herogpui::components::{
     SortDescriptor, SortDirection, TabItem, Table, TableColumn, TableRow, TableVariant, Tabs,
     TabsSize, TabsVariant,
 };
-use herogpui::core::{Color as HeroColor, SelectionMode, Size as HeroSize, Variant};
+use herogpui::core::{Color as HeroColor, SelectionMode, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::{
-    AnyElement, App, ClipboardItem, Context, FontFeatures, FontWeight, InteractiveElement,
-    IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
+    AnyElement, App, ClipboardItem, Context, Entity, FontFeatures, FontWeight, InteractiveElement,
+    IntoElement, MouseButton, ParentElement, SharedString, StatefulInteractiveElement, Styled,
+    Window, div, px,
 };
 use herogpui::prelude::FluentBuilder;
 use herogpui::theme::ActiveTheme;
@@ -512,21 +513,95 @@ fn collect_structure_column_entries(
     entries
 }
 
+fn render_structure_checkbox_cell(
+    orig_idx: usize,
+    is_selected: bool,
+    entity_sel: Entity<DataForgeWorkspace>,
+    cx: &App,
+) -> AnyElement {
+    let colors = cx.colors();
+    let accent = colors.accent.color;
+    let accent_fg = colors.accent.foreground;
+    let box_bg = if is_selected {
+        accent
+    } else {
+        colors.field.background
+    };
+    let box_border = if is_selected {
+        accent
+    } else {
+        theme::hairline_border_color(cx)
+    };
+    let box_hover_border = if is_selected {
+        accent
+    } else {
+        with_alpha(accent, 0.55)
+    };
+    let box_hover_bg = if is_selected {
+        accent
+    } else {
+        with_alpha(accent, 0.08)
+    };
+
+    div()
+        .id(("struct-col-check", orig_idx))
+        .size(px(15.0))
+        .rounded(px(4.0))
+        .border_1()
+        .border_color(box_border)
+        .bg(box_bg)
+        .hover(move |s| s.border_color(box_hover_border).bg(box_hover_bg))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .justify_center()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            cx.stop_propagation();
+        })
+        .on_click(move |_, _, cx| {
+            entity_sel.update(cx, |ws, cx| {
+                ws.structure_ui.selected_column =
+                    if ws.structure_ui.selected_column == Some(orig_idx) {
+                        None
+                    } else {
+                        Some(orig_idx)
+                    };
+                cx.notify();
+            });
+        })
+        .when(is_selected, |el| {
+            el.child(Icon::new(IconName::Check).size(px(11.0)).color(accent_fg))
+        })
+        .into_any_element()
+}
+
 fn build_structure_column_row(
     entry: StructureColumnDisplay,
+    is_selected: bool,
     font: &herogpui::gpui::Font,
+    entity_sel: Entity<DataForgeWorkspace>,
     cx: &App,
 ) -> TableRow {
+    let orig_idx = entry.orig_idx;
+    let select_cell = render_structure_checkbox_cell(orig_idx, is_selected, entity_sel, cx);
+    let colors = cx.colors();
+    let accent = colors.accent.color;
+
     let idx_cell = div()
         .font_features(tnum_features())
-        .text_color(cx.colors().muted)
+        .text_color(if is_selected { accent } else { colors.muted })
         .text_size(px(12.0))
         .child(format!("{}", entry.orig_idx + 1))
         .into_any_element();
     let name_cell = div()
         .font(font.clone())
         .text_size(px(12.0))
-        .font_weight(FontWeight::MEDIUM)
+        .font_weight(if is_selected {
+            FontWeight::SEMIBOLD
+        } else {
+            FontWeight::MEDIUM
+        })
+        .when(is_selected, |el| el.text_color(accent))
         .truncate()
         .child(entry.name.clone())
         .into_any_element();
@@ -561,6 +636,7 @@ fn build_structure_column_row(
         .into_any_element();
 
     TableRow::new(vec![
+        select_cell,
         idx_cell,
         name_cell,
         type_cell,
@@ -628,6 +704,7 @@ fn render_columns_table(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let cols = vec![
+        TableColumn::new("").width(px(34.0)).allows_resizing(false),
         TableColumn::new("#").width(px(44.0)).allows_resizing(false),
         TableColumn::new("Column")
             .is_row_header(true)
@@ -652,32 +729,36 @@ fn render_columns_table(
     ];
 
     let entries = collect_structure_column_entries(ws, def);
+    let entry_orig_indices: Vec<usize> = entries.iter().map(|e| e.orig_idx).collect();
+    let selected_column = ws.structure_ui.selected_column;
     let font = theme::value_gpui_font(&ws.controller.settings);
-    let rows: Vec<TableRow> = entries
-        .into_iter()
-        .map(|entry| build_structure_column_row(entry, &font, cx))
-        .collect();
-
-    let selected_keys: Vec<SharedString> = ws
-        .structure_ui
-        .selected_column
-        .map(|idx| vec![SharedString::from(format!("{idx}"))])
-        .unwrap_or_default();
-
     let entity_sel = cx.entity().clone();
     let entity_sort = cx.entity().clone();
+    let rows: Vec<TableRow> = entries
+        .into_iter()
+        .map(|entry| {
+            let is_selected = selected_column == Some(entry.orig_idx);
+            build_structure_column_row(entry, is_selected, &font, entity_sel.clone(), cx)
+        })
+        .collect();
 
     let mut table = Table::new(Vec::new())
         .id("structure-columns-table")
         .variant(TableVariant::Primary)
         .columns(cols)
-        .row_height(px(32.0))
-        .selection_mode(SelectionMode::Single)
-        .selected_keys(selected_keys)
-        .on_selection_change(move |keys, _w, cx| {
-            let parsed = keys.first().and_then(|k| k.parse::<usize>().ok());
+        .row_height(px(34.0))
+        .selection_mode(SelectionMode::None)
+        .on_row_click(move |row_idx, _ev, _w, cx| {
+            let Some(orig_idx) = entry_orig_indices.get(*row_idx).copied() else {
+                return;
+            };
             entity_sel.update(cx, |ws, cx| {
-                ws.structure_ui.selected_column = parsed;
+                ws.structure_ui.selected_column =
+                    if ws.structure_ui.selected_column == Some(orig_idx) {
+                        None
+                    } else {
+                        Some(orig_idx)
+                    };
                 cx.notify();
             });
         })
