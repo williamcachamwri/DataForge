@@ -86,16 +86,12 @@ fn render_left_status(
         Some(ConnectionWindowPhase::Connecting { .. }) => {
             render_phase_spinner("status-bar-conn-spin", s.connecting, colors.foreground)
         }
-        Some(ConnectionWindowPhase::Reconnecting { .. }) => render_phase_spinner(
-            "status-bar-reconn-spin",
-            s.reconnecting,
-            colors.foreground,
-        ),
-        Some(ConnectionWindowPhase::Unavailable { .. }) => render_phase_dot(
-            colors.danger.color,
-            s.unavailable_long,
-            colors.danger.color,
-        ),
+        Some(ConnectionWindowPhase::Reconnecting { .. }) => {
+            render_phase_spinner("status-bar-reconn-spin", s.reconnecting, colors.foreground)
+        }
+        Some(ConnectionWindowPhase::Unavailable { .. }) => {
+            render_phase_dot(colors.danger.color, s.unavailable_long, colors.danger.color)
+        }
         Some(ConnectionWindowPhase::Disconnected) | None => {
             render_phase_dot(colors.muted, s.disconnected_ready, colors.muted)
         }
@@ -115,80 +111,86 @@ fn render_left_status(
                 .orientation(Orientation::Vertical)
                 .sx(|s| s.h(px(12.0))),
         )
-        .child(
-            div()
-                .text_color(colors.muted)
-                .child(sub_view_label),
-        );
+        .child(div().text_color(colors.muted).child(sub_view_label));
 
     if matches!(phase, Some(ConnectionWindowPhase::Connected)) {
-        if let Some(ref schema) = ws.sidebar_ui.selected_schema
-            && !schema.is_empty()
-        {
-            left = left
-                .child(
-                    Separator::new()
-                        .id("status-sep-schema")
-                        .orientation(Orientation::Vertical)
-                        .sx(|s| s.h(px(12.0))),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_color(colors.muted)
-                        .child(controller.strings.status_schema_tpl.replace("{schema}", schema)),
-                );
-        }
-        if let Some(table) = &controller.active_table {
-            left = left
-                .child(
-                    Separator::new()
-                        .id("status-sep-table")
-                        .orientation(Orientation::Vertical)
-                        .sx(|s| s.h(px(12.0))),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_color(colors.foreground)
-                        .child(format_table_ref(table)),
-                );
-        }
-        let obj_count = controller.cached_objects.len();
-        if obj_count > 0 {
-            left = left
-                .child(
-                    Separator::new()
-                        .id("status-sep-objs")
-                        .orientation(Orientation::Vertical)
-                        .sx(|s| s.h(px(12.0))),
-                )
-                .child(
-                    div()
-                        .text_color(colors.muted)
-                        .child(format!(
-                            "{obj_count} {}",
-                            if obj_count == 1 {
-                                s.object_singular
-                            } else {
-                                s.object_plural
-                            }
-                        )),
-                );
-        }
-        if controller.toolbar_status.safe_mode {
-            left = left.child(
-                Chip::new()
-                    .variant(ChipVariant::Soft)
-                    .color(Color::Warning)
-                    .size(Size::Sm)
-                    .text_size(px(10.0))
-                    .child(ChipLabel::new().child(s.safe_mode)),
-            );
-        }
+        left = append_connected_left_details(ws, left, cx);
     }
 
     left.into_any_element()
+}
+
+fn append_connected_left_details(
+    ws: &DataForgeWorkspace,
+    mut left: herogpui::gpui::Stateful<herogpui::gpui::Div>,
+    cx: &Context<DataForgeWorkspace>,
+) -> herogpui::gpui::Stateful<herogpui::gpui::Div> {
+    let controller = &ws.controller;
+    let s = &controller.strings;
+    let colors = cx.colors().clone();
+
+    if let Some(ref schema) = ws.sidebar_ui.selected_schema
+        && !schema.is_empty()
+    {
+        left = left
+            .child(
+                Separator::new()
+                    .id("status-sep-schema")
+                    .orientation(Orientation::Vertical)
+                    .sx(|s| s.h(px(12.0))),
+            )
+            .child(
+                div()
+                    .truncate()
+                    .text_color(colors.muted)
+                    .child(s.status_schema_tpl.replace("{schema}", schema)),
+            );
+    }
+    if let Some(table) = &controller.active_table {
+        left = left
+            .child(
+                Separator::new()
+                    .id("status-sep-table")
+                    .orientation(Orientation::Vertical)
+                    .sx(|s| s.h(px(12.0))),
+            )
+            .child(
+                div()
+                    .truncate()
+                    .text_color(colors.foreground)
+                    .child(format_table_ref(table)),
+            );
+    }
+    let obj_count = controller.cached_objects.len();
+    if obj_count > 0 {
+        left = left
+            .child(
+                Separator::new()
+                    .id("status-sep-objs")
+                    .orientation(Orientation::Vertical)
+                    .sx(|s| s.h(px(12.0))),
+            )
+            .child(div().text_color(colors.muted).child(format!(
+                "{obj_count} {}",
+                if obj_count == 1 {
+                    s.object_singular
+                } else {
+                    s.object_plural
+                }
+            )));
+    }
+    if controller.toolbar_status.safe_mode {
+        left = left.child(
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .color(Color::Warning)
+                .size(Size::Sm)
+                .text_size(px(10.0))
+                .child(ChipLabel::new().child(s.safe_mode)),
+        );
+    }
+
+    left
 }
 
 fn render_connected_left_status(
@@ -302,7 +304,9 @@ fn render_right_metrics(
         .flex_shrink_0();
 
     let s = &controller.strings;
-    if let Some(metric) = render_query_timing_metric(controller, active_result, numeric_font.clone(), cx) {
+    if let Some(metric) =
+        render_query_timing_metric(controller, active_result, numeric_font.clone(), cx)
+    {
         right = right.child(metric);
     }
 
@@ -546,16 +550,13 @@ fn render_cursor_and_vim(
         .items_center()
         .gap(px(6.0))
         .child(
-            div()
-                .font(numeric_font)
-                .text_color(colors.muted)
-                .child(
-                    controller
-                        .strings
-                        .cursor_pos_tpl
-                        .replace("{line}", &line.to_string())
-                        .replace("{col}", &col.to_string()),
-                ),
+            div().font(numeric_font).text_color(colors.muted).child(
+                controller
+                    .strings
+                    .cursor_pos_tpl
+                    .replace("{line}", &line.to_string())
+                    .replace("{col}", &col.to_string()),
+            ),
         );
 
     if let Some(mode) = controller.vim_mode {
@@ -697,7 +698,10 @@ fn real_row_count_label(
         return Some(pluralize_rows(controller, total));
     }
     if !controller.grid_rows.is_empty() {
-        return Some(pluralize_rows(controller, controller.grid_rows.len() as u64));
+        return Some(pluralize_rows(
+            controller,
+            controller.grid_rows.len() as u64,
+        ));
     }
     if is_connected && controller.active_table.is_some() {
         return Some(controller.strings.showing_rows_zero.to_owned());
