@@ -7,17 +7,17 @@ use std::time::{Duration, Instant};
 use dataforge_state::connection_window::ConnectionWindowPhase;
 use dataforge_state::tabs::TabConnectionId;
 use herogpui::components::{
-    Badge, BadgeLabel, BadgeVariant, Button, Card, CardContent, CardDescription, CardHeader,
-    CardTitle, CardVariant, Chip, ChipLabel, ChipVariant, Color, ContextMenu, Dropdown,
-    DropdownPlacement, Filter, Icon, IconName, IconSize, InputState, MenuItem, PickerItem,
-    SearchField, Select, Sensitivity, Separator, Size, Skeleton, Spinner, SpinnerSize, TabItem,
-    Tabs, TabsSize, TabsVariant, Tooltip, TreeItem, TreeView, Variant,
+    Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant, Chip,
+    ChipLabel, ChipVariant, Color, ContextMenu, Dropdown, DropdownPlacement, Filter, Icon,
+    IconName, IconSize, InputState, MenuItem, PickerItem, SearchField, Select, Sensitivity,
+    Separator, Size, Skeleton, Spinner, SpinnerSize, TabItem, Tabs, TabsSize, TabsVariant, Tooltip,
+    TreeItem, TreeView, Variant,
 };
 use herogpui::core::SelectionMode;
 use herogpui::gpui::{
-    AnyElement, App, AppContext as _, AsyncApp, ClipboardItem, Context, Entity, Focusable as _,
-    FontFeatures, InteractiveElement, IntoElement, ParentElement, SharedString, Styled, WeakEntity,
-    Window, div, px,
+    Animation, AnimationExt as _, AnyElement, App, AppContext as _, AsyncApp, ClipboardItem,
+    Context, Entity, Focusable as _, FontFeatures, InteractiveElement, IntoElement, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
 };
 use herogpui::theme::{ActiveTheme, SkeletonAnimation};
 use tablepro_core::column::ColumnInfo;
@@ -28,8 +28,8 @@ use super::DataForgeWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{
-    COMPACT_GAP_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, PANEL_RADIUS_PX, hairline_border_color,
-    is_reduced_motion, panel_surface_bg,
+    COMPACT_GAP_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, PANEL_RADIUS_PX, ease_out_quad,
+    hairline_border_color, hover_duration, is_reduced_motion, overlay_duration, panel_surface_bg,
 };
 use crate::app::ScreenMode;
 
@@ -59,12 +59,13 @@ pub struct SidebarPanelState {
     pub filter_focused: bool,
     filter_input: Entity<InputState>,
     last_synced_filter: String,
-    selected_schema: Option<String>,
+    pub(crate) selected_schema: Option<String>,
     selected_node_key: Option<String>,
     expanded_keys: HashSet<SharedString>,
     table_details: HashMap<String, TableDetailsState>,
     schema_loading: bool,
     copied_object: Option<(String, Instant)>,
+    expand_anim_gen: u64,
 }
 
 impl SidebarPanelState {
@@ -86,6 +87,7 @@ impl SidebarPanelState {
             table_details: HashMap::new(),
             schema_loading: false,
             copied_object: None,
+            expand_anim_gen: 0,
         }
     }
 
@@ -176,18 +178,19 @@ fn render_sidebar_header(
         );
 
     let total_objects = ws.controller.cached_objects.len();
-    let count_badge = Badge::new()
-        .variant(BadgeVariant::Soft)
-        .color(if is_connected {
-            Color::Accent
-        } else {
-            Color::Default
-        })
-        .size(Size::Sm)
+    let count_pill = div()
+        .flex_shrink_0()
+        .font_features(tabular_font_features())
         .child(
-            BadgeLabel::new()
-                .child(format!("{total_objects}"))
-                .sx(|d| d.font_features(tabular_font_features())),
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .color(if is_connected {
+                    Color::Accent
+                } else {
+                    Color::Default
+                })
+                .size(Size::Sm)
+                .child(ChipLabel::new().child(format!("{total_objects}"))),
         );
 
     let refresh_btn = render_refresh_button(is_connected, is_loading, cx);
@@ -216,7 +219,7 @@ fn render_sidebar_header(
                                 .text_color(colors.foreground)
                                 .child("Objects"),
                         )
-                        .child(count_badge),
+                        .child(count_pill),
                 )
                 .child(refresh_btn),
         );
@@ -451,6 +454,9 @@ fn render_connected_body(
                 .filter(|k| !ws.sidebar_ui.expanded_keys.contains(*k))
                 .map(|k| k.to_string())
                 .collect();
+            if *keys != ws.sidebar_ui.expanded_keys {
+                ws.sidebar_ui.expand_anim_gen = ws.sidebar_ui.expand_anim_gen.wrapping_add(1);
+            }
             ws.sidebar_ui.expanded_keys = keys.clone();
             for key in newly_opened {
                 maybe_load_expanded_table_details(ws, &key, cx);
@@ -461,17 +467,33 @@ fn render_connected_body(
     let ctx_items = build_object_menu_items(selected_object.as_ref(), ws);
     let tree_with_ctx = ContextMenu::new(
         "sidebar-tree-context-menu",
-        div()
-            .flex_1()
-            .min_h_0()
-            .overflow_hidden()
-            .p(px(6.0))
-            .child(tree),
+        div().w_full().p(px(6.0)).child(tree),
         ctx_items,
     )
     .on_action(cx.listener(|ws, action_key: &SharedString, _, cx| {
         execute_node_action(ws, action_key.as_ref(), cx);
     }));
+
+    let tree_container = div()
+        .id("sidebar-object-tree-scroll")
+        .flex_1()
+        .min_h_0()
+        .w_full()
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .child(tree_with_ctx);
+    let tree_section = if ws.sidebar_ui.expand_anim_gen > 0 && !is_reduced_motion(cx) {
+        tree_container
+            .with_animation(
+                ("sidebar-tree-expand", ws.sidebar_ui.expand_anim_gen),
+                Animation::new(hover_duration(cx)).with_easing(ease_out_quad),
+                |el, delta| el.opacity(0.90 + 0.10 * delta).pt(px(2.0 * (1.0 - delta))),
+            )
+            .into_any_element()
+    } else {
+        tree_container.into_any_element()
+    };
 
     let mut root = div()
         .flex_1()
@@ -479,14 +501,7 @@ fn render_connected_body(
         .flex()
         .flex_col()
         .child(render_count_badges_strip(counts, cx))
-        .child(
-            div()
-                .flex_1()
-                .min_h_0()
-                .flex()
-                .flex_col()
-                .child(tree_with_ctx),
-        );
+        .child(tree_section);
 
     if let Some(ref obj) = selected_object {
         root = root
@@ -543,7 +558,7 @@ fn render_count_badges_strip(
         .into_any_element()
 }
 
-fn summary_chip(label: &str, count: usize, _muted: herogpui::gpui::Hsla) -> AnyElement {
+fn summary_chip(label: &str, count: usize, muted: herogpui::gpui::Hsla) -> AnyElement {
     Chip::new()
         .variant(ChipVariant::Secondary)
         .size(Size::Sm)
@@ -551,17 +566,18 @@ fn summary_chip(label: &str, count: usize, _muted: herogpui::gpui::Hsla) -> AnyE
             div()
                 .flex()
                 .items_center()
-                .gap(px(4.0))
+                .gap(px(5.0))
                 .child(ChipLabel::new().child(label.to_owned()))
                 .child(
-                    Badge::new()
-                        .variant(BadgeVariant::Soft)
-                        .size(Size::Sm)
-                        .child(
-                            BadgeLabel::new()
-                                .child(format!("{count}"))
-                                .sx(|d| d.font_features(tabular_font_features())),
-                        ),
+                    div()
+                        .flex_shrink_0()
+                        .px(px(5.0))
+                        .py(px(1.0))
+                        .rounded(px(99.0))
+                        .bg(muted.alpha(0.14))
+                        .text_size(px(10.0))
+                        .font_features(tabular_font_features())
+                        .child(format!("{count}")),
                 ),
         )
         .into_any_element()
@@ -877,7 +893,21 @@ fn render_selected_node_bar(
         );
     }
 
-    bar.into_any_element()
+    if is_reduced_motion(cx) {
+        return bar.into_any_element();
+    }
+
+    let anim_key = ws
+        .sidebar_ui
+        .selected_node_key
+        .clone()
+        .unwrap_or_else(|| qualified.clone());
+    bar.with_animation(
+        SharedString::from(format!("sidebar-selected-bar:{anim_key}")),
+        Animation::new(overlay_duration(cx)).with_easing(ease_out_quad),
+        |el, delta| el.opacity(delta).pt(px(8.0 + 4.0 * (1.0 - delta))),
+    )
+    .into_any_element()
 }
 
 fn build_object_menu_items(
@@ -1001,11 +1031,20 @@ fn execute_node_action(
             cx.notify();
         }
         "refresh_schema" => {
-            let schema = resolve_active_schema(ws);
-            spawn_schema_refresh(ws, schema, cx);
+            refresh_active_schema(ws, cx);
         }
         _ => {}
     }
+}
+
+/// Refreshes the active schema and object list asynchronously, then reloads details
+/// for any tables/views that are currently expanded in the sidebar tree.
+pub(crate) fn refresh_active_schema(
+    ws: &mut DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let schema = resolve_active_schema(ws);
+    spawn_schema_refresh(ws, schema, cx);
 }
 
 fn spawn_schema_refresh(
@@ -1074,6 +1113,15 @@ fn spawn_schema_refresh(
                             ws.sidebar_ui.selected_schema = selected;
                             ws.sidebar_ui.table_details.clear();
                             ws.controller.rebuild_sidebar_rows();
+                            let expanded: Vec<String> = ws
+                                .sidebar_ui
+                                .expanded_keys
+                                .iter()
+                                .map(|k| k.to_string())
+                                .collect();
+                            for key in expanded {
+                                maybe_load_expanded_table_details(ws, &key, cx);
+                            }
                         }
                         Err(err) => {
                             ws.notify_toast(
