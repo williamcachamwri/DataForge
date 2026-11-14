@@ -58,6 +58,7 @@ pub enum ScreenMode {
 /// Complete headless-testable and GPU-renderable application controller.
 pub struct AppController {
     pub settings: AppSettings,
+    pub locale: Locale,
     pub strings: Strings,
     pub system_theme: WindowsTheme,
     pub content_theme: ThemeDefinition,
@@ -125,9 +126,10 @@ impl AppController {
         connections.add_workspace(active_workspace);
         connections.select_workspace(active_workspace);
 
+        let strings = Strings::for_locale(locale);
         let mut tabs = TabStripModel::new();
         let conn_id = TabConnectionId("default".to_owned());
-        tabs.open_query_tab(conn_id, Some("Query 1"));
+        tabs.open_query_tab(conn_id, Some(&format!("{} 1", strings.new_query_tab)));
 
         let content_theme = if system_theme.is_dark() {
             ThemeDefinition::builtin_dark()
@@ -136,7 +138,8 @@ impl AppController {
         };
 
         let mut controller = Self {
-            strings: Strings::for_locale(locale),
+            locale,
+            strings,
             system_theme,
             content_theme,
             last_theme_import: None,
@@ -205,11 +208,20 @@ impl AppController {
         controller
     }
 
-    /// Creates a controller using live Windows system theme detection.
+    /// Creates a controller using live Windows system theme and saved/environment locale detection.
     #[must_use]
     pub fn with_detected_theme(settings: AppSettings) -> Self {
         let system_theme = detect_theme_or_default();
-        Self::new(settings, system_theme, Locale::EnUs)
+        let locale = crate::i18n::init_locale(settings.locale.as_deref());
+        Self::new(settings, system_theme, locale)
+    }
+
+    /// Switches the active UI locale, persists the BCP-47 tag in settings, and refreshes localized models.
+    pub fn set_locale(&mut self, locale: Locale) {
+        self.locale = locale;
+        self.strings = Strings::for_locale(locale);
+        self.settings.locale = Some(locale.code().to_owned());
+        self.rebuild_sidebar_rows();
     }
 
     /// Resolves the effective [`ThemeMode`] from user preference and live OS theme.
@@ -264,10 +276,12 @@ impl AppController {
     pub fn import_vscode_theme(&mut self, bytes: &[u8]) -> std::result::Result<(), String> {
         let (def, outcome) = import_vscode_theme_bytes(bytes)?;
         self.content_theme = def;
-        self.last_theme_import = Some(format!(
-            "{} ({} slots)",
-            outcome.theme_name, outcome.slot_count
-        ));
+        self.last_theme_import = Some(
+            self.strings
+                .theme_slots_count_tpl
+                .replace("{name}", &outcome.theme_name)
+                .replace("{count}", &outcome.slot_count.to_string()),
+        );
         Ok(())
     }
 
@@ -395,8 +409,8 @@ impl AppController {
             KeyCommand::NewQueryTab => {
                 let n = self.tabs.tabs().len() + 1;
                 let conn_id = TabConnectionId("default".to_owned());
-                self.tabs
-                    .open_query_tab(conn_id, Some(&format!("Query {n}")));
+                let title = format!("{} {n}", self.strings.new_query_tab);
+                self.tabs.open_query_tab(conn_id, Some(&title));
                 self.screen_mode = ScreenMode::Workspace;
                 self.sync_layout_counts();
             }
