@@ -1022,9 +1022,19 @@ fn render_messages_view(
                 s.status_completed,
                 s.rows_affected_suffix
             ),
-            None => format!("{} {} — {}", s.statement_prefix, idx + 1, s.status_completed),
+            None => format!(
+                "{} {} — {}",
+                s.statement_prefix,
+                idx + 1,
+                s.status_completed
+            ),
         };
-        stack = stack.child(render_command_completed_banner(s.status_ok, msg, border, cx));
+        stack = stack.child(render_command_completed_banner(
+            s.status_ok,
+            msg,
+            border,
+            cx,
+        ));
     }
 
     for notice in &res.accumulator.notices {
