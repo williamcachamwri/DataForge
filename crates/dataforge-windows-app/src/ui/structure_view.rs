@@ -114,7 +114,7 @@ pub fn render_structure_view(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let Some(table) = ws.controller.active_table.clone() else {
-        return render_no_table_selected(cx);
+        return render_no_table_selected(&ws.controller.strings, cx);
     };
 
     StructureViewState::ensure_table_loaded(ws, &table, cx);
@@ -151,7 +151,8 @@ fn start_fetch_definition(
     }
 
     let (tx, rx) = async_channel::bounded::<Result<(TableDefinition, Option<String>), String>>(1);
-    spawn_definition_fetch_task(services, workspace_id, table.clone(), tx);
+    let no_session_msg = ws.controller.strings.no_active_connection;
+    spawn_definition_fetch_task(services, workspace_id, table.clone(), no_session_msg, tx);
 
     cx.spawn(async move |this, cx| {
         if let Ok(result) = rx.recv().await {
@@ -168,6 +169,7 @@ fn spawn_definition_fetch_task(
     services: Arc<crate::services::ServiceHub>,
     workspace_id: dataforge_state::connection_window::WorkspaceId,
     table: TableRef,
+    no_session_msg: &'static str,
     tx: async_channel::Sender<Result<(TableDefinition, Option<String>), String>>,
 ) {
     let runtime = services.runtime.clone();
@@ -176,7 +178,7 @@ fn spawn_definition_fetch_task(
             let guard = services.sessions.read().await;
             let session = guard
                 .session(workspace_id)
-                .ok_or_else(|| "No active database session".to_owned())?;
+                .ok_or_else(|| no_session_msg.to_owned())?;
             let def = session
                 .run(OperationKind::Metadata, |lease, call| {
                     let target = table.clone();
@@ -340,9 +342,9 @@ fn render_structure_header(
                         .is_disabled(is_loading)
                         .child(Icon::new(IconName::RotateCcw).size(IconSize::Xs))
                         .label(if is_loading {
-                            "Refreshing..."
+                            ws.controller.strings.refreshing_label
                         } else {
-                            "Refresh"
+                            ws.controller.strings.refresh_label
                         })
                         .on_press(cx.listener(move |ws, _ev, _w, cx| {
                             start_fetch_definition(ws, table_for_refresh.clone(), true, cx);
@@ -362,11 +364,12 @@ fn render_structure_subtabs(
     let col_count = def.map_or(ws.controller.structure_columns.len(), |d| d.columns.len());
     let idx_count = def.map_or(0, |d| d.indexes.len());
     let fk_count = def.map_or(0, |d| d.foreign_keys.len() + d.inbound_foreign_keys.len());
+    let s = &ws.controller.strings;
     let items = vec![
-        TabItem::new("columns", format!("Columns ({col_count})")),
-        TabItem::new("indexes", format!("Indexes ({idx_count})")),
-        TabItem::new("foreign-keys", format!("Foreign Keys ({fk_count})")),
-        TabItem::new("ddl-triggers", "DDL & Triggers"),
+        TabItem::new("columns", format!("{} ({col_count})", s.columns_button)),
+        TabItem::new("indexes", format!("{} ({idx_count})", s.indexes_label)),
+        TabItem::new("foreign-keys", format!("{} ({fk_count})", s.foreign_keys_label)),
+        TabItem::new("ddl-triggers", s.ddl_triggers_tab),
     ];
     let selected_key = SharedString::from(ws.structure_ui.active_tab.key());
     let entity = cx.entity().clone();
@@ -393,15 +396,16 @@ fn render_structure_body(
     let def_matches = ws.structure_ui.loaded_table.as_ref() == Some(table);
 
     if is_loading && !def_matches && ws.controller.structure_columns.is_empty() {
-        return render_structure_skeleton(cx);
+        return render_structure_skeleton(&ws.controller.strings, cx);
     }
 
+    let s = &ws.controller.strings;
     let err_banner = ws.structure_ui.load_error.as_ref().map(|err| {
         div()
             .px(px(12.0))
             .pt(px(8.0))
             .child(
-                Alert::new("Metadata load incomplete")
+                Alert::new(s.structure_metadata_incomplete)
                     .status(HeroColor::Warning)
                     .description(err.clone()),
             )
@@ -500,12 +504,17 @@ fn collect_structure_column_entries(
 
     if let Some(desc) = &ws.structure_ui.sort_descriptor {
         let asc = desc.direction == SortDirection::Ascending;
+        let s = &ws.controller.strings;
         entries.sort_by(|a, b| {
-            let ord = match desc.column.as_ref() {
-                "Column" => a.name.cmp(&b.name),
-                "Type" => a.dtype.cmp(&b.dtype),
-                "Nullable" => a.nullable.cmp(&b.nullable),
-                _ => a.orig_idx.cmp(&b.orig_idx),
+            let col: &str = desc.column.as_ref();
+            let ord = if col == s.struct_col_column || col == "Column" {
+                a.name.cmp(&b.name)
+            } else if col == s.struct_col_type || col == "Type" {
+                a.dtype.cmp(&b.dtype)
+            } else if col == s.struct_col_nullable || col == "Nullable" {
+                a.nullable.cmp(&b.nullable)
+            } else {
+                a.orig_idx.cmp(&b.orig_idx)
             };
             if asc { ord } else { ord.reverse() }
         });
@@ -580,6 +589,7 @@ fn build_structure_column_row(
     is_selected: bool,
     font: &herogpui::gpui::Font,
     entity_sel: Entity<DataForgeWorkspace>,
+    s: &crate::i18n::Strings,
     cx: &App,
 ) -> TableRow {
     let orig_idx = entry.orig_idx;
@@ -620,7 +630,11 @@ fn build_structure_column_row(
         } else {
             HeroColor::Warning
         })
-        .child(ChipLabel::new().child(if entry.nullable { "YES" } else { "NOT NULL" }))
+        .child(ChipLabel::new().child(if entry.nullable {
+            s.nullable_yes
+        } else {
+            s.not_null_badge
+        }))
         .into_any_element();
     let def_cell = render_column_default_cell(&entry.default_expr, font, cx);
     let attrs_row = render_column_attrs_row(entry.attrs, cx);
@@ -703,27 +717,28 @@ fn render_columns_table(
     def: Option<&TableDefinition>,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let cols = vec![
         TableColumn::new("").width(px(34.0)).allows_resizing(false),
         TableColumn::new("#").width(px(44.0)).allows_resizing(false),
-        TableColumn::new("Column")
+        TableColumn::new(s.struct_col_column)
             .is_row_header(true)
             .allows_sorting(true)
             .allows_resizing(true)
             .default_width(px(180.0))
             .min_width(px(100.0)),
-        TableColumn::new("Type")
+        TableColumn::new(s.struct_col_type)
             .allows_sorting(true)
             .allows_resizing(true)
             .default_width(px(150.0)),
-        TableColumn::new("Nullable")
+        TableColumn::new(s.struct_col_nullable)
             .allows_sorting(true)
             .default_width(px(90.0)),
-        TableColumn::new("Default")
+        TableColumn::new(s.struct_col_default)
             .allows_resizing(true)
             .default_width(px(160.0)),
-        TableColumn::new("Attributes").default_width(px(160.0)),
-        TableColumn::new("Comment")
+        TableColumn::new(s.struct_col_attributes).default_width(px(160.0)),
+        TableColumn::new(s.struct_col_comment)
             .allows_resizing(true)
             .default_width(px(200.0)),
     ];
@@ -738,7 +753,7 @@ fn render_columns_table(
         .into_iter()
         .map(|entry| {
             let is_selected = selected_column == Some(entry.orig_idx);
-            build_structure_column_row(entry, is_selected, &font, entity_sel.clone(), cx)
+            build_structure_column_row(entry, is_selected, &font, entity_sel.clone(), s, cx)
         })
         .collect();
 
@@ -774,7 +789,7 @@ fn render_columns_table(
                 .p(px(24.0))
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("No column metadata returned by the server for this table."),
+                .child(s.structure_no_columns_empty),
         );
 
     if let Some(sort) = &ws.structure_ui.sort_descriptor {
@@ -791,16 +806,17 @@ fn render_indexes_table(
     def: Option<&TableDefinition>,
     cx: &App,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let cols = vec![
-        TableColumn::new("Index Name")
+        TableColumn::new(s.struct_idx_name)
             .is_row_header(true)
             .allows_resizing(true)
             .default_width(px(200.0)),
-        TableColumn::new("Keys / Expressions")
+        TableColumn::new(s.struct_idx_keys)
             .allows_resizing(true)
             .default_width(px(260.0)),
-        TableColumn::new("Flags").default_width(px(140.0)),
-        TableColumn::new("Predicate").default_width(px(220.0)),
+        TableColumn::new(s.struct_idx_flags).default_width(px(140.0)),
+        TableColumn::new(s.struct_idx_predicate).default_width(px(220.0)),
     ];
     let font = theme::value_gpui_font(&ws.controller.settings);
 
@@ -814,7 +830,7 @@ fn render_indexes_table(
                 .p(px(24.0))
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("This table defines no secondary indexes."),
+                .child(s.structure_no_indexes_empty),
         );
 
     if let Some(d) = def {
@@ -908,14 +924,15 @@ fn render_foreign_keys_table(
     def: Option<&TableDefinition>,
     cx: &App,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let cols = vec![
-        TableColumn::new("Constraint")
+        TableColumn::new(s.struct_fk_constraint)
             .is_row_header(true)
             .allows_resizing(true)
             .default_width(px(190.0)),
-        TableColumn::new("Direction").default_width(px(110.0)),
-        TableColumn::new("Relationship").default_width(px(280.0)),
-        TableColumn::new("Actions").default_width(px(170.0)),
+        TableColumn::new(s.struct_fk_direction).default_width(px(110.0)),
+        TableColumn::new(s.struct_fk_relationship).default_width(px(280.0)),
+        TableColumn::new(s.struct_fk_actions).default_width(px(170.0)),
     ];
     let font = theme::value_gpui_font(&ws.controller.settings);
 
@@ -929,22 +946,27 @@ fn render_foreign_keys_table(
                 .p(px(24.0))
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("No outbound or inbound foreign key relationships."),
+                .child(s.structure_no_fks_empty),
         );
 
     if let Some(d) = def {
         for fk in &d.foreign_keys {
-            table = table.tree_row(build_outbound_fk_row(fk, &font, cx));
+            table = table.tree_row(build_outbound_fk_row(fk, &font, s, cx));
         }
         for in_fk in &d.inbound_foreign_keys {
-            table = table.tree_row(build_inbound_fk_row(in_fk, &font, cx));
+            table = table.tree_row(build_inbound_fk_row(in_fk, &font, s, cx));
         }
     }
 
     table.into_any_element()
 }
 
-fn build_outbound_fk_row(fk: &ForeignKeyInfo, font: &herogpui::gpui::Font, cx: &App) -> TableRow {
+fn build_outbound_fk_row(
+    fk: &ForeignKeyInfo,
+    font: &herogpui::gpui::Font,
+    strings: &crate::i18n::Strings,
+    cx: &App,
+) -> TableRow {
     let target_table = match &fk.ref_schema {
         Some(s) => format!("{s}.{}", fk.ref_table),
         None => fk.ref_table.clone(),
@@ -979,7 +1001,7 @@ fn build_outbound_fk_row(fk: &ForeignKeyInfo, font: &herogpui::gpui::Font, cx: &
             .variant(ChipVariant::Soft)
             .size(HeroSize::Sm)
             .color(HeroColor::Accent)
-            .child(ChipLabel::new().child("Outbound"))
+            .child(ChipLabel::new().child(strings.fk_outbound))
             .into_any_element(),
         div()
             .font(font.clone())
@@ -999,6 +1021,7 @@ fn build_outbound_fk_row(fk: &ForeignKeyInfo, font: &herogpui::gpui::Font, cx: &
 fn build_inbound_fk_row(
     in_fk: &tablepro_core::ddl::InboundForeignKey,
     font: &herogpui::gpui::Font,
+    strings: &crate::i18n::Strings,
     cx: &App,
 ) -> TableRow {
     let src_table = match &in_fk.table.schema {
@@ -1020,7 +1043,7 @@ fn build_inbound_fk_row(
         Chip::new()
             .variant(ChipVariant::Secondary)
             .size(HeroSize::Sm)
-            .child(ChipLabel::new().child("Inbound"))
+            .child(ChipLabel::new().child(strings.fk_inbound))
             .into_any_element(),
         div()
             .font(font.clone())
@@ -1031,7 +1054,7 @@ fn build_inbound_fk_row(
         div()
             .text_size(px(11.0))
             .text_color(cx.colors().muted)
-            .child("References this table")
+            .child(strings.fk_references_this_table)
             .into_any_element(),
     ])
     .key(format!("in-{}", in_fk.name))
@@ -1109,6 +1132,7 @@ fn render_ddl_card(
     border: herogpui::gpui::Hsla,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     if ddl_text.is_empty() {
         return div()
             .p(px(16.0))
@@ -1117,7 +1141,7 @@ fn render_ddl_card(
             .border_color(border)
             .text_size(px(12.0))
             .text_color(cx.colors().muted)
-            .child("Engine did not provide DDL text for this object.")
+            .child(s.structure_no_ddl_empty)
             .into_any_element();
     }
 
@@ -1144,22 +1168,18 @@ fn render_ddl_card(
                     div()
                         .text_size(px(12.0))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child("Table DDL"),
+                        .child(s.structure_table_ddl),
                 )
                 .child(
                     Button::new("structure-copy-ddl")
                         .variant(Variant::Tertiary)
                         .size(HeroSize::Sm)
                         .child(Icon::new(IconName::Copy).size(IconSize::Xs))
-                        .label("Copy DDL")
+                        .label(s.copy_ddl)
                         .on_press(cx.listener(move |ws, _ev, _w, cx| {
                             cx.write_to_clipboard(ClipboardItem::new_string(ddl_for_copy.clone()));
-                            ws.notify_toast(
-                                ToastSeverity::Success,
-                                "DDL copied to clipboard",
-                                None,
-                                cx,
-                            );
+                            let msg = ws.controller.strings.ddl_copied_toast;
+                            ws.notify_toast(ToastSeverity::Success, msg, None, cx);
                         })),
                 ),
         )
@@ -1208,7 +1228,11 @@ fn render_triggers_card(
                     div()
                         .text_size(px(12.0))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child(format!("Triggers ({})", trigger_deps.len())),
+                        .child(format!(
+                            "{} ({})",
+                            ws.controller.strings.triggers_label,
+                            trigger_deps.len()
+                        )),
                 ),
         );
 
@@ -1218,7 +1242,7 @@ fn render_triggers_card(
                 .p(px(12.0))
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("No triggers attached to this table."),
+                .child(ws.controller.strings.structure_no_triggers_empty),
         );
         return triggers_card.into_any_element();
     }
@@ -1271,7 +1295,7 @@ fn render_triggers_card(
     triggers_card.into_any_element()
 }
 
-fn render_structure_skeleton(cx: &App) -> AnyElement {
+fn render_structure_skeleton(s: &crate::i18n::Strings, cx: &App) -> AnyElement {
     let mut stack = div()
         .size_full()
         .p(px(16.0))
@@ -1282,7 +1306,7 @@ fn render_structure_skeleton(cx: &App) -> AnyElement {
             div()
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("Loading table schema metadata..."),
+                .child(s.structure_loading_metadata),
         );
     for idx in 0usize..6 {
         stack = stack.child(
@@ -1295,7 +1319,7 @@ fn render_structure_skeleton(cx: &App) -> AnyElement {
     stack.into_any_element()
 }
 
-fn render_no_table_selected(cx: &App) -> AnyElement {
+fn render_no_table_selected(s: &crate::i18n::Strings, cx: &App) -> AnyElement {
     div()
         .size_full()
         .flex()
@@ -1314,13 +1338,13 @@ fn render_no_table_selected(cx: &App) -> AnyElement {
                 .text_size(px(14.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(cx.colors().foreground)
-                .child("No table selected"),
+                .child(s.structure_no_table_title),
         )
         .child(
             div()
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("Select a table or view in the Schema Browser to inspect columns, indexes, foreign keys, and DDL."),
+                .child(s.structure_no_table_desc),
         )
         .into_any_element()
 }
