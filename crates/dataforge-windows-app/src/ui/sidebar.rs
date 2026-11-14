@@ -141,9 +141,11 @@ pub fn render_sidebar(
         ConnectionWindowPhase::Connecting { .. } | ConnectionWindowPhase::Reconnecting { .. } => {
             render_schema_skeletons(cx)
         }
-        ConnectionWindowPhase::Disconnected => render_disconnected_card(cx),
+        ConnectionWindowPhase::Disconnected => {
+            render_disconnected_card(&ws.controller.strings, cx)
+        }
         ConnectionWindowPhase::Unavailable(view) => {
-            render_unavailable_sidebar_card(&view.summary, cx)
+            render_unavailable_sidebar_card(&ws.controller.strings, &view.summary, cx)
         }
     };
 
@@ -193,7 +195,12 @@ fn render_sidebar_header(
                 .child(ChipLabel::new().child(format!("{total_objects}"))),
         );
 
-    let refresh_btn = render_refresh_button(is_connected, is_loading, cx);
+    let refresh_btn = render_refresh_button(
+        ws.controller.strings.refresh_schema,
+        is_connected,
+        is_loading,
+        cx,
+    );
 
     let mut header = div()
         .flex()
@@ -217,7 +224,7 @@ fn render_sidebar_header(
                                 .text_xs()
                                 .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
                                 .text_color(colors.foreground)
-                                .child("Objects"),
+                                .child(ws.controller.strings.objects),
                         )
                         .child(count_pill),
                 )
@@ -234,6 +241,7 @@ fn render_sidebar_header(
 }
 
 fn render_refresh_button(
+    refresh_tooltip: &'static str,
     is_connected: bool,
     is_loading: bool,
     cx: &mut Context<DataForgeWorkspace>,
@@ -244,7 +252,7 @@ fn render_refresh_button(
         .variant(Variant::Tertiary)
         .size(Size::Sm)
         .is_icon_only(true)
-        .aria_label("Refresh schemas")
+        .aria_label(refresh_tooltip)
         .is_disabled(!is_connected || is_loading)
         .content(move |_| {
             if is_loading && !reduced_motion {
@@ -264,7 +272,7 @@ fn render_refresh_button(
             spawn_schema_refresh(ws, schema, cx);
         }));
 
-    Tooltip::new("Refresh schemas & objects")
+    Tooltip::new(refresh_tooltip)
         .child(btn)
         .into_any_element()
 }
@@ -295,15 +303,18 @@ fn render_database_and_schema_controls(
         .map(|s| PickerItem::new(s.name.clone(), s.name.clone()))
         .collect();
     if schema_items.is_empty() {
-        schema_items.push(PickerItem::new("default", "Default schema"));
+        schema_items.push(PickerItem::new(
+            "default",
+            ws.controller.strings.default_schema,
+        ));
     }
 
     let selected_key = active_schema.unwrap_or_else(|| "default".to_owned());
     let disabled_select = ws.controller.cached_schemas.is_empty() || ws.sidebar_ui.schema_loading;
 
     let schema_select = Select::new("sidebar-schema-select", schema_items)
-        .aria_label("Active schema")
-        .placeholder("Select schema")
+        .aria_label(ws.controller.strings.active_schema_label)
+        .placeholder(ws.controller.strings.select_schema)
         .value(Some(SharedString::from(selected_key)))
         .full_width(true)
         .height(px(28.0))
@@ -356,15 +367,16 @@ fn render_filter_controls(
         .filter(|obj| ws.controller.favorite_objects.contains(&obj.name))
         .count();
 
+    let s = &ws.controller.strings;
     let fav_label = if fav_count > 0 {
-        format!("Favorites ({fav_count})")
+        format!("{} ({fav_count})", s.favorites)
     } else {
-        "Favorites".to_owned()
+        s.favorites.to_owned()
     };
 
     let ws_for_clear = cx.entity().downgrade();
     let search = SearchField::new(ws.sidebar_ui.filter_input.clone())
-        .placeholder("Filter objects (Ctrl+F)")
+        .placeholder(s.filter_shortcut_placeholder)
         .full_width()
         .height(px(30.0))
         .text_size(px(12.0))
@@ -390,7 +402,7 @@ fn render_filter_controls(
     let tabs = Tabs::new(
         "sidebar-scope-tabs",
         vec![
-            TabItem::new("all", "All"),
+            TabItem::new("all", s.all),
             TabItem::new("favorites", fav_label),
         ],
         "all",
@@ -424,7 +436,7 @@ fn render_connected_body(
 
     let filtered = filtered_objects(ws);
     if ws.controller.cached_objects.is_empty() {
-        return render_empty_schema_card(cx);
+        return render_empty_schema_card(&ws.controller.strings, cx);
     }
     if filtered.is_empty() {
         return render_empty_filtered_card(ws, cx);
@@ -500,7 +512,11 @@ fn render_connected_body(
         .min_h_0()
         .flex()
         .flex_col()
-        .child(render_count_badges_strip(counts, cx))
+        .child(render_count_badges_strip(
+            &ws.controller.strings,
+            counts,
+            cx,
+        ))
         .child(tree_section);
 
     if let Some(ref obj) = selected_object {
@@ -539,6 +555,7 @@ impl SectionCounts {
 }
 
 fn render_count_badges_strip(
+    s: &crate::i18n::Strings,
     counts: SectionCounts,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
@@ -552,9 +569,9 @@ fn render_count_badges_strip(
         .py(px(6.0))
         .border_b(px(HAIRLINE_BORDER_PX))
         .border_color(hairline_border_color(cx))
-        .child(summary_chip("Tables", counts.tables, colors.muted))
-        .child(summary_chip("Views", counts.views, colors.muted))
-        .child(summary_chip("Routines", counts.routines, colors.muted))
+        .child(summary_chip(s.tables, counts.tables, colors.muted))
+        .child(summary_chip(s.views, counts.views, colors.muted))
+        .child(summary_chip(s.routines, counts.routines, colors.muted))
         .into_any_element()
 }
 
@@ -605,33 +622,40 @@ fn build_tree_items(ws: &DataForgeWorkspace, objects: &[&ObjectInfo]) -> Vec<Tre
         }
     }
 
+    let s = &ws.controller.strings;
     let mut roots = Vec::new();
     if !tables.is_empty() {
         roots.push(
-            TreeItem::new(SECTION_TABLES, format!("Tables ({})", tables.len()))
+            TreeItem::new(SECTION_TABLES, format!("{} ({})", s.tables, tables.len()))
                 .icon(IconName::Folder.path())
                 .children(tables),
         );
     }
     if !views.is_empty() {
         roots.push(
-            TreeItem::new(SECTION_VIEWS, format!("Views ({})", views.len()))
+            TreeItem::new(SECTION_VIEWS, format!("{} ({})", s.views, views.len()))
                 .icon(IconName::Folder.path())
                 .children(views),
         );
     }
     if !routines.is_empty() {
         roots.push(
-            TreeItem::new(SECTION_ROUTINES, format!("Functions ({})", routines.len()))
-                .icon(IconName::Folder.path())
-                .children(routines),
+            TreeItem::new(
+                SECTION_ROUTINES,
+                format!("{} ({})", s.routines, routines.len()),
+            )
+            .icon(IconName::Folder.path())
+            .children(routines),
         );
     }
     if !other.is_empty() {
         roots.push(
-            TreeItem::new(SECTION_OTHER, format!("Sequences & Keys ({})", other.len()))
-                .icon(IconName::Folder.path())
-                .children(other),
+            TreeItem::new(
+                SECTION_OTHER,
+                format!("{} ({})", s.other_objects, other.len()),
+            )
+            .icon(IconName::Folder.path())
+            .children(other),
         );
     }
     roots
@@ -674,7 +698,7 @@ fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem
                 groups.push(
                     TreeItem::new(
                         format!("grp:cols:{key}"),
-                        format!("Columns ({})", col_items.len()),
+                        format!("{} ({})", ws.controller.strings.columns_button, col_items.len()),
                     )
                     .icon(IconName::Columns2.path())
                     .children(col_items),
@@ -700,7 +724,7 @@ fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem
                     groups.push(
                         TreeItem::new(
                             format!("grp:idxs:{key}"),
-                            format!("Indexes ({})", idx_items.len()),
+                            format!("{} ({})", ws.controller.strings.indexes_label, idx_items.len()),
                         )
                         .icon(IconName::ListOrdered.path())
                         .children(idx_items),
@@ -714,7 +738,10 @@ fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem
                     .is_disabled(true),
             ],
             Some(TableDetailsState::Loading) | None => vec![
-                TreeItem::new(format!("loading:{key}"), "Expand to load columns...")
+                TreeItem::new(
+                    format!("loading:{key}"),
+                    ws.controller.strings.expand_to_load_columns,
+                )
                     .icon(IconName::LoaderCircle.path())
                     .is_disabled(true),
             ],
@@ -737,7 +764,7 @@ fn render_selected_node_dropdown(
             .variant(Variant::Tertiary)
             .size(Size::Sm)
             .is_icon_only(true)
-            .aria_label("Object actions")
+            .aria_label(ws.controller.strings.object_actions_aria)
             .content(move |_| {
                 Icon::new(IconName::EllipsisVertical)
                     .size(IconSize::Sm)
@@ -768,16 +795,16 @@ fn render_selected_node_actions(
         .is_some_and(|(name, at)| name == qualified && at.elapsed() < Duration::from_secs(2));
 
     let fav_btn = Tooltip::new(if is_fav {
-        "Remove favorite"
+        ws.controller.strings.remove_favorite
     } else {
-        "Add favorite"
+        ws.controller.strings.add_favorite
     })
     .child(
         Button::new("sidebar-selected-fav")
             .variant(Variant::Tertiary)
             .size(Size::Sm)
             .is_icon_only(true)
-            .aria_label("Toggle favorite")
+            .aria_label(ws.controller.strings.toggle_favorite_aria)
             .content(move |_| {
                 Icon::new(IconName::Star)
                     .size(IconSize::Sm)
@@ -793,12 +820,12 @@ fn render_selected_node_actions(
             })),
     );
 
-    let copy_btn = Tooltip::new("Copy qualified name").child(
+    let copy_btn = Tooltip::new(ws.controller.strings.copy_qualified_name).child(
         Button::new("sidebar-selected-copy")
             .variant(Variant::Tertiary)
             .size(Size::Sm)
             .is_icon_only(true)
-            .aria_label("Copy qualified name")
+            .aria_label(ws.controller.strings.copy_qualified_name)
             .content(move |_| {
                 Icon::new(if recently_copied {
                     IconName::Check
@@ -872,7 +899,7 @@ fn render_selected_node_bar(
                 .gap(px(MICRO_GAP_PX))
                 .child(
                     Button::new("sidebar-open-data")
-                        .label("Data")
+                        .label(ws.controller.strings.data_tab)
                         .variant(Variant::Secondary)
                         .size(Size::Sm)
                         .grow(true)
@@ -882,7 +909,7 @@ fn render_selected_node_bar(
                 )
                 .child(
                     Button::new("sidebar-open-structure")
-                        .label("Structure")
+                        .label(ws.controller.strings.structure_tab)
                         .variant(Variant::Secondary)
                         .size(Size::Sm)
                         .grow(true)
@@ -918,33 +945,36 @@ fn build_object_menu_items(
     let has_any = selected.is_some();
     let is_fav = selected.is_some_and(|obj| ws.controller.favorite_objects.contains(&obj.name));
 
+    let s = &ws.controller.strings;
     let mut items = Vec::new();
     if has_table {
-        items.push(MenuItem::new("open_data", "Open Table Data").icon(IconName::Table.path()));
+        items.push(MenuItem::new("open_data", s.ctx_open_table_data).icon(IconName::Table.path()));
         items.push(
-            MenuItem::new("view_structure", "View Structure").icon(IconName::Columns2.path()),
+            MenuItem::new("view_structure", s.ctx_view_structure).icon(IconName::Columns2.path()),
         );
-        items.push(MenuItem::new("new_select", "New SELECT Query").icon(IconName::FileCode.path()));
+        items.push(
+            MenuItem::new("new_select", s.ctx_new_select_query).icon(IconName::FileCode.path()),
+        );
         items.push(MenuItem::Separator);
     }
     if has_any {
         items.push(
-            MenuItem::new("copy_qualified", "Copy Qualified Name").icon(IconName::Copy.path()),
+            MenuItem::new("copy_qualified", s.copy_qualified_name).icon(IconName::Copy.path()),
         );
         items.push(
             MenuItem::new(
                 "toggle_favorite",
                 if is_fav {
-                    "Remove from Favorites"
+                    s.remove_from_favorites
                 } else {
-                    "Add to Favorites"
+                    s.add_to_favorites
                 },
             )
             .icon(IconName::Star.path()),
         );
         items.push(MenuItem::Separator);
     }
-    items.push(MenuItem::new("refresh_schema", "Refresh Schema").icon(IconName::RefreshCw.path()));
+    items.push(MenuItem::new("refresh_schema", s.refresh_schema_short).icon(IconName::RefreshCw.path()));
     items
 }
 
@@ -964,9 +994,10 @@ fn execute_node_action(
                     cx.notify();
                 }
                 Err(err) => {
+                    let msg = ws.controller.strings.failed_to_open_table;
                     ws.notify_toast(
                         ToastSeverity::Error,
-                        "Open Table Failed",
+                        msg,
                         Some(err.to_string().into()),
                         cx,
                     );
@@ -983,9 +1014,10 @@ fn execute_node_action(
                     cx.notify();
                 }
                 Err(err) => {
+                    let msg = ws.controller.strings.load_structure_failed_toast;
                     ws.notify_toast(
                         ToastSeverity::Error,
-                        "Load Structure Failed",
+                        msg,
                         Some(err.to_string().into()),
                         cx,
                     );
@@ -997,14 +1029,14 @@ fn execute_node_action(
             let qualified = qualified_name(&obj);
             let sql = format!("SELECT *\nFROM {qualified}\nLIMIT 100;\n");
             let conn_id = TabConnectionId(format!("ws-{}", ws.controller.active_workspace.0));
-            ws.controller
-                .tabs
-                .open_query_tab(conn_id, Some(&format!("Query - {}", obj.name)));
+            let tab_title = format!("{} - {}", ws.controller.strings.new_query_tab, obj.name);
+            ws.controller.tabs.open_query_tab(conn_id, Some(&tab_title));
             ws.controller.set_editor_sql(&sql);
             ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
+            let ready_msg = ws.controller.strings.query_ready_toast;
             ws.notify_toast(
                 ToastSeverity::Info,
-                "Query Ready",
+                ready_msg,
                 Some(qualified.into()),
                 cx,
             );
@@ -1015,7 +1047,8 @@ fn execute_node_action(
             let qualified = qualified_name(&obj);
             cx.write_to_clipboard(ClipboardItem::new_string(qualified.clone()));
             ws.sidebar_ui.copied_object = Some((qualified.clone(), Instant::now()));
-            ws.notify_toast(ToastSeverity::Success, "Copied", Some(qualified.into()), cx);
+            let copied_msg = ws.controller.strings.copied;
+            ws.notify_toast(ToastSeverity::Success, copied_msg, Some(qualified.into()), cx);
             cx.notify();
         }
         "toggle_favorite" => {
@@ -1023,9 +1056,9 @@ fn execute_node_action(
             ws.controller.toggle_object_favorite(&obj.name);
             let added = ws.controller.favorite_objects.contains(&obj.name);
             let title = if added {
-                "Added to Favorites"
+                ws.controller.strings.added_to_favorites_toast
             } else {
-                "Removed from Favorites"
+                ws.controller.strings.removed_from_favorites_toast
             };
             ws.notify_toast(ToastSeverity::Info, title, Some(obj.name.into()), cx);
             cx.notify();
@@ -1053,15 +1086,18 @@ fn spawn_schema_refresh(
     cx: &mut Context<DataForgeWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
+        let title = ws.controller.strings.unavailable;
+        let desc = ws.controller.strings.service_runtime_not_init;
         ws.notify_toast(
             ToastSeverity::Warning,
-            "Unavailable",
-            Some("Runtime services are not initialized.".into()),
+            title,
+            Some(desc.into()),
             cx,
         );
         return;
     };
     let workspace_id = ws.controller.active_workspace;
+    let no_session_err = ws.controller.strings.no_active_session_err;
     ws.sidebar_ui.schema_loading = true;
     cx.notify();
 
@@ -1072,7 +1108,7 @@ fn spawn_schema_refresh(
             drop(services.runtime.spawn(async move {
                 let guard = svc.sessions.read().await;
                 let Some(session) = guard.session(workspace_id) else {
-                    let _ = tx.send(Err("No active session for workspace".to_owned()));
+                    let _ = tx.send(Err(no_session_err.to_owned()));
                     return;
                 };
                 let schemas = match session.refresh_schemas().await {
@@ -1124,9 +1160,10 @@ fn spawn_schema_refresh(
                             }
                         }
                         Err(err) => {
+                            let msg = ws.controller.strings.schema_refresh_failed_toast;
                             ws.notify_toast(
                                 ToastSeverity::Error,
-                                "Schema Refresh Failed",
+                                msg,
                                 Some(err.into()),
                                 cx,
                             );
@@ -1173,6 +1210,7 @@ fn maybe_load_expanded_table_details(
         .insert(key_owned.clone(), TableDetailsState::Loading);
 
     let workspace_id = ws.controller.active_workspace;
+    let session_unavailable_err = ws.controller.strings.session_unavailable_err;
     let table_ref = TableRef::new(obj.schema, obj.name);
 
     cx.spawn(
@@ -1182,7 +1220,7 @@ fn maybe_load_expanded_table_details(
             drop(services.runtime.spawn(async move {
                 let guard = svc.sessions.read().await;
                 let Some(session) = guard.session(workspace_id) else {
-                    let _ = tx.send(Err("Session unavailable".to_owned()));
+                    let _ = tx.send(Err(session_unavailable_err.to_owned()));
                     return;
                 };
                 let columns = match session.columns(table_ref.clone()).await {
@@ -1245,7 +1283,10 @@ fn render_schema_skeletons(cx: &Context<DataForgeWorkspace>) -> AnyElement {
     stack.into_any_element()
 }
 
-fn render_disconnected_card(cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_disconnected_card(
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
     let colors = cx.colors().clone();
     div()
         .p(px(12.0))
@@ -1265,16 +1306,14 @@ fn render_disconnected_card(cx: &mut Context<DataForgeWorkspace>) -> AnyElement 
                                         .size(IconSize::Md)
                                         .color(colors.muted),
                                 )
-                                .child(CardTitle::new().child("No Active Connection")),
+                                .child(CardTitle::new().child(s.no_active_connection)),
                         )
-                        .child(CardDescription::new().child(
-                            "Connect to a database or open a local file to browse objects.",
-                        )),
+                        .child(CardDescription::new().child(s.no_active_connection_desc)),
                 )
                 .child(
                     CardContent::new().child(
                         Button::new("sidebar-open-connections")
-                            .label("Open Connections")
+                            .label(s.open_connections)
                             .variant(Variant::Primary)
                             .size(Size::Sm)
                             .full_width(true)
@@ -1288,6 +1327,7 @@ fn render_disconnected_card(cx: &mut Context<DataForgeWorkspace>) -> AnyElement 
 }
 
 fn render_unavailable_sidebar_card(
+    s: &crate::i18n::Strings,
     summary: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
@@ -1310,14 +1350,14 @@ fn render_unavailable_sidebar_card(
                                         .size(IconSize::Md)
                                         .color(colors.danger.color),
                                 )
-                                .child(CardTitle::new().child("Connection Unavailable")),
+                                .child(CardTitle::new().child(s.unavailable_long)),
                         )
                         .child(CardDescription::new().child(summary.to_owned())),
                 )
                 .child(
                     CardContent::new().child(
                         Button::new("sidebar-unavailable-connections")
-                            .label("Open Connections")
+                            .label(s.open_connections)
                             .variant(Variant::Secondary)
                             .size(Size::Sm)
                             .full_width(true)
@@ -1330,7 +1370,10 @@ fn render_unavailable_sidebar_card(
         .into_any_element()
 }
 
-fn render_empty_schema_card(cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_empty_schema_card(
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
     div()
         .p(px(12.0))
         .child(
@@ -1338,16 +1381,13 @@ fn render_empty_schema_card(cx: &mut Context<DataForgeWorkspace>) -> AnyElement 
                 .variant(CardVariant::Secondary)
                 .child(
                     CardHeader::new()
-                        .child(CardTitle::new().child("Schema Is Empty"))
-                        .child(
-                            CardDescription::new()
-                                .child("No tables, views, or routines were returned."),
-                        ),
+                        .child(CardTitle::new().child(s.schema_empty_title))
+                        .child(CardDescription::new().child(s.schema_empty_desc)),
                 )
                 .child(
                     CardContent::new().child(
                         Button::new("sidebar-empty-refresh")
-                            .label("Refresh Schema")
+                            .label(s.refresh_schema_short)
                             .variant(Variant::Secondary)
                             .size(Size::Sm)
                             .full_width(true)
@@ -1365,10 +1405,11 @@ fn render_empty_filtered_card(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let reason = if ws.controller.sidebar_favorites_only {
-        "No favorite objects match the current filter."
+        s.no_matching_favorites_desc
     } else {
-        "No database objects match the filter text."
+        s.no_matching_objects_desc
     };
 
     div()
@@ -1378,13 +1419,13 @@ fn render_empty_filtered_card(
                 .variant(CardVariant::Secondary)
                 .child(
                     CardHeader::new()
-                        .child(CardTitle::new().child("No Matching Objects"))
+                        .child(CardTitle::new().child(s.no_matching_objects_title))
                         .child(CardDescription::new().child(reason)),
                 )
                 .child(
                     CardContent::new().child(
                         Button::new("sidebar-clear-filter")
-                            .label("Reset Filter")
+                            .label(s.reset_filter_btn)
                             .variant(Variant::Secondary)
                             .size(Size::Sm)
                             .full_width(true)
