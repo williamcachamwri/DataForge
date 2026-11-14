@@ -14,12 +14,21 @@ use dataforge_gfx::palette::{Color as GfxColor, ThemeMode, ThemePalette};
 use dataforge_state::theme::{
     ResolvedTheme, Rgba as StateRgba, ThemeAppearance, ThemeDefinition, ThemeSlot,
 };
-use dataforge_windows_platform::{AppSettings, EditorFont, FontSpec, detect_reduced_motion};
+use dataforge_windows_platform::{
+    AppSettings, EditorFont, FontSpec, WindowBackdropPreference, detect_reduced_motion,
+};
 use herogpui::core::{readable_color, with_alpha};
 use herogpui::gpui::{
-    App, Font, FontFeatures, FontStyle, Hsla, Rgba as GpuiRgba, font as gpui_font,
+    Animation, AnimationExt, AnyElement, App, ElementId, Font, FontFeatures, FontStyle, Hsla,
+    IntoElement, Rgba as GpuiRgba, Styled, font as gpui_font, px,
 };
 use herogpui::theme::{ActiveTheme, Appearance, Theme, set_reduce_motion, set_theme};
+
+/// Theme id registered in HeroGPUI when Light mode is active.
+pub const LIGHT_THEME_ID: &str = "dataforge-light";
+
+/// Theme id registered in HeroGPUI when Dark mode is active.
+pub const DARK_THEME_ID: &str = "dataforge-dark";
 
 /// Theme id registered in HeroGPUI when Windows High Contrast mode is active.
 pub const HIGH_CONTRAST_THEME_ID: &str = "dataforge-high-contrast";
@@ -53,6 +62,27 @@ pub const OVERLAY_EXIT_MS: u64 = 100;
 
 /// Drawer/panel slide transition duration (`180ms`, < `250ms`).
 pub const DRAWER_SLIDE_MS: u64 = 180;
+
+/// Screen transition fade duration (`160ms`, < `250ms`).
+pub const SCREEN_TRANSITION_MS: u64 = 160;
+
+const fn rgb_hsla(r: u8, g: u8, b: u8) -> GpuiRgba {
+    GpuiRgba {
+        r: (r as f32) / 255.0,
+        g: (g as f32) / 255.0,
+        b: (b as f32) / 255.0,
+        a: 1.0,
+    }
+}
+
+const fn rgba_hsla(r: u8, g: u8, b: u8, a: f32) -> GpuiRgba {
+    GpuiRgba {
+        r: (r as f32) / 255.0,
+        g: (g as f32) / 255.0,
+        b: (b as f32) / 255.0,
+        a,
+    }
+}
 
 /// Converts a `dataforge-state` 8-bit [`StateRgba`] color into GPUI [`GpuiRgba`].
 #[must_use]
@@ -290,20 +320,121 @@ pub fn high_contrast_chrome_theme() -> Theme {
     high_contrast_theme_from_palette(&sys)
 }
 
+/// Builds the harmonious Apple-style Dark Chrome [`Theme`].
+///
+/// Surface elevation ladder:
+/// - Recessed/Base (`background`, `surface_secondary`): `#17181C`
+/// - Editor/Content (`field.background`, content palette): `#1B1C20`
+/// - Chrome/Toolbar/Sidebar (`surface.background`): `#1F2025`
+/// - Elevated/Card/Popover (`overlay.background`, `surface_tertiary`): `#25272D`
+/// - Hairline border (`border`, `separator`): `rgba(255, 255, 255, 0.08)`
+#[must_use]
+pub fn dark_chrome_theme() -> Theme {
+    let base = Theme::dark();
+    let fg = base.colors.foreground;
+    let recessed: Hsla = rgb_hsla(0x17, 0x18, 0x1C).into();
+    let editor: Hsla = rgb_hsla(0x1B, 0x1C, 0x20).into();
+    let chrome: Hsla = rgb_hsla(0x1F, 0x20, 0x25).into();
+    let elevated: Hsla = rgb_hsla(0x25, 0x27, 0x2D).into();
+    let hairline: Hsla = rgba_hsla(255, 255, 255, 0.08).into();
+
+    Theme::builder(DARK_THEME_ID, base)
+        .appearance(Appearance::Dark)
+        .background(recessed)
+        .surface(chrome, fg)
+        .surface_levels(recessed, elevated)
+        .overlay(elevated, fg)
+        .border(hairline)
+        .separator(hairline)
+        .field(editor, fg)
+        .field_border(hairline)
+        .backdrop(rgba_hsla(0, 0, 0, 0.42).into())
+        .build()
+}
+
+/// Builds the harmonious Apple-style Light Chrome [`Theme`].
+///
+/// Surface elevation ladder:
+/// - Base/Recessed (`background`, `surface_secondary`): `#F3F4F6`
+/// - Chrome/Toolbar/Sidebar (`surface.background`): `#F8F9FB`
+/// - Editor/Content & Elevated/Card/Popover (`overlay.background`, `surface_tertiary`): `#FFFFFF`
+/// - Hairline border (`border`, `separator`): `rgba(0, 0, 0, 0.08)`
+#[must_use]
+pub fn light_chrome_theme() -> Theme {
+    let base = Theme::light();
+    let fg = base.colors.foreground;
+    let recessed: Hsla = rgb_hsla(0xF3, 0xF4, 0xF6).into();
+    let chrome: Hsla = rgb_hsla(0xF8, 0xF9, 0xFB).into();
+    let elevated: Hsla = rgb_hsla(0xFF, 0xFF, 0xFF).into();
+    let hairline: Hsla = rgba_hsla(0, 0, 0, 0.08).into();
+
+    Theme::builder(LIGHT_THEME_ID, base)
+        .appearance(Appearance::Light)
+        .background(recessed)
+        .surface(chrome, fg)
+        .surface_levels(recessed, elevated)
+        .overlay(elevated, fg)
+        .border(hairline)
+        .separator(hairline)
+        .field(elevated, fg)
+        .field_border(hairline)
+        .backdrop(rgba_hsla(15, 23, 42, 0.28).into())
+        .build()
+}
+
 /// Selects the HeroGPUI Chrome [`Theme`] matching `mode`.
 #[must_use]
 pub fn chrome_theme_for_mode(mode: ThemeMode) -> Theme {
     match mode {
-        ThemeMode::Light => Theme::light(),
-        ThemeMode::Dark => Theme::dark(),
+        ThemeMode::Light => light_chrome_theme(),
+        ThemeMode::Dark => dark_chrome_theme(),
         ThemeMode::HighContrastLight | ThemeMode::HighContrastDark => high_contrast_chrome_theme(),
     }
 }
 
-/// Applies the active HeroGPUI Chrome [`Theme`] and Windows reduced-motion setting.
-pub fn apply_chrome_theme_and_motion(mode: ThemeMode, cx: &mut App) {
-    set_theme(chrome_theme_for_mode(mode), cx);
+/// Applies the active HeroGPUI Chrome [`Theme`], backdrop translucency, and Windows reduced-motion setting.
+pub fn apply_chrome_theme_and_motion(
+    mode: ThemeMode,
+    backdrop: WindowBackdropPreference,
+    cx: &mut App,
+) {
+    let mut theme = chrome_theme_for_mode(mode);
+    let alphas = match backdrop {
+        WindowBackdropPreference::Opaque => None,
+        // Gaussian Blur: translucent across window & panel surfaces so frosted glass shows
+        // across the workspace, while keeping `overlay.background` opaque because GPUI
+        // does not support an in-app `backdrop-filter: blur()` shader over UI text.
+        WindowBackdropPreference::GaussianBlur => Some((0.46, 0.36, 0.28, 0.24)),
+        WindowBackdropPreference::Mica | WindowBackdropPreference::MicaAlt => {
+            Some((0.66, 0.56, 0.44, 0.38))
+        }
+    };
+    if let Some((bg_a, surf_a, sec_a, tert_a)) = alphas {
+        theme.colors.background = with_alpha(theme.colors.background, bg_a);
+        theme.colors.surface.background = with_alpha(theme.colors.surface.background, surf_a);
+        theme.colors.surface_secondary = with_alpha(theme.colors.surface_secondary, sec_a);
+        theme.colors.surface_tertiary = with_alpha(theme.colors.surface_tertiary, tert_a);
+    }
+    set_theme(theme, cx);
     set_reduce_motion(detect_reduced_motion(), cx);
+}
+
+/// Applies backdrop translucency to content surfaces (SQL editor, gutter, grid header)
+/// so Gaussian Blur / Mica covers the entire window uniformly.
+pub fn apply_backdrop_to_content_palette(
+    palette: &mut ContentThemePalette,
+    backdrop: WindowBackdropPreference,
+) {
+    let (editor_a, gutter_a, header_a) = match backdrop {
+        WindowBackdropPreference::Opaque => return,
+        WindowBackdropPreference::GaussianBlur => (0.18, 0.14, 0.30),
+        WindowBackdropPreference::Mica | WindowBackdropPreference::MicaAlt => (0.35, 0.28, 0.45),
+    };
+    palette.editor_background = with_alpha(palette.editor_background, editor_a);
+    palette.editor_gutter_background = with_alpha(palette.editor_gutter_background, gutter_a);
+    palette.editor_current_line = with_alpha(palette.editor_current_line, editor_a);
+    palette.data_grid_header_background = with_alpha(palette.data_grid_header_background, header_a);
+    palette.window_background = with_alpha(palette.window_background, editor_a);
 }
 
 fn build_font(family: &str, ligatures: bool) -> Font {
@@ -418,6 +549,136 @@ pub fn ease_out_quad(t: f32) -> f32 {
     1.0 - (1.0 - clamped) * (1.0 - clamped)
 }
 
+/// Apple-style cubic ease-out curve for crisp hover, fade, and active indicator transitions.
+#[must_use]
+pub fn ease_out_cubic(t: f32) -> f32 {
+    let inv = 1.0 - t.clamp(0.0, 1.0);
+    1.0 - inv * inv * inv
+}
+
+/// Apple-style quintic ease-out curve for decelerating drawers, modals, and toast entrances.
+#[must_use]
+pub fn ease_out_quint(t: f32) -> f32 {
+    let inv = 1.0 - t.clamp(0.0, 1.0);
+    let inv2 = inv * inv;
+    1.0 - inv2 * inv2 * inv
+}
+
+/// Smoothly fades an element in from `0.0` to `1.0` using [`ease_out_cubic`].
+///
+/// Returns `el` untouched when reduced motion is active or `duration_ms == 0`.
+pub fn animate_fade_in<E>(el: E, id: impl Into<ElementId>, duration_ms: u64, cx: &App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    let ms = effective_duration_ms(duration_ms, cx);
+    if ms == 0 {
+        return el.into_any_element();
+    }
+    el.with_animation(
+        id.into(),
+        Animation::new(Duration::from_millis(ms)).with_easing(ease_out_cubic),
+        |el, delta| if delta >= 1.0 { el } else { el.opacity(delta) },
+    )
+    .into_any_element()
+}
+
+/// Smoothly fades and settles an element vertically by `offset_y_px` using [`ease_out_quint`].
+///
+/// Returns `el` untouched when reduced motion is active or `duration_ms == 0`.
+pub fn animate_slide_fade_in<E>(
+    el: E,
+    id: impl Into<ElementId>,
+    duration_ms: u64,
+    offset_y_px: f32,
+    cx: &App,
+) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    let ms = effective_duration_ms(duration_ms, cx);
+    if ms == 0 {
+        return el.into_any_element();
+    }
+    el.with_animation(
+        id.into(),
+        Animation::new(Duration::from_millis(ms)).with_easing(ease_out_quint),
+        move |el, delta| {
+            if delta >= 1.0 {
+                el
+            } else {
+                el.opacity(delta).mt(px(offset_y_px * (1.0 - delta)))
+            }
+        },
+    )
+    .into_any_element()
+}
+
+/// Smooth Apple-style drawer/panel entrance (opacity + subtle 14px horizontal slide).
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_drawer_enter<E>(
+    el: E,
+    id: impl Into<ElementId>,
+    from_right: bool,
+    cx: &App,
+) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    let ms = effective_duration_ms(DRAWER_SLIDE_MS, cx);
+    if ms == 0 {
+        return el.into_any_element();
+    }
+    el.with_animation(
+        id.into(),
+        Animation::new(Duration::from_millis(ms)).with_easing(ease_out_quint),
+        move |el, delta| {
+            if delta >= 1.0 {
+                return el;
+            }
+            let offset = px(14.0 * (1.0 - delta));
+            let el = el.opacity(delta);
+            if from_right {
+                el.mr(-offset)
+            } else {
+                el.ml(-offset)
+            }
+        },
+    )
+    .into_any_element()
+}
+
+/// Smooth Apple-style modal entrance (opacity + subtle 8px upward settle).
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_modal_enter<E>(el: E, id: impl Into<ElementId>, cx: &App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    animate_slide_fade_in(el, id, OVERLAY_ENTER_MS, 8.0, cx)
+}
+
+/// Smooth Apple-style toast viewport entrance (opacity + subtle 10px slide from bottom).
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_toast_slide_in<E>(el: E, id: impl Into<ElementId>, cx: &App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    animate_slide_fade_in(el, id, OVERLAY_ENTER_MS, 10.0, cx)
+}
+
+/// Crisp active-indicator entrance for rail and tab selection highlights.
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_active_indicator<E>(el: E, id: impl Into<ElementId>, cx: &App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    animate_fade_in(el, id, HOVER_FEEDBACK_MS, cx)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,5 +730,61 @@ mod tests {
             theme.colors.border,
             gfx_color_to_hsla(hc_palette.chrome.border)
         );
+    }
+
+    #[test]
+    fn dark_and_light_chrome_themes_follow_surface_ladder() {
+        let dark = dark_chrome_theme();
+        assert_eq!(dark.id.as_ref(), DARK_THEME_ID);
+        assert_eq!(dark.appearance, Appearance::Dark);
+        assert_eq!(
+            dark.colors.background,
+            Hsla::from(rgb_hsla(0x17, 0x18, 0x1C))
+        );
+        assert_eq!(
+            dark.colors.surface.background,
+            Hsla::from(rgb_hsla(0x1F, 0x20, 0x25))
+        );
+        assert_eq!(
+            dark.colors.overlay.background,
+            Hsla::from(rgb_hsla(0x25, 0x27, 0x2D))
+        );
+        assert_eq!(
+            dark.colors.border,
+            Hsla::from(rgba_hsla(255, 255, 255, 0.08))
+        );
+        assert_eq!(dark.colors.backdrop, Hsla::from(rgba_hsla(0, 0, 0, 0.42)));
+
+        let light = light_chrome_theme();
+        assert_eq!(light.id.as_ref(), LIGHT_THEME_ID);
+        assert_eq!(light.appearance, Appearance::Light);
+        assert_eq!(
+            light.colors.background,
+            Hsla::from(rgb_hsla(0xF3, 0xF4, 0xF6))
+        );
+        assert_eq!(
+            light.colors.surface.background,
+            Hsla::from(rgb_hsla(0xF8, 0xF9, 0xFB))
+        );
+        assert_eq!(
+            light.colors.overlay.background,
+            Hsla::from(rgb_hsla(0xFF, 0xFF, 0xFF))
+        );
+        assert_eq!(light.colors.border, Hsla::from(rgba_hsla(0, 0, 0, 0.08)));
+        assert_eq!(
+            light.colors.backdrop,
+            Hsla::from(rgba_hsla(15, 23, 42, 0.28))
+        );
+    }
+
+    #[test]
+    fn apple_easing_curves_are_monotonic_and_bounded() {
+        for curve in [ease_out_quad, ease_out_cubic, ease_out_quint] {
+            assert_eq!(curve(-0.5), 0.0);
+            assert_eq!(curve(0.0), 0.0);
+            assert_eq!(curve(1.0), 1.0);
+            assert_eq!(curve(1.5), 1.0);
+            assert!(curve(0.5) > 0.5);
+        }
     }
 }
