@@ -55,7 +55,7 @@ pub fn render_status_bar(
         .border_color(hairline_border_color(cx))
         .text_size(px(11.5))
         .text_color(colors.muted)
-        .child(render_left_status(&ws.controller, &phase, cx))
+        .child(render_left_status(ws, &phase, cx))
         .child(render_right_metrics(
             ws,
             &phase,
@@ -67,10 +67,11 @@ pub fn render_status_bar(
 }
 
 fn render_left_status(
-    controller: &AppController,
+    ws: &DataForgeWorkspace,
     phase: &Option<ConnectionWindowPhase>,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let controller = &ws.controller;
     let colors = cx.colors().clone();
     let mut left = div()
         .id("status-bar-left")
@@ -95,27 +96,91 @@ fn render_left_status(
             colors.danger.color,
         ),
         Some(ConnectionWindowPhase::Disconnected) | None => {
-            render_phase_dot(colors.muted, "Disconnected", colors.muted)
+            render_phase_dot(colors.muted, "Disconnected • Ready", colors.muted)
         }
     };
     left = left.child(phase_node);
 
-    if let Some(table) = &controller.active_table
-        && matches!(phase, Some(ConnectionWindowPhase::Connected))
-    {
-        left = left
-            .child(
-                Separator::new()
-                    .id("status-sep-table")
-                    .orientation(Orientation::Vertical)
-                    .sx(|s| s.h(px(12.0))),
-            )
-            .child(
-                div()
-                    .truncate()
-                    .text_color(colors.muted)
-                    .child(format_table_ref(table)),
+    let sub_view_label = match ws.workspace_pane.sub_view {
+        WorkspaceSubView::SqlEditor => "SQL Editor",
+        WorkspaceSubView::DataGrid => "Data Grid",
+        WorkspaceSubView::Structure => "Structure",
+        WorkspaceSubView::SplitSqlAndGrid => "Split SQL + Grid",
+    };
+    left = left
+        .child(
+            Separator::new()
+                .id("status-sep-view")
+                .orientation(Orientation::Vertical)
+                .sx(|s| s.h(px(12.0))),
+        )
+        .child(
+            div()
+                .text_color(colors.muted)
+                .child(sub_view_label),
+        );
+
+    if matches!(phase, Some(ConnectionWindowPhase::Connected)) {
+        if let Some(ref schema) = ws.sidebar_ui.selected_schema
+            && !schema.is_empty()
+        {
+            left = left
+                .child(
+                    Separator::new()
+                        .id("status-sep-schema")
+                        .orientation(Orientation::Vertical)
+                        .sx(|s| s.h(px(12.0))),
+                )
+                .child(
+                    div()
+                        .truncate()
+                        .text_color(colors.muted)
+                        .child(format!("schema: {schema}")),
+                );
+        }
+        if let Some(table) = &controller.active_table {
+            left = left
+                .child(
+                    Separator::new()
+                        .id("status-sep-table")
+                        .orientation(Orientation::Vertical)
+                        .sx(|s| s.h(px(12.0))),
+                )
+                .child(
+                    div()
+                        .truncate()
+                        .text_color(colors.foreground)
+                        .child(format_table_ref(table)),
+                );
+        }
+        let obj_count = controller.cached_objects.len();
+        if obj_count > 0 {
+            left = left
+                .child(
+                    Separator::new()
+                        .id("status-sep-objs")
+                        .orientation(Orientation::Vertical)
+                        .sx(|s| s.h(px(12.0))),
+                )
+                .child(
+                    div()
+                        .text_color(colors.muted)
+                        .child(format!(
+                            "{obj_count} {}",
+                            if obj_count == 1 { "object" } else { "objects" }
+                        )),
+                );
+        }
+        if controller.toolbar_status.safe_mode {
+            left = left.child(
+                Chip::new()
+                    .variant(ChipVariant::Soft)
+                    .color(Color::Warning)
+                    .size(Size::Sm)
+                    .text_size(px(10.0))
+                    .child(ChipLabel::new().child("Safe Mode")),
             );
+        }
     }
 
     left.into_any_element()
@@ -270,10 +335,37 @@ fn render_right_metrics(
         ws.workspace_pane.sub_view,
         WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid
     ) {
-        right = right.child(render_cursor_and_vim(controller, numeric_font, cx));
+        right = right.child(render_cursor_and_vim(controller, numeric_font.clone(), cx));
     }
 
+    let dialect = super::sql_editor::grammar_label(ws.active_grammar());
+    let tab_count = controller.tabs.tabs().len();
+    let editor_font_px = controller.settings.editor_font.size.round() as u32;
+
     right
+        .child(
+            Separator::new()
+                .id("status-sep-meta")
+                .orientation(Orientation::Vertical)
+                .sx(|s| s.h(px(12.0))),
+        )
+        .child(div().text_color(colors.muted).child(dialect))
+        .child(
+            div()
+                .font(numeric_font.clone())
+                .text_color(colors.muted)
+                .child(format!("{editor_font_px}px")),
+        )
+        .child(div().text_color(colors.muted).child("UTF-8"))
+        .child(
+            div()
+                .font(numeric_font)
+                .text_color(colors.muted)
+                .child(format!(
+                    "{tab_count} {}",
+                    if tab_count == 1 { "tab" } else { "tabs" }
+                )),
+        )
         .child(
             Separator::new()
                 .id("status-sep-panels")
