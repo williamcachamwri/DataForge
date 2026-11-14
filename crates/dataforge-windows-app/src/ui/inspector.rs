@@ -503,10 +503,10 @@ fn render_column_header_block(
                         .child(cell.col_name.clone()),
                 )
                 .child(
-                    div()
-                        .text_xs()
-                        .text_color(colors.muted)
-                        .child(s.row_number_tpl.replace("{num}", &(cell.row_idx + 1).to_string())),
+                    div().text_xs().text_color(colors.muted).child(
+                        s.row_number_tpl
+                            .replace("{num}", &(cell.row_idx + 1).to_string()),
+                    ),
                 ),
         )
         .child(build_column_chips(cell, s))
@@ -1060,8 +1060,8 @@ fn resolve_inspected_cell(ws: &DataForgeWorkspace) -> Option<InspectedCell> {
             ),
         ),
     };
-    let generated_hint = (!col_info.is_writable())
-        .then(|| ws.controller.strings.generated_col_readonly.to_owned());
+    let generated_hint =
+        (!col_info.is_writable()).then(|| ws.controller.strings.generated_col_readonly.to_owned());
     let read_only_hint = type_read_only_hint.or(generated_hint);
     let is_read_only = read_only_hint.is_some();
 
