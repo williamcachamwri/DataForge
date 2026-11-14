@@ -85,11 +85,7 @@ fn render_connecting_banner(
             Color::Warning,
         )
     } else {
-        (
-            s.connecting_to_db.to_owned(),
-            Color::Accent,
-            Color::Accent,
-        )
+        (s.connecting_to_db.to_owned(), Color::Accent, Color::Accent)
     };
     let target = active_target_summary(ws);
 
