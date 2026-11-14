@@ -33,6 +33,7 @@ use herogpui::gpui::{
     Window, div, fill, outline, point, px, relative, size,
 };
 use herogpui::theme::ActiveTheme;
+use tablepro_core::meta::ObjectKind;
 use tablepro_core::sql_syntax::SqlGrammar;
 use tablepro_core::{EditorSessionOptions, ResultEvent, RunOptions, RunSummary};
 use tokio::sync::mpsc;
@@ -107,21 +108,6 @@ const SQL_KEYWORDS: &[&str] = &[
     "ROLLBACK",
     "EXPLAIN",
     "ANALYZE",
-];
-
-const SQL_FUNCTIONS: &[(&str, &str)] = &[
-    ("COUNT", "Aggregate row count"),
-    ("SUM", "Sum numeric values"),
-    ("AVG", "Arithmetic mean"),
-    ("MIN", "Minimum value"),
-    ("MAX", "Maximum value"),
-    ("COALESCE", "First non-null value"),
-    ("NULLIF", "Null if arguments match"),
-    ("CAST", "Convert expression type"),
-    ("LOWER", "Lowercase string"),
-    ("UPPER", "Uppercase string"),
-    ("LENGTH", "String character length"),
-    ("NOW", "Current timestamp"),
 ];
 
 #[derive(Debug, Clone)]
@@ -228,12 +214,16 @@ pub struct SqlEditorDocEntity {
     catalog_fingerprint: u64,
     suppress_autocomplete: bool,
     last_shaped_rows: Vec<ShapedEditorRow>,
+    empty_hint_text: &'static str,
+    autocomplete_insert_hint: &'static str,
+    autocomplete_dismiss_hint: &'static str,
 }
 
 impl SqlEditorDocEntity {
     fn new(weak_workspace: WeakEntity<DataForgeWorkspace>, cx: &mut Context<Self>) -> Self {
         let rope = Rope::new();
         let line_starts = compute_line_starts(&rope);
+        let default_strings = crate::i18n::Strings::for_locale(crate::i18n::Locale::EnUs);
         Self {
             rope,
             line_starts,
@@ -264,6 +254,9 @@ impl SqlEditorDocEntity {
             catalog_fingerprint: 0,
             suppress_autocomplete: false,
             last_shaped_rows: Vec::new(),
+            empty_hint_text: default_strings.sql_editor_placeholder,
+            autocomplete_insert_hint: default_strings.autocomplete_insert_hint,
+            autocomplete_dismiss_hint: default_strings.autocomplete_dismiss_hint,
         }
     }
 
@@ -1472,7 +1465,7 @@ fn build_empty_editor_hint(
     window: &Window,
 ) -> Option<(ShapedLine, Point<Pixels>)> {
     (doc.rope.len_chars() == 0 && doc.marked_range_utf16.is_none()).then(|| {
-        let hint_text = "Write SQL here... (Ctrl+Enter to run, Ctrl+Space for schema completions)";
+        let hint_text = doc.empty_hint_text;
         let hint_color = with_alpha(doc.palette.editor_text, 0.36);
         let run = TextRun {
             len: hint_text.len(),
@@ -2045,15 +2038,20 @@ fn render_toolbar_left_actions(
     vim_cmd_buf: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let run_btn = if is_running {
         Button::new("sql-cancel-btn")
             .variant(Variant::DangerSoft)
             .size(HeroSize::Sm)
             .child(Icon::new(IconName::Ban).size(IconSize::Xs))
-            .label("Stop")
+            .label(s.stop)
             .on_press(cx.listener(|ws, _e, _w, cx| cancel_active_query(ws, cx)))
     } else {
-        let label = if has_selection { "Run Selected" } else { "Run" };
+        let label = if has_selection {
+            s.run_selection
+        } else {
+            s.run
+        };
         Button::new("sql-run-btn")
             .variant(Variant::Primary)
             .size(HeroSize::Sm)
@@ -2064,13 +2062,18 @@ fn render_toolbar_left_actions(
             }))
     };
 
-    let save_popover = render_save_query_popover(ws, cx);
+    let vim_label = if vim_enabled {
+        s.vim_on_label
+    } else {
+        s.vim_off_label
+    };
     let drawer_count = ws.controller.saved_queries.len() + ws.controller.query_history.len();
     let drawer_label = if drawer_count > 0 {
-        format!("Library ({drawer_count})")
+        format!("{} ({drawer_count})", ws.controller.strings.library_label)
     } else {
-        "Library".to_owned()
+        ws.controller.strings.library_label.to_owned()
     };
+    let save_popover = render_save_query_popover(ws, cx);
     let drawer_btn = Button::new("sql-drawer-btn")
         .variant(if ws.sql_editor_ui.show_drawer {
             Variant::Secondary
@@ -2093,7 +2096,7 @@ fn render_toolbar_left_actions(
         })
         .size(HeroSize::Sm)
         .child(Icon::new(IconName::Terminal).size(IconSize::Xs))
-        .label(if vim_enabled { "Vim ON" } else { "Vim" })
+        .label(vim_label)
         .on_press(cx.listener(|ws, _e, _w, cx| {
             ws.controller.toggle_vim_mode();
             let enabled = ws.controller.vim_mode.is_some();
@@ -2139,14 +2142,18 @@ fn render_toolbar_right_status(
     cx: &App,
 ) -> AnyElement {
     let tnum_font = tabular_gutter_font(&editor_gpui_font(&ws.controller.settings));
+    let s = &ws.controller.strings;
+    let line_str = (primary_pos.0 + 1).to_string();
+    let col_str = (primary_pos.1 + 1).to_string();
     let pos_text = if cursor_count > 1 {
-        format!(
-            "Ln {}, Col {} ({cursor_count} cursors)",
-            primary_pos.0 + 1,
-            primary_pos.1 + 1
-        )
+        s.cursor_pos_multi_tpl
+            .replace("{line}", &line_str)
+            .replace("{col}", &col_str)
+            .replace("{count}", &cursor_count.to_string())
     } else {
-        format!("Ln {}, Col {}", primary_pos.0 + 1, primary_pos.1 + 1)
+        s.cursor_pos_tpl
+            .replace("{line}", &line_str)
+            .replace("{col}", &col_str)
     };
     div()
         .flex()
@@ -2173,11 +2180,12 @@ fn render_save_query_popover(
     ws: &mut DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let trigger = Button::new("sql-save-trigger-btn")
         .variant(Variant::Ghost)
         .size(HeroSize::Sm)
         .child(Icon::new(IconName::Save).size(IconSize::Xs))
-        .label("Save");
+        .label(s.save);
 
     let name_input = ws.sql_editor_ui.save_name_input.clone();
     let submit_input = name_input.clone();
@@ -2188,7 +2196,7 @@ fn render_save_query_popover(
         .gap(px(8.0))
         .child(
             Input::new(&name_input)
-                .placeholder("Query name (e.g. Monthly Active Users)")
+                .placeholder(s.query_name_placeholder)
                 .height(px(28.0))
                 .text_size(px(12.0))
                 .variant(FieldVariant::Secondary)
@@ -2205,7 +2213,7 @@ fn render_save_query_popover(
                     Button::new("sql-save-cancel-btn")
                         .variant(Variant::Ghost)
                         .size(HeroSize::Sm)
-                        .label("Cancel")
+                        .label(s.cancel_label)
                         .on_press(cx.listener(|ws, _e, _w, cx| {
                             ws.sql_editor_ui.save_popover_open = false;
                             cx.notify();
@@ -2215,7 +2223,7 @@ fn render_save_query_popover(
                     Button::new("sql-save-confirm-btn")
                         .variant(Variant::Primary)
                         .size(HeroSize::Sm)
-                        .label("Save Query")
+                        .label(s.save_query)
                         .on_press(cx.listener(move |ws, _e, _w, cx| {
                             let val = submit_input.read(cx).value().to_string();
                             commit_save_query(ws, &val, cx);
@@ -2225,7 +2233,7 @@ fn render_save_query_popover(
 
     Popover::new(trigger)
         .id("sql-save-popover")
-        .title("Save SQL Query")
+        .title(s.save_query_title)
         .placement(PopoverPlacement::BottomStart)
         .is_open(ws.sql_editor_ui.save_popover_open)
         .on_open_change(cx.listener(|ws, open: &bool, _w, cx| {
@@ -2243,10 +2251,12 @@ fn commit_save_query(
 ) {
     let trimmed = raw_name.trim();
     if trimmed.is_empty() {
+        let title = ws.controller.strings.enter_query_name_toast;
+        let desc = ws.controller.strings.enter_query_name_desc;
         ws.notify_toast(
             ToastSeverity::Warning,
-            "Enter a query name",
-            Some("Provide a non-empty name before saving.".into()),
+            title,
+            Some(desc.into()),
             cx,
         );
         return;
@@ -2257,9 +2267,14 @@ fn commit_save_query(
     ws.sql_editor_ui.save_popover_open = false;
     ws.sql_editor_ui.show_drawer = true;
     ws.sql_editor_ui.drawer_tab = EditorDrawerTab::Saved;
+    let saved_msg = ws
+        .controller
+        .strings
+        .saved_query_named_tpl
+        .replace("{name}", trimmed);
     ws.notify_toast(
         ToastSeverity::Success,
-        format!("Saved \"{trimmed}\""),
+        saved_msg,
         None,
         cx,
     );
@@ -2278,11 +2293,12 @@ fn render_editor_drawer(
         EditorDrawerTab::History => "history",
     };
 
+    let s = &ws.controller.strings;
     let tabs = Tabs::new(
         "sql-drawer-tabs",
         vec![
-            TabItem::new("saved", "Saved"),
-            TabItem::new("history", "History"),
+            TabItem::new("saved", s.saved_tab),
+            TabItem::new("history", s.history_tab),
         ],
         "saved",
     )
@@ -2324,7 +2340,7 @@ fn render_editor_drawer(
                 .child(tabs)
                 .child(
                     Input::new(&filter_input)
-                        .placeholder("Filter saved & history...")
+                        .placeholder(s.filter_saved_history_placeholder)
                         .height(px(28.0))
                         .text_size(px(12.0))
                         .variant(FieldVariant::Secondary)
@@ -2353,17 +2369,18 @@ fn render_saved_queries_list(
         .collect();
 
     if filtered.is_empty() {
+        let s = &ws.controller.strings;
         return render_drawer_empty_state(
             IconName::Bookmark,
             if needle.is_empty() {
-                "No saved queries"
+                s.no_saved_queries_title
             } else {
-                "No matching saved queries"
+                s.no_matching_saved_queries
             },
             if needle.is_empty() {
-                "Click Save above the SQL editor to bookmark a query."
+                s.no_saved_queries_desc
             } else {
-                "Try clearing or broadening your search."
+                s.try_clearing_search_desc
             },
             cx,
         );
@@ -2416,18 +2433,19 @@ fn render_query_history_list(
         .map(|h| (h.sql.clone(), h.database.clone(), h.elapsed_ms, h.succeeded))
         .collect();
 
+    let s = &ws.controller.strings;
     if filtered.is_empty() {
         return render_drawer_empty_state(
             IconName::History,
             if needle.is_empty() {
-                "No query history yet"
+                s.no_query_history_title
             } else {
-                "No matching history"
+                s.no_matching_history
             },
             if needle.is_empty() {
-                "Queries you run with Ctrl+Enter appear here automatically."
+                s.no_query_history_desc
             } else {
-                "Try clearing or broadening your search."
+                s.try_clearing_search_desc
             },
             cx,
         );
@@ -2438,7 +2456,7 @@ fn render_query_history_list(
         .enumerate()
         .map(|(i, (sql, db, ms, ok))| {
             let label = single_line_preview(sql, 42);
-            let status = if *ok { "ok" } else { "error" };
+            let status = if *ok { s.status_ok } else { s.status_error };
             let desc = if db.is_empty() {
                 format!("{ms} ms · {status}")
             } else {
@@ -2526,6 +2544,8 @@ fn render_autocomplete_overlay(
         .selected_index
         .min(items.len().saturating_sub(1));
     let (anchor_x, anchor_y) = doc.caret_overlay_position();
+    let insert_hint = doc.autocomplete_insert_hint;
+    let dismiss_hint = doc.autocomplete_dismiss_hint;
     let _ = doc;
 
     let max_h = (items.len() as f32 * AUTOCOMPLETE_ROW_HEIGHT_PX + 12.0).min(248.0);
@@ -2571,8 +2591,8 @@ fn render_autocomplete_overlay(
                 .justify_between()
                 .text_xs()
                 .text_color(with_alpha(palette.editor_text, 0.55))
-                .child("Click / Tab / Enter to insert")
-                .child("Esc to dismiss"),
+                .child(insert_hint)
+                .child(dismiss_hint),
         )
         .into_any_element()
 }
@@ -2689,6 +2709,9 @@ fn sync_doc_with_workspace(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
     let line_height_px = (font_size_px * ws.controller.settings.editor_font.line_height.max(1.1))
         .max(font_size_px + 2.0);
     let vim_mode = ws.controller.vim_mode;
+    let empty_hint_text = ws.controller.strings.sql_editor_placeholder;
+    let autocomplete_insert_hint = ws.controller.strings.autocomplete_insert_hint;
+    let autocomplete_dismiss_hint = ws.controller.strings.autocomplete_dismiss_hint;
     let fingerprint = compute_catalog_fingerprint(ws, grammar);
     let catalog = (ws.sql_editor_ui.doc.read(cx).catalog_fingerprint != fingerprint)
         .then(|| build_schema_catalog(ws));
@@ -2700,6 +2723,9 @@ fn sync_doc_with_workspace(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
         doc.font_size_px = font_size_px;
         doc.line_height_px = line_height_px;
         doc.char_advance_px = (font_size_px * 0.6).max(6.0);
+        doc.empty_hint_text = empty_hint_text;
+        doc.autocomplete_insert_hint = autocomplete_insert_hint;
+        doc.autocomplete_dismiss_hint = autocomplete_dismiss_hint;
         if doc.grammar != grammar {
             doc.grammar = grammar;
             doc.highlighter = IncrementalLineHighlighter::new(grammar);
@@ -2805,10 +2831,12 @@ pub(crate) fn cancel_active_query(
 ) {
     if let Some(token) = ws.results_ui.active_cancel.take() {
         token.cancel();
+        let cancelled_msg = ws.controller.strings.query_cancelled_msg;
+        let cancelled_toast = ws.controller.strings.query_cancelled_toast;
         if let Some(tab_id) = ws.controller.tabs.active_tab() {
-            ws.ensure_tab_result(tab_id).fail("Query cancelled by user");
+            ws.ensure_tab_result(tab_id).fail(cancelled_msg);
         }
-        ws.notify_toast(ToastSeverity::Info, "Query cancelled", None, cx);
+        ws.notify_toast(ToastSeverity::Info, cancelled_toast, None, cx);
         cx.notify();
     }
 }
@@ -2834,24 +2862,27 @@ pub(crate) fn trigger_run_query(
         }
     };
     if sql.trim().is_empty() {
+        let title = ws.controller.strings.nothing_to_execute_toast;
+        let desc = ws.controller.strings.enter_sql_before_running;
         ws.notify_toast(
             ToastSeverity::Info,
-            "Nothing to execute",
-            Some("Enter a SQL query before running.".into()),
+            title,
+            Some(desc.into()),
             cx,
         );
         return;
     }
     let Some(tab_id) = ws.controller.tabs.active_tab() else {
-        ws.notify_toast(ToastSeverity::Warning, "No active tab", None, cx);
+        let msg = ws.controller.strings.no_active_tab_toast;
+        ws.notify_toast(ToastSeverity::Warning, msg, None, cx);
         return;
     };
     if let Some(prev) = ws.results_ui.active_cancel.take() {
         prev.cancel();
     }
     let Some(services) = ws.controller.services.clone() else {
-        ws.ensure_tab_result(tab_id)
-            .fail("No database service active — connect to a workspace first");
+        let msg = ws.controller.strings.no_db_service_active;
+        ws.ensure_tab_result(tab_id).fail(msg);
         ws.controller.record_query_history(&sql, 0, None, false);
         cx.notify();
         return;
@@ -3239,66 +3270,87 @@ fn compute_catalog_fingerprint(ws: &DataForgeWorkspace, grammar: SqlGrammar) -> 
     let s = ws.controller.cached_schemas.len() as u64;
     let o = ws.controller.cached_objects.len() as u64;
     let c = ws.controller.structure_columns.len() as u64;
-    (s << 40) ^ (o << 20) ^ (c << 4) ^ (grammar as u64)
+    ((ws.controller.locale as u64) << 56) ^ (s << 40) ^ (o << 20) ^ (c << 4) ^ (grammar as u64)
 }
 
-const SQL_SNIPPETS: &[(&str, &str, &str)] = &[
-    (
-        "sel · SELECT * FROM <table>",
-        "Query snippet — auto-suggests table names after FROM",
-        "SELECT *\nFROM ",
-    ),
-    (
-        "sell · SELECT * FROM <table> LIMIT 100",
-        "Paginated table preview snippet",
-        "SELECT *\nFROM \nLIMIT 100;",
-    ),
-    (
-        "selw · SELECT * FROM <table> WHERE ...",
-        "Filtered query snippet",
-        "SELECT *\nFROM \nWHERE ",
-    ),
-    (
-        "cnt · SELECT COUNT(*) FROM <table>",
-        "Row count aggregation snippet",
-        "SELECT COUNT(*) AS total\nFROM ",
-    ),
-    (
-        "ins · INSERT INTO <table> (...) VALUES (...)",
-        "Insert row snippet",
-        "INSERT INTO  ()\nVALUES ();",
-    ),
-    (
-        "upd · UPDATE <table> SET ... WHERE ...",
-        "Update rows snippet",
-        "UPDATE \nSET \nWHERE ;",
-    ),
-    (
-        "del · DELETE FROM <table> WHERE ...",
-        "Delete rows snippet",
-        "DELETE FROM \nWHERE ;",
-    ),
-    (
-        "join · INNER JOIN <table> ON ...",
-        "Inner join snippet",
-        "INNER JOIN  ON ",
-    ),
-    (
-        "ljoin · LEFT JOIN <table> ON ...",
-        "Left outer join snippet",
-        "LEFT JOIN  ON ",
-    ),
-    (
-        "cte · WITH cte AS (...)",
-        "Common Table Expression snippet",
-        "WITH cte AS (\n    SELECT *\n    FROM \n)\nSELECT * FROM cte;",
-    ),
-    (
-        "ct · CREATE TABLE <table> (...)",
-        "Create table DDL snippet",
-        "CREATE TABLE  (\n    id INTEGER PRIMARY KEY\n);",
-    ),
-];
+fn sql_functions_catalog(s: &crate::i18n::Strings) -> [(&'static str, &'static str); 12] {
+    [
+        ("COUNT", s.sql_fn_count),
+        ("SUM", s.sql_fn_sum),
+        ("AVG", s.sql_fn_avg),
+        ("MIN", s.sql_fn_min),
+        ("MAX", s.sql_fn_max),
+        ("COALESCE", s.sql_fn_coalesce),
+        ("NULLIF", s.sql_fn_nullif),
+        ("CAST", s.sql_fn_cast),
+        ("LOWER", s.sql_fn_lower),
+        ("UPPER", s.sql_fn_upper),
+        ("LENGTH", s.sql_fn_length),
+        ("NOW", s.sql_fn_now),
+    ]
+}
+
+fn sql_snippets_catalog(
+    s: &crate::i18n::Strings,
+) -> [(&'static str, &'static str, &'static str); 11] {
+    [
+        (
+            "sel · SELECT * FROM <table>",
+            s.sql_snip_sel,
+            "SELECT *\nFROM ",
+        ),
+        (
+            "sell · SELECT * FROM <table> LIMIT 100",
+            s.sql_snip_sell,
+            "SELECT *\nFROM \nLIMIT 100;",
+        ),
+        (
+            "selw · SELECT * FROM <table> WHERE ...",
+            s.sql_snip_selw,
+            "SELECT *\nFROM \nWHERE ",
+        ),
+        (
+            "cnt · SELECT COUNT(*) FROM <table>",
+            s.sql_snip_cnt,
+            "SELECT COUNT(*) AS total\nFROM ",
+        ),
+        (
+            "ins · INSERT INTO <table> (...) VALUES (...)",
+            s.sql_snip_ins,
+            "INSERT INTO  ()\nVALUES ();",
+        ),
+        (
+            "upd · UPDATE <table> SET ... WHERE ...",
+            s.sql_snip_upd,
+            "UPDATE \nSET \nWHERE ;",
+        ),
+        (
+            "del · DELETE FROM <table> WHERE ...",
+            s.sql_snip_del,
+            "DELETE FROM \nWHERE ;",
+        ),
+        (
+            "join · INNER JOIN <table> ON ...",
+            s.sql_snip_join,
+            "INNER JOIN  ON ",
+        ),
+        (
+            "ljoin · LEFT JOIN <table> ON ...",
+            s.sql_snip_ljoin,
+            "LEFT JOIN  ON ",
+        ),
+        (
+            "cte · WITH cte AS (...)",
+            s.sql_snip_cte,
+            "WITH cte AS (\n    SELECT *\n    FROM \n)\nSELECT * FROM cte;",
+        ),
+        (
+            "ct · CREATE TABLE <table> (...)",
+            s.sql_snip_ct,
+            "CREATE TABLE  (\n    id INTEGER PRIMARY KEY\n);",
+        ),
+    ]
+}
 
 fn detect_sql_autocomplete_context(
     rope: &Rope,
@@ -3328,8 +3380,9 @@ fn detect_sql_autocomplete_context(
 }
 
 fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
+    let strings = &ws.controller.strings;
     let mut items = Vec::new();
-    for &(label, detail, insert_text) in SQL_SNIPPETS {
+    for (label, detail, insert_text) in sql_snippets_catalog(strings) {
         items.push(SchemaCompletionItem {
             label: label.to_owned(),
             kind: SchemaCompletionKind::Snippet,
@@ -3341,14 +3394,21 @@ fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
         items.push(SchemaCompletionItem {
             label: schema.name.clone(),
             kind: SchemaCompletionKind::Schema,
-            detail: Some("Schema".to_owned()),
+            detail: Some(strings.completion_schema_detail.to_owned()),
             insert_text: schema.name.clone(),
         });
     }
     for obj in &ws.controller.cached_objects {
+        let kind_label = match obj.kind {
+            ObjectKind::Table | ObjectKind::PartitionedTable | ObjectKind::ForeignTable => {
+                strings.obj_kind_table
+            }
+            ObjectKind::View | ObjectKind::MaterializedView => strings.obj_kind_view,
+            _ => strings.obj_kind_object,
+        };
         let detail = match &obj.schema {
-            Some(s) if !s.is_empty() => format!("{:?} · {s}", obj.kind),
-            _ => format!("{:?}", obj.kind),
+            Some(s) if !s.is_empty() => format!("{kind_label} · {s}"),
+            _ => kind_label.to_owned(),
         };
         items.push(SchemaCompletionItem {
             label: obj.name.clone(),
@@ -3359,7 +3419,7 @@ fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
         items.push(SchemaCompletionItem {
             label: format!("SELECT * FROM {} LIMIT 100", obj.name),
             kind: SchemaCompletionKind::Snippet,
-            detail: Some(format!("Quick query · {}", obj.name)),
+            detail: Some(strings.quick_query_tpl.replace("{table}", &obj.name)),
             insert_text: format!("SELECT * FROM {} LIMIT 100;", obj.name),
         });
     }
@@ -3371,7 +3431,7 @@ fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
             insert_text: col.name.clone(),
         });
     }
-    for &(name, detail) in SQL_FUNCTIONS {
+    for (name, detail) in sql_functions_catalog(strings) {
         items.push(SchemaCompletionItem {
             label: name.to_owned(),
             kind: SchemaCompletionKind::Function,
@@ -3383,7 +3443,7 @@ fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
         items.push(SchemaCompletionItem {
             label: kw.to_owned(),
             kind: SchemaCompletionKind::Keyword,
-            detail: Some("SQL Keyword".to_owned()),
+            detail: Some(strings.sql_keyword_detail.to_owned()),
             insert_text: kw.to_owned(),
         });
     }
