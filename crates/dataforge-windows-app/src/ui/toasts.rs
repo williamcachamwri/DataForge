@@ -27,11 +27,12 @@ pub fn render_toast_viewport(
 ) -> AnyElement {
     let weak = cx.entity().downgrade();
     let store = toast_store(cx);
+    let store_for_sub = store.clone();
     let _store_sub = window.use_keyed_state(
         ElementId::Name("dataforge-toast-store-subscription".into()),
         cx,
         move |_, cx| {
-            ToastStore::subscribe(&store, cx, move |app| {
+            ToastStore::subscribe(&store_for_sub, cx, move |app| {
                 if let Some(view) = weak.upgrade() {
                     view.update(app, |_, cx| cx.notify());
                 }
