@@ -86,7 +86,7 @@ pub fn render_titlebar(
                 .orientation(Orientation::Vertical)
                 .sx(|s| s.h(px(16.0)).flex_shrink_0()),
         )
-        .child(render_quick_search_trigger(skip_anim, cx))
+        .child(render_quick_search_trigger(&ws.controller.strings, skip_anim, cx))
         .child(
             div()
                 .id("titlebar-drag-filler")
@@ -230,21 +230,22 @@ fn active_engine_kind(controller: &AppController) -> Option<EngineKind> {
 
 fn render_status_pill(controller: &AppController, cx: &Context<DataForgeWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &controller.strings;
     match controller.screen_mode {
         ScreenMode::ConnectionsLibrary => {
-            return render_screen_pill(IconName::Server, "Connections", cx);
+            return render_screen_pill(IconName::Server, s.connections_library, cx);
         }
-        ScreenMode::Settings => return render_screen_pill(IconName::Settings, "Settings", cx),
+        ScreenMode::Settings => return render_screen_pill(IconName::Settings, s.settings, cx),
         ScreenMode::Workspace => {}
     }
 
     match controller.connections.phase(controller.active_workspace) {
         Some(ConnectionWindowPhase::Connected) => render_connected_pill(controller, cx),
         Some(ConnectionWindowPhase::Connecting { .. }) => {
-            render_spinner_chip("titlebar-conn-spinner", "Connecting...")
+            render_spinner_chip("titlebar-conn-spinner", s.connecting)
         }
         Some(ConnectionWindowPhase::Reconnecting { .. }) => {
-            render_spinner_chip("titlebar-reconn-spinner", "Reconnecting...")
+            render_spinner_chip("titlebar-reconn-spinner", s.reconnecting)
         }
         Some(ConnectionWindowPhase::Unavailable { .. }) => Chip::new()
             .variant(ChipVariant::Soft)
@@ -255,7 +256,7 @@ fn render_status_pill(controller: &AppController, cx: &Context<DataForgeWorkspac
                     .size(px(12.0))
                     .color(colors.danger.color),
             )
-            .child(ChipLabel::new().child("Unavailable"))
+            .child(ChipLabel::new().child(s.unavailable))
             .into_any_element(),
         Some(ConnectionWindowPhase::Disconnected) | None => Chip::new()
             .variant(ChipVariant::Secondary)
@@ -269,7 +270,7 @@ fn render_status_pill(controller: &AppController, cx: &Context<DataForgeWorkspac
                     .flex_shrink_0()
                     .bg(colors.muted),
             )
-            .child(ChipLabel::new().child("Disconnected"))
+            .child(ChipLabel::new().child(s.disconnected))
             .into_any_element(),
     }
 }
@@ -362,18 +363,25 @@ fn format_connected_label(controller: &AppController) -> String {
         (true, false) => host.to_owned(),
         (false, true) => db.to_owned(),
         (false, false) => {
-            if !status.engine_version.is_empty() && status.engine_version != "Not connected" {
+            let is_not_connected = crate::i18n::Locale::ALL
+                .iter()
+                .any(|loc| status.engine_version == crate::i18n::Strings::for_locale(*loc).not_connected);
+            if !status.engine_version.is_empty() && !is_not_connected {
                 status.engine_version.clone()
             } else {
-                "Connected".to_owned()
+                controller.strings.connected.to_owned()
             }
         }
     }
 }
 
-fn render_quick_search_trigger(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_quick_search_trigger(
+    strings: &crate::i18n::Strings,
+    skip_anim: bool,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
     let colors = cx.colors().clone();
-    Tooltip::new("Command Palette (Ctrl+K)")
+    Tooltip::new(strings.cmd_palette_tooltip)
         .id("titlebar-cmd-tip")
         .placement(TooltipPlacement::Bottom)
         .delay(350)
@@ -386,7 +394,7 @@ fn render_quick_search_trigger(skip_anim: bool, cx: &Context<DataForgeWorkspace>
                 .height(px(24.0))
                 .padding_x(px(8.0))
                 .radius(px(CONTROL_RADIUS_PX))
-                .aria_label("Open Command Palette")
+                .aria_label(strings.open_cmd_palette_aria)
                 .on_press(cx.listener(|ws, _, window, cx| {
                     ws.command_palette_ui.toggle(window, cx);
                     cx.notify();
@@ -405,7 +413,7 @@ fn render_quick_search_trigger(skip_anim: bool, cx: &Context<DataForgeWorkspace>
                             div()
                                 .text_size(px(11.5))
                                 .text_color(colors.muted)
-                                .child("Command..."),
+                                .child(strings.command_placeholder),
                         )
                         .child(
                             Kbd::new()
