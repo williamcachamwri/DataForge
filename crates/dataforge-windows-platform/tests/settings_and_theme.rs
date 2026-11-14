@@ -24,6 +24,9 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
 
     let custom = AppSettings {
         theme: ThemePreference::Dark,
+        window_backdrop: dataforge_windows_platform::WindowBackdropPreference::GaussianBlur,
+        content_theme_id: Some("builtin.tokyo_night".to_owned()),
+        syntax_palette_id: Some("builtin.dracula".to_owned()),
         editor_font: EditorFont {
             family: "JetBrains Mono".to_owned(),
             size: 14.5,
