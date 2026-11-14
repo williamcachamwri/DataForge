@@ -24,8 +24,8 @@ use tablepro_core::meta::TableRef;
 use super::DataForgeWorkspace;
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{
-    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, hairline_border_color, is_reduced_motion,
-    muted_surface_bg, panel_surface_bg,
+    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, animate_active_indicator,
+    hairline_border_color, is_reduced_motion, muted_surface_bg, panel_surface_bg,
 };
 
 /// Persistent UI state for the horizontal workspace tab strip.
@@ -263,9 +263,22 @@ fn build_tab_pill_shell(
         .when(!is_active, |el| {
             el.hover(move |s| s.bg(hover_bg).text_color(colors.foreground))
         })
+        .active(|s| s.opacity(0.85))
         .on_click(cx.listener(move |ws, _, _, cx| {
             select_workspace_tab(ws, tab_id, &click_kind, cx);
         }))
+        .when(is_active, |el| {
+            el.child(animate_active_indicator(
+                div()
+                    .w(px(2.0))
+                    .h(px(14.0))
+                    .rounded(px(99.0))
+                    .flex_shrink_0()
+                    .bg(colors.accent.color),
+                format!("workspace-tab-active-{}", tab_id.0),
+                cx,
+            ))
+        })
         .child(Icon::new(kind_icon).size(px(13.0)).color(if is_active {
             colors.accent.color
         } else {
