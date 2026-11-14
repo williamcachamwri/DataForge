@@ -51,6 +51,7 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
             port: 49_123,
         },
         restore_session: false,
+        locale: Some("vi-VN".to_owned()),
     };
 
     custom.save_atomic(&path)?;
