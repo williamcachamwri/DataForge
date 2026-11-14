@@ -62,7 +62,10 @@ pub fn render_rail(
         ))
         .child(render_rail_toggle(
             "rail-nav-connections",
-            format!("{} (Ctrl+Shift+C)", ws.controller.strings.connections_library),
+            format!(
+                "{} (Ctrl+Shift+C)",
+                ws.controller.strings.connections_library
+            ),
             IconName::Server,
             ws.controller.screen_mode == ScreenMode::ConnectionsLibrary,
             skip_anim,
