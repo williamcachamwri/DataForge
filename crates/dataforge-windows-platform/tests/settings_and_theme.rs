@@ -51,6 +51,7 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
             port: 49_123,
         },
         restore_session: false,
+        auto_check_updates: false,
         locale: Some("vi-VN".to_owned()),
     };
 
@@ -94,6 +95,7 @@ fn settings_load_backcompat_defaults_missing_value_font() -> TestResult {
     assert_eq!(loaded.editor_font.family, "Consolas");
     assert_eq!(loaded.value_font, FontSpec::default());
     assert!(!loaded.restore_session);
+    assert!(loaded.auto_check_updates);
     Ok(())
 }
 
