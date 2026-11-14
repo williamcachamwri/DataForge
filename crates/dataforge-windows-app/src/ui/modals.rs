@@ -24,6 +24,7 @@ use super::theme::{
     COMPACT_GAP_PX, CONTROL_RADIUS_PX, editor_gpui_font, hairline_border_color, muted_surface_bg,
 };
 use crate::dialogs::DialogOutcome;
+use crate::i18n::Strings;
 
 /// Blocking modal interaction queued for native HeroGPUI resolution.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,6 +228,7 @@ fn render_queued_prompt_modal(
     prompt: &BlockingPrompt,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     match prompt {
         BlockingPrompt::SshHostKey {
             host,
@@ -236,18 +238,22 @@ fn render_queued_prompt_modal(
         } => render_ssh_host_key_modal(ws, host, *port, algorithm, fingerprint, cx),
         BlockingPrompt::SshPassphrase { key_label } => render_secret_prompt_modal(
             ws,
-            "SSH Key Passphrase",
-            &format!("Enter passphrase to unlock SSH key '{key_label}'."),
+            s.ssh_passphrase_title,
+            &s.ssh_passphrase_prompt_tpl.replace("{key}", key_label),
             true,
-            "Passphrase",
+            s.passphrase_label,
             cx,
         ),
         BlockingPrompt::InteractiveAuth { prompt, masked } => render_secret_prompt_modal(
             ws,
-            "Authentication Required",
+            s.interactive_auth_title,
             prompt,
             *masked,
-            if *masked { "Secret / PIN" } else { "Response" },
+            if *masked {
+                s.secret_pin_label
+            } else {
+                s.response_label
+            },
             cx,
         ),
         BlockingPrompt::SafeModeConfirmation { summary } => {
@@ -266,14 +272,19 @@ fn render_ssh_host_key_body(
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let editor_font = editor_gpui_font(&ws.controller.settings);
+    let s = &ws.controller.strings;
+    let endpoint = format!("{host}:{port}");
 
     div()
         .flex()
         .flex_col()
         .gap(px(10.0))
-        .child(div().text_xs().text_color(colors.foreground).child(format!(
-            "The authenticity of host '{host}:{port}' cannot be verified."
-        )))
+        .child(
+            div().text_xs().text_color(colors.foreground).child(
+                s.ssh_host_key_unverified_tpl
+                    .replace("{endpoint}", &endpoint),
+            ),
+        )
         .child(
             div()
                 .flex()
@@ -291,7 +302,7 @@ fn render_ssh_host_key_body(
                         .variant(ChipVariant::Soft)
                         .color(HeroColor::Warning)
                         .size(HeroSize::Sm)
-                        .child(ChipLabel::new().child("Unknown Host Key")),
+                        .child(ChipLabel::new().child(s.unknown_host_key_chip)),
                 ),
         )
         .child(
@@ -317,13 +328,15 @@ fn render_ssh_host_key_modal(
     fingerprint: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
+
     Modal::new()
         .id("modal-ssh-host-key")
         .is_open(true)
         .size(ModalSize::Md)
         .backdrop(Backdrop::Blur)
         .is_dismissible(false)
-        .title("Verify SSH Host Key")
+        .title(s.ssh_host_key_title)
         .icon(IconName::ShieldCheck)
         .icon_color(HeroColor::Warning)
         .on_open_change(cx.listener(|ws, &open: &bool, _w, cx| {
@@ -350,7 +363,7 @@ fn render_ssh_host_key_modal(
                         .resolve_front_prompt(DialogOutcome::Rejected, cx);
                     cx.notify();
                 }))
-                .child("Reject"),
+                .child(s.reject_label),
         )
         .footer_child(
             Button::new("ssh-hostkey-once")
@@ -361,7 +374,7 @@ fn render_ssh_host_key_modal(
                         .resolve_front_prompt(DialogOutcome::Accepted(Some("once".to_owned())), cx);
                     cx.notify();
                 }))
-                .child("Trust Once"),
+                .child(s.trust_once_label),
         )
         .footer_child(
             Button::new("ssh-hostkey-save")
@@ -372,7 +385,7 @@ fn render_ssh_host_key_modal(
                         .resolve_front_prompt(DialogOutcome::Accepted(Some("save".to_owned())), cx);
                     cx.notify();
                 }))
-                .child("Save Host Key"),
+                .child(s.save_host_key_label),
         )
         .into_any_element()
 }
@@ -386,6 +399,7 @@ fn render_secret_prompt_modal(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let input = Input::new(&ws.modals_ui.prompt_input)
         .input_type(if masked {
             InputType::Password
@@ -438,7 +452,7 @@ fn render_secret_prompt_modal(
                         .resolve_front_prompt(DialogOutcome::Cancelled, cx);
                     cx.notify();
                 }))
-                .child("Cancel"),
+                .child(s.cancel_label),
         )
         .footer_child(
             Button::new("secret-prompt-submit")
@@ -450,7 +464,7 @@ fn render_secret_prompt_modal(
                         .resolve_front_prompt(DialogOutcome::Accepted(Some(val)), cx);
                     cx.notify();
                 }))
-                .child("Continue"),
+                .child(s.continue_label),
         )
         .into_any_element()
 }
@@ -462,6 +476,7 @@ fn render_generic_safe_mode_modal(
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let editor_font = editor_gpui_font(&ws.controller.settings);
+    let s = &ws.controller.strings;
 
     Modal::new()
         .id("modal-safe-mode-prompt")
@@ -469,7 +484,7 @@ fn render_generic_safe_mode_modal(
         .size(ModalSize::Md)
         .backdrop(Backdrop::Blur)
         .is_dismissible(false)
-        .title("Safe Mode Confirmation")
+        .title(s.safe_mode_title)
         .icon(IconName::TriangleAlert)
         .icon_color(HeroColor::Warning)
         .on_open_change(cx.listener(|ws, &open: &bool, _w, cx| {
@@ -488,7 +503,7 @@ fn render_generic_safe_mode_modal(
                     div()
                         .text_xs()
                         .text_color(colors.foreground)
-                        .child("Safe Mode is active. Review the write impact before executing:"),
+                        .child(s.safe_mode_review_desc),
                 )
                 .child(
                     div()
@@ -512,7 +527,7 @@ fn render_generic_safe_mode_modal(
                         .resolve_front_prompt(DialogOutcome::Cancelled, cx);
                     cx.notify();
                 }))
-                .child("Cancel"),
+                .child(s.cancel_label),
         )
         .footer_child(
             Button::new("safemode-prompt-confirm")
@@ -523,7 +538,7 @@ fn render_generic_safe_mode_modal(
                         .resolve_front_prompt(DialogOutcome::Accepted(None), cx);
                     cx.notify();
                 }))
-                .child("Execute Write"),
+                .child(s.execute_write_label),
         )
         .into_any_element()
 }
@@ -535,8 +550,9 @@ fn render_close_transaction_guard(
 ) -> AnyElement {
     let summary = build_pending_impact_summary(ws);
     let has_edits = ws.controller.grid_model.edits.has_pending_edits();
+    let s = &ws.controller.strings;
 
-    AlertDialog::new("Unsaved Changes & Active Transactions")
+    AlertDialog::new(s.close_guard_title)
         .id("alert-close-guard")
         .is_open(true)
         .size(AlertDialogSize::Md)
@@ -561,7 +577,7 @@ fn render_close_transaction_guard(
                     ws.pending_quit_after_confirm = false;
                     cx.notify();
                 }))
-                .child("Cancel"),
+                .child(s.cancel_label),
         )
         .footer_child(
             Button::new("close-guard-discard")
@@ -575,7 +591,7 @@ fn render_close_transaction_guard(
                     window.remove_window();
                     cx.notify();
                 }))
-                .child("Discard & Close"),
+                .child(s.discard_and_close_label),
         )
         .footer_child(
             Button::new("close-guard-commit")
@@ -589,7 +605,7 @@ fn render_close_transaction_guard(
                         ws.controller.safe_mode_enabled = prev_safe;
                         if let Err(err) = res {
                             push_error_toast(
-                                "Commit failed before closing",
+                                ws.controller.strings.commit_failed_closing,
                                 Some(SharedString::from(err.to_string())),
                                 cx,
                             );
@@ -603,9 +619,9 @@ fn render_close_transaction_guard(
                     cx.notify();
                 }))
                 .child(if has_edits {
-                    "Commit & Close"
+                    s.commit_and_close_label
                 } else {
-                    "Close Anyway"
+                    s.close_anyway_label
                 }),
         )
         .into_any_element()
@@ -618,6 +634,7 @@ fn render_safe_mode_commit_modal(
     let colors = cx.colors().clone();
     let summary = build_pending_impact_summary(ws);
     let safe_mode = ws.controller.safe_mode_enabled;
+    let s = &ws.controller.strings;
 
     Modal::new()
         .id("modal-safe-commit")
@@ -626,9 +643,9 @@ fn render_safe_mode_commit_modal(
         .backdrop(Backdrop::Blur)
         .is_dismissible(true)
         .title(if safe_mode {
-            "Safe Mode: Confirm Batch Commit"
+            s.safe_mode_batch_commit_title
         } else {
-            "Confirm Pending Grid Edits"
+            s.confirm_pending_edits_title
         })
         .icon(IconName::TriangleAlert)
         .icon_color(if safe_mode {
@@ -663,7 +680,7 @@ fn render_safe_mode_commit_modal(
                         .border_color(hairline_border_color(cx))
                         .text_xs()
                         .text_color(colors.muted)
-                        .child("Pending inserts, cell updates, and row deletions will be written inside a transaction."),
+                        .child(s.batch_commit_tx_note),
                 ),
         )
         .footer_child(
@@ -674,7 +691,7 @@ fn render_safe_mode_commit_modal(
                     ws.workspace_pane.confirm_commit_open = false;
                     cx.notify();
                 }))
-                .child("Cancel"),
+                .child(s.cancel_label),
         )
         .footer_child(
             Button::new("commit-modal-confirm")
@@ -685,18 +702,24 @@ fn render_safe_mode_commit_modal(
                     ws.controller.safe_mode_enabled = false;
                     let res = ws.controller.commit_grid_edits_blocking();
                     ws.controller.safe_mode_enabled = prev_safe;
+                    let s = &ws.controller.strings;
                     match res {
                         Ok(affected) => {
                             ws.workspace_pane.confirm_commit_open = false;
+                            let desc = if affected == 1 {
+                                s.row_affected_singular.to_owned()
+                            } else {
+                                s.rows_affected_tpl.replace("{count}", &affected.to_string())
+                            };
                             push_success_toast(
-                                "Edits committed",
-                                Some(SharedString::from(format!("{affected} rows affected"))),
+                                s.edits_committed_toast,
+                                Some(SharedString::from(desc)),
                                 cx,
                             );
                         }
                         Err(err) => {
                             push_error_toast(
-                                "Commit failed",
+                                s.commit_failed_toast,
                                 Some(SharedString::from(err.to_string())),
                                 cx,
                             );
@@ -704,7 +727,7 @@ fn render_safe_mode_commit_modal(
                     }
                     cx.notify();
                 }))
-                .child("Commit Changes"),
+                .child(s.commit_changes_label),
         )
         .into_any_element()
 }
@@ -716,15 +739,16 @@ fn render_export_form_body(
     let format = ws.modals_ui.export_format;
     let source = ws.modals_ui.export_source;
     let dataset_summary = resolve_export_dataset_label(ws, source);
+    let s = &ws.controller.strings;
 
     let format_items = vec![
-        PickerItem::new("csv", "CSV (.csv)"),
-        PickerItem::new("json-array", "JSON Array (.json)"),
-        PickerItem::new("json-lines", "JSON Lines (.jsonl)"),
-        PickerItem::new("sql-insert", "SQL INSERT Statements (.sql)"),
+        PickerItem::new("csv", s.export_fmt_csv),
+        PickerItem::new("json-array", s.export_fmt_json_array),
+        PickerItem::new("json-lines", s.export_fmt_json_lines),
+        PickerItem::new("sql-insert", s.export_fmt_sql_insert),
     ];
     let format_select = Select::new("export-format-select", format_items)
-        .label("Export Format")
+        .label(s.export_format_label)
         .full_width(true)
         .value(Some(SharedString::from(export_format_key(format))))
         .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _w, cx| {
@@ -736,12 +760,12 @@ fn render_export_form_body(
         }));
 
     let source_items = vec![
-        PickerItem::new("auto", "Auto (Active View)"),
-        PickerItem::new("grid", "Active Data Grid Table"),
-        PickerItem::new("query", "Active Query Result Set"),
+        PickerItem::new("auto", s.export_src_auto),
+        PickerItem::new("grid", s.export_src_grid),
+        PickerItem::new("query", s.export_src_query),
     ];
     let source_select = Select::new("export-source-select", source_items)
-        .label("Data Source")
+        .label(s.export_source_label)
         .full_width(true)
         .value(Some(SharedString::from(export_source_key(source))))
         .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _w, cx| {
@@ -752,7 +776,7 @@ fn render_export_form_body(
         }));
 
     let mut path_input = Input::new(&ws.modals_ui.export_path_input)
-        .label("Destination Path")
+        .label(s.export_dest_path_label)
         .full_width()
         .placeholder("C:\\Users\\...\\export.csv");
     if let Some(err) = ws.modals_ui.export_error.clone() {
@@ -771,7 +795,7 @@ fn render_export_form_body(
                 .items_center()
                 .gap(px(5.0))
                 .child(Icon::new(IconName::FolderOpen).size(IconSize::Xs))
-                .child("Browse..."),
+                .child(s.browse_btn),
         );
 
     div()
@@ -803,13 +827,15 @@ fn render_export_modal(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
+
     Modal::new()
         .id("modal-export-data")
         .is_open(true)
         .size(ModalSize::Md)
         .backdrop(Backdrop::Blur)
         .is_dismissible(true)
-        .title("Export Rows & Results")
+        .title(s.export_modal_title)
         .icon(IconName::Download)
         .icon_color(HeroColor::Accent)
         .on_open_change(cx.listener(|ws, &open: &bool, _w, cx| {
@@ -829,7 +855,7 @@ fn render_export_modal(
                     ws.modals_ui.export_error = None;
                     cx.notify();
                 }))
-                .child("Cancel"),
+                .child(s.cancel_label),
         )
         .footer_child(
             Button::new("export-modal-run")
@@ -838,7 +864,7 @@ fn render_export_modal(
                 .on_press(cx.listener(|ws, _, _w, cx| {
                     execute_export(ws, cx);
                 }))
-                .child("Export"),
+                .child(s.export),
         )
         .into_any_element()
 }
@@ -872,6 +898,7 @@ fn browse_export_save_path(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
 }
 
 fn execute_export(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    let s = ws.controller.strings.clone();
     let raw_path = ws
         .modals_ui
         .export_path_input
@@ -880,7 +907,7 @@ fn execute_export(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
         .trim()
         .to_owned();
     if raw_path.is_empty() {
-        ws.modals_ui.export_error = Some("Choose a destination file path.".to_owned());
+        ws.modals_ui.export_error = Some(s.export_err_missing_path.to_owned());
         cx.notify();
         return;
     }
@@ -898,7 +925,7 @@ fn execute_export(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
     let use_query = should_export_query_result(ws, ws.modals_ui.export_source);
 
     let outcome = if use_query {
-        export_active_query_result(ws, &path, format)
+        export_active_query_result(ws, &path, format, &s)
     } else {
         ws.controller
             .export_active_grid(&path, format)
@@ -909,18 +936,19 @@ fn execute_export(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
         Ok(count) => {
             ws.modals_ui.export_modal_open = false;
             ws.modals_ui.export_error = None;
-            push_success_toast(
-                "Export complete",
-                Some(SharedString::from(format!(
-                    "Wrote {count} rows to {}",
-                    path.display()
-                ))),
-                cx,
-            );
+            let path_str = path.display().to_string();
+            let desc = if count == 1 {
+                s.export_wrote_one_row_tpl.replace("{path}", &path_str)
+            } else {
+                s.export_wrote_rows_tpl
+                    .replace("{count}", &count.to_string())
+                    .replace("{path}", &path_str)
+            };
+            push_success_toast(s.export_complete_toast, Some(SharedString::from(desc)), cx);
         }
         Err(err) => {
             ws.modals_ui.export_error = Some(err.clone());
-            push_error_toast("Export failed", Some(SharedString::from(err)), cx);
+            push_error_toast(s.export_failed_toast, Some(SharedString::from(err)), cx);
         }
     }
     cx.notify();
@@ -930,16 +958,17 @@ fn export_active_query_result(
     ws: &mut DataForgeWorkspace,
     path: &std::path::Path,
     format: ExportFormat,
+    s: &Strings,
 ) -> Result<u64, String> {
     let tab_res = ws
         .active_tab_result()
-        .ok_or_else(|| "No active query result set to export".to_owned())?;
+        .ok_or_else(|| s.export_err_no_result_set.to_owned())?;
     let set = tab_res
         .accumulator
         .result_sets
         .get(tab_res.active_result_set)
         .or_else(|| tab_res.accumulator.result_sets.first())
-        .ok_or_else(|| "Active query tab contains no result rows".to_owned())?;
+        .ok_or_else(|| s.export_err_empty_result_set.to_owned())?;
     let options = ExportOptions {
         format,
         table: ws.controller.active_table.clone(),
@@ -947,7 +976,15 @@ fn export_active_query_result(
     };
     let count = export_rows_atomic(path, &set.columns, &set.rows, &options)
         .map_err(|err| err.to_string())?;
-    ws.controller.last_export_status = Some(format!("Exported {count} rows to {}", path.display()));
+    let path_str = path.display().to_string();
+    let status = if count == 1 {
+        s.export_status_one_tpl.replace("{path}", &path_str)
+    } else {
+        s.export_status_tpl
+            .replace("{count}", &count.to_string())
+            .replace("{path}", &path_str)
+    };
+    ws.controller.last_export_status = Some(status);
     Ok(count)
 }
 
@@ -969,6 +1006,7 @@ fn should_export_query_result(ws: &DataForgeWorkspace, source: ExportSource) -> 
 }
 
 fn resolve_export_dataset_label(ws: &DataForgeWorkspace, source: ExportSource) -> String {
+    let s = &ws.controller.strings;
     if should_export_query_result(ws, source)
         && let Some(r) = ws.active_tab_result()
         && let Some(set) = r
@@ -977,26 +1015,53 @@ fn resolve_export_dataset_label(ws: &DataForgeWorkspace, source: ExportSource) -
             .get(r.active_result_set)
             .or_else(|| r.accumulator.result_sets.first())
     {
+        let row_count = set.rows.len();
+        let col_count = set.columns.len();
+        let row_word = if row_count == 1 {
+            s.row_singular
+        } else {
+            s.rows_suffix
+        };
+        let col_word = if col_count == 1 {
+            s.col_singular
+        } else {
+            s.col_plural
+        };
         return format!(
-            "Query Result Set #{} · {} rows · {} columns",
+            "{} #{} · {} {} · {} {}",
+            s.export_query_result_set,
             r.active_result_set + 1,
-            set.rows.len(),
-            set.columns.len()
+            row_count,
+            row_word,
+            col_count,
+            col_word
         );
     }
     let table_name = ws
         .controller
         .active_table
         .as_ref()
-        .map_or("active table", |t| t.name.as_str());
+        .map_or(s.active_table_fallback, |t| t.name.as_str());
+    let row_count = ws.controller.grid_raw_rows.len();
+    let col_count = ws.controller.grid_raw_columns.len();
+    let row_word = if row_count == 1 {
+        s.row_singular
+    } else {
+        s.rows_suffix
+    };
+    let col_word = if col_count == 1 {
+        s.col_singular
+    } else {
+        s.col_plural
+    };
     format!(
-        "Data Grid ({table_name}) · {} rows · {} columns",
-        ws.controller.grid_raw_rows.len(),
-        ws.controller.grid_raw_columns.len()
+        "{} ({table_name}) · {} {} · {} {}",
+        s.export_data_grid, row_count, row_word, col_count, col_word
     )
 }
 
 fn build_pending_impact_summary(ws: &DataForgeWorkspace) -> String {
+    let s = &ws.controller.strings;
     let edits = &ws.controller.grid_model.edits;
     let open_tx = ws
         .controller
@@ -1008,14 +1073,13 @@ fn build_pending_impact_summary(ws: &DataForgeWorkspace) -> String {
         .controller
         .active_table
         .as_ref()
-        .map_or("current workspace", |t| t.name.as_str());
-    format!(
-        "Target: {table_label} — {} modified cells, {} inserted rows, {} deleted rows, {} open transactions.",
-        edits.modified_cells.len(),
-        edits.inserted_rows.len(),
-        edits.deleted_rows.len(),
-        open_tx
-    )
+        .map_or(s.current_workspace_fallback, |t| t.name.as_str());
+    s.pending_impact_summary_tpl
+        .replace("{target}", table_label)
+        .replace("{modified}", &edits.modified_cells.len().to_string())
+        .replace("{inserted}", &edits.inserted_rows.len().to_string())
+        .replace("{deleted}", &edits.deleted_rows.len().to_string())
+        .replace("{tx}", &open_tx.to_string())
 }
 
 fn default_export_path(format: ExportFormat, table: Option<&str>) -> PathBuf {
