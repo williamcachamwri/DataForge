@@ -11,6 +11,8 @@ use herogpui::gpui::{
 };
 
 use crate::app::ScreenMode;
+use crate::i18n::Strings;
+use crate::services::resolve_active_strings;
 
 use super::DataForgeWorkspace;
 use super::shell_state::ToastSeverity;
@@ -76,25 +78,35 @@ pub fn push_action_toast(
     toast.push(None, cx)
 }
 
-/// Pushes an error toast with a working `"Retry"` action link bound to `workspace`.
+fn active_workspace_strings(workspace: &WeakEntity<DataForgeWorkspace>, cx: &App) -> Strings {
+    workspace
+        .upgrade()
+        .map_or_else(resolve_active_strings, |view| {
+            view.read(cx).controller.strings.clone()
+        })
+}
+
+/// Pushes an error toast with a localized retry action link bound to `workspace`.
 pub fn push_retry_connection_toast(
     workspace: WeakEntity<DataForgeWorkspace>,
     title: impl Into<SharedString>,
     error_detail: impl Into<SharedString>,
     cx: &mut App,
 ) -> u64 {
+    let strings = active_workspace_strings(&workspace, cx);
     push_action_toast(
         ToastSeverity::Error,
         title,
         Some(error_detail.into()),
-        "Retry",
+        strings.retry_connection,
         move |app| {
             if let Some(view) = workspace.upgrade() {
                 view.update(app, |ws, cx| {
                     if let Err(err) = ws.controller.retry_unavailable_connection() {
+                        let retry_failed = ws.controller.strings.retry_failed;
                         ws.notify_toast(
                             ToastSeverity::Error,
-                            "Retry failed",
+                            retry_failed,
                             Some(err.to_string().into()),
                             cx,
                         );
@@ -107,7 +119,7 @@ pub fn push_retry_connection_toast(
     )
 }
 
-/// Pushes a notification toast with a quick `"Open Settings"` action link.
+/// Pushes a notification toast with a localized `"Open Settings"` action link.
 pub fn push_open_settings_toast(
     workspace: WeakEntity<DataForgeWorkspace>,
     severity: ToastSeverity,
@@ -115,11 +127,12 @@ pub fn push_open_settings_toast(
     description: Option<SharedString>,
     cx: &mut App,
 ) -> u64 {
+    let strings = active_workspace_strings(&workspace, cx);
     push_action_toast(
         severity,
         title,
         description,
-        "Open Settings",
+        strings.open_settings,
         move |app| {
             if let Some(view) = workspace.upgrade() {
                 view.update(app, |ws, cx| {
