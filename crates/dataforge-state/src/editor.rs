@@ -699,11 +699,23 @@ pub fn lex_line_utf16(
 /// Kind of completion item offered by schema-aware autocomplete.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SchemaCompletionKind {
-    Keyword,
-    Schema,
+    Snippet,
     Table,
+    Schema,
     Column,
     Function,
+    Keyword,
+}
+
+/// SQL clause context around the cursor to prioritize relevant completions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AutocompleteContext {
+    #[default]
+    General,
+    /// Cursor follows `FROM`, `JOIN`, `INTO`, `UPDATE`, `TABLE`, etc.
+    TableExpecting,
+    /// Cursor follows `SELECT`, `WHERE`, `ON`, `SET`, `ORDER BY`, `GROUP BY`, etc.
+    ColumnExpecting,
 }
 
 /// A single schema-aware autocomplete candidate.
@@ -749,19 +761,44 @@ impl AutocompleteState {
 
     /// Opens or updates autocomplete for `prefix`.
     pub fn update_prefix(&mut self, prefix: &str) {
+        self.update_prefix_with_context(prefix, AutocompleteContext::General);
+    }
+
+    /// Opens or updates autocomplete for `prefix` using the surrounding SQL clause `context`.
+    pub fn update_prefix_with_context(&mut self, prefix: &str, context: AutocompleteContext) {
         self.prefix = prefix.to_owned();
         let needle = prefix.to_lowercase();
         let mut items: Vec<SchemaCompletionItem> = self
             .catalog
             .iter()
-            .filter(|item| needle.is_empty() || item.label.to_lowercase().contains(&needle))
+            .filter(|item| {
+                if needle.is_empty() {
+                    return match context {
+                        AutocompleteContext::TableExpecting => matches!(
+                            item.kind,
+                            SchemaCompletionKind::Table | SchemaCompletionKind::Schema
+                        ),
+                        AutocompleteContext::ColumnExpecting => matches!(
+                            item.kind,
+                            SchemaCompletionKind::Column | SchemaCompletionKind::Function
+                        ),
+                        AutocompleteContext::General => true,
+                    };
+                }
+                item.label.to_lowercase().contains(&needle)
+                    || (item.kind == SchemaCompletionKind::Snippet
+                        && item.insert_text.to_lowercase().contains(&needle))
+            })
             .cloned()
             .collect();
         items.sort_by(|a, b| {
-            let a_starts = a.label.to_lowercase().starts_with(&needle);
-            let b_starts = b.label.to_lowercase().starts_with(&needle);
+            let a_starts = !needle.is_empty() && a.label.to_lowercase().starts_with(&needle);
+            let b_starts = !needle.is_empty() && b.label.to_lowercase().starts_with(&needle);
+            let a_ctx = context_rank(a.kind, context);
+            let b_ctx = context_rank(b.kind, context);
             b_starts
                 .cmp(&a_starts)
+                .then_with(|| a_ctx.cmp(&b_ctx))
                 .then_with(|| a.kind.cmp(&b.kind))
                 .then_with(|| a.label.cmp(&b.label))
         });
@@ -806,6 +843,35 @@ impl AutocompleteState {
         self.is_open = false;
         self.filtered.clear();
         self.selected_index = 0;
+    }
+}
+
+const fn context_rank(kind: SchemaCompletionKind, context: AutocompleteContext) -> u8 {
+    match context {
+        AutocompleteContext::TableExpecting => match kind {
+            SchemaCompletionKind::Table => 0,
+            SchemaCompletionKind::Schema => 1,
+            SchemaCompletionKind::Snippet => 2,
+            SchemaCompletionKind::Keyword => 3,
+            SchemaCompletionKind::Column => 4,
+            SchemaCompletionKind::Function => 5,
+        },
+        AutocompleteContext::ColumnExpecting => match kind {
+            SchemaCompletionKind::Column => 0,
+            SchemaCompletionKind::Function => 1,
+            SchemaCompletionKind::Table => 2,
+            SchemaCompletionKind::Snippet => 3,
+            SchemaCompletionKind::Keyword => 4,
+            SchemaCompletionKind::Schema => 5,
+        },
+        AutocompleteContext::General => match kind {
+            SchemaCompletionKind::Snippet => 0,
+            SchemaCompletionKind::Table => 1,
+            SchemaCompletionKind::Schema => 2,
+            SchemaCompletionKind::Column => 3,
+            SchemaCompletionKind::Function => 4,
+            SchemaCompletionKind::Keyword => 5,
+        },
     }
 }
 
