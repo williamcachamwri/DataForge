@@ -101,11 +101,7 @@ fn build_command_items(controller: &AppController) -> Vec<CommandItem> {
     items
 }
 
-fn append_action_items(
-    controller: &AppController,
-    s: &Strings,
-    items: &mut Vec<CommandItem>,
-) {
+fn append_action_items(controller: &AppController, s: &Strings, items: &mut Vec<CommandItem>) {
     let is_connected = matches!(
         controller.connections.phase(controller.active_workspace),
         Some(ConnectionWindowPhase::Connected)
@@ -243,11 +239,7 @@ fn append_open_tab_items(controller: &AppController, s: &Strings, items: &mut Ve
     }
 }
 
-fn append_connection_items(
-    controller: &AppController,
-    s: &Strings,
-    items: &mut Vec<CommandItem>,
-) {
+fn append_connection_items(controller: &AppController, s: &Strings, items: &mut Vec<CommandItem>) {
     for conn in controller.library.storage().connections.values() {
         let desc = format!("{} · {} / {}", conn.driver_id, conn.host, conn.database);
         items.push(
@@ -291,11 +283,7 @@ fn append_catalog_items(controller: &AppController, s: &Strings, items: &mut Vec
     }
 }
 
-fn append_saved_query_items(
-    controller: &AppController,
-    s: &Strings,
-    items: &mut Vec<CommandItem>,
-) {
+fn append_saved_query_items(controller: &AppController, s: &Strings, items: &mut Vec<CommandItem>) {
     for (idx, saved) in controller.saved_queries.iter().enumerate() {
         let snippet = compact_sql_preview(&saved.sql, s.empty_sql_preview);
         items.push(
