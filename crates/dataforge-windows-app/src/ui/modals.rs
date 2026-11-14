@@ -664,12 +664,7 @@ fn render_safe_mode_commit_modal(
                 .flex()
                 .flex_col()
                 .gap(px(10.0))
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(colors.foreground)
-                        .child(summary),
-                )
+                .child(div().text_xs().text_color(colors.foreground).child(summary))
                 .child(
                     div()
                         .px(px(10.0))
@@ -709,7 +704,8 @@ fn render_safe_mode_commit_modal(
                             let desc = if affected == 1 {
                                 s.row_affected_singular.to_owned()
                             } else {
-                                s.rows_affected_tpl.replace("{count}", &affected.to_string())
+                                s.rows_affected_tpl
+                                    .replace("{count}", &affected.to_string())
                             };
                             push_success_toast(
                                 s.edits_committed_toast,
