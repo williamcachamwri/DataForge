@@ -93,27 +93,31 @@ pub fn render_toolbar(
                     .border_color(border)
             }
         })
-        .child(render_left_actions(&state, cx))
+        .child(render_left_actions(&ws.controller.strings, &state, cx))
         .child(render_right_controls(&ws.controller, &phase, window, cx));
 
     bar.into_any_element()
 }
 
-fn render_left_actions(state: &ToolbarActionState, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_left_actions(
+    s: &crate::i18n::Strings,
+    state: &ToolbarActionState,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
     div()
         .id("toolbar-left-cluster")
         .flex()
         .items_center()
         .gap(px(6.0))
         .min_w(px(0.0))
-        .child(render_execution_controls(state, cx))
+        .child(render_execution_controls(s, state, cx))
         .child(
             Separator::new()
                 .id("toolbar-sep-sql")
                 .orientation(Orientation::Vertical)
                 .sx(|s| s.h(px(18.0))),
         )
-        .child(render_sql_file_group(state.has_export_rows, cx))
+        .child(render_sql_file_group(s, state.has_export_rows, cx))
         .child(
             Separator::new()
                 .id("toolbar-sep-grid")
@@ -121,6 +125,7 @@ fn render_left_actions(state: &ToolbarActionState, cx: &Context<DataForgeWorkspa
                 .sx(|s| s.h(px(18.0))),
         )
         .child(render_grid_edit_controls(
+            s,
             state.is_connected,
             state.has_grid_columns,
             state.pending_edits,
@@ -130,7 +135,11 @@ fn render_left_actions(state: &ToolbarActionState, cx: &Context<DataForgeWorkspa
         .into_any_element()
 }
 
-fn render_sql_file_group(has_export_rows: bool, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_sql_file_group(
+    s: &crate::i18n::Strings,
+    has_export_rows: bool,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
     let colors = cx.colors().clone();
     ButtonGroup::new()
         .id("toolbar-sql-group")
@@ -139,7 +148,7 @@ fn render_sql_file_group(has_export_rows: bool, cx: &Context<DataForgeWorkspace>
         .separators(true)
         .button(
             Button::new("toolbar-new-query")
-                .aria_label("New Query Tab (Ctrl+T)")
+                .aria_label(s.new_query_tab_tooltip)
                 .on_press(cx.listener(|ws, _, window, cx| {
                     ws.execute_key_command(KeyCommand::NewQueryTab, window, cx);
                 }))
@@ -148,11 +157,11 @@ fn render_sql_file_group(has_export_rows: bool, cx: &Context<DataForgeWorkspace>
                         .size(px(13.0))
                         .color(colors.foreground),
                 )
-                .child("New"),
+                .child(s.new_label),
         )
         .button(
             Button::new("toolbar-save-sql")
-                .aria_label("Save SQL Query (Ctrl+S)")
+                .aria_label(s.save_query_tooltip)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     save_active_tab_query(ws, cx);
                 }))
@@ -161,12 +170,12 @@ fn render_sql_file_group(has_export_rows: bool, cx: &Context<DataForgeWorkspace>
                         .size(px(13.0))
                         .color(colors.foreground),
                 )
-                .child("Save"),
+                .child(s.save),
         )
         .button(
             Button::new("toolbar-export")
                 .is_disabled(!has_export_rows)
-                .aria_label("Export Data")
+                .aria_label(s.export_data_aria)
                 .on_press(cx.listener(|ws, _, window, cx| {
                     ws.modals_ui.open_export(window, cx);
                     cx.notify();
@@ -180,22 +189,24 @@ fn render_sql_file_group(has_export_rows: bool, cx: &Context<DataForgeWorkspace>
                             colors.muted
                         }),
                 )
-                .child("Export"),
+                .child(s.export),
         )
         .into_any_element()
 }
 
 fn render_execution_controls(
+    s: &crate::i18n::Strings,
     state: &ToolbarActionState,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     if !state.is_connected {
-        return render_disconnected_execution(state.is_connecting, state.skip_anim, cx);
+        return render_disconnected_execution(s, state.is_connecting, state.skip_anim, cx);
     }
-    render_connected_execution(state.is_running, state.has_selection, state.skip_anim, cx)
+    render_connected_execution(s, state.is_running, state.has_selection, state.skip_anim, cx)
 }
 
 fn render_disconnected_execution(
+    s: &crate::i18n::Strings,
     is_connecting: bool,
     skip_anim: bool,
     cx: &Context<DataForgeWorkspace>,
@@ -207,13 +218,13 @@ fn render_disconnected_execution(
             .size(Size::Sm)
             .is_disabled(true)
             .child(Spinner::new("toolbar-conn-spin").size_px(px(12.0)))
-            .child("Connecting...")
+            .child(s.connecting)
             .into_any_element()
     } else {
         Button::new("toolbar-connect-cta")
             .variant(Variant::Primary)
             .size(Size::Sm)
-            .aria_label("Connect to a database")
+            .aria_label(s.connect_db_aria)
             .on_press(cx.listener(|ws, _, _, cx| {
                 ws.switch_screen(ScreenMode::ConnectionsLibrary, cx);
             }))
@@ -222,7 +233,7 @@ fn render_disconnected_execution(
                     .size(px(13.0))
                     .color(colors.accent.foreground),
             )
-            .child("Connect...")
+            .child(s.connect_cta)
             .into_any_element()
     };
 
@@ -230,7 +241,7 @@ fn render_disconnected_execution(
         Button::new("toolbar-cancel-connect")
             .variant(Variant::DangerSoft)
             .size(Size::Sm)
-            .aria_label("Cancel Connection")
+            .aria_label(s.cancel_connection_aria)
             .on_press(cx.listener(|ws, _, _, cx| {
                 ws.controller.cancel_active_connect();
                 cx.notify();
@@ -240,10 +251,10 @@ fn render_disconnected_execution(
                     .size(px(13.0))
                     .color(colors.danger.color),
             )
-            .child("Cancel")
+            .child(s.cancel_label)
             .into_any_element()
     } else {
-        Tooltip::new("Connect to a database to run queries")
+        Tooltip::new(s.connect_to_run_tooltip)
             .id("toolbar-run-disabled-tip")
             .placement(TooltipPlacement::Bottom)
             .delay(250)
@@ -254,9 +265,9 @@ fn render_disconnected_execution(
                     .variant(Variant::Secondary)
                     .size(Size::Sm)
                     .is_disabled(true)
-                    .aria_label("Run Query (Disconnected)")
+                    .aria_label(s.run_query_disconnected_aria)
                     .child(Icon::new(IconName::Play).size(px(13.0)).color(colors.muted))
-                    .child("Run"),
+                    .child(s.run),
             )
             .into_any_element()
     };
@@ -271,6 +282,7 @@ fn render_disconnected_execution(
 }
 
 fn render_connected_execution(
+    s: &crate::i18n::Strings,
     is_running: bool,
     has_selection: bool,
     skip_anim: bool,
@@ -278,11 +290,11 @@ fn render_connected_execution(
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let run_label = if has_selection {
-        "Run Selection"
+        s.run_selection
     } else {
-        "Run"
+        s.run
     };
-    let run_btn = Tooltip::new("Execute SQL query (Ctrl+Enter)")
+    let run_btn = Tooltip::new(s.execute_sql_tooltip)
         .id("toolbar-run-tip")
         .placement(TooltipPlacement::Bottom)
         .delay(350)
@@ -312,7 +324,7 @@ fn render_connected_execution(
                 ),
         );
 
-    let cancel_btn = Tooltip::new("Cancel active operation")
+    let cancel_btn = Tooltip::new(s.cancel_operation_tooltip)
         .id("toolbar-cancel-tip")
         .placement(TooltipPlacement::Bottom)
         .delay(350)
@@ -327,7 +339,7 @@ fn render_connected_execution(
                 })
                 .size(Size::Sm)
                 .is_disabled(!is_running)
-                .aria_label("Cancel Query")
+                .aria_label(s.cancel_query_aria)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     ws.controller.cancel_active_connect();
                     if let Some(tab_id) = ws.controller.tabs.active_tab() {
@@ -346,7 +358,7 @@ fn render_connected_execution(
                         .color(colors.muted)
                         .into_any_element()
                 })
-                .child("Cancel"),
+                .child(s.cancel_label),
         );
 
     div()
@@ -359,6 +371,7 @@ fn render_connected_execution(
 }
 
 fn render_grid_edit_controls(
+    s: &crate::i18n::Strings,
     is_connected: bool,
     has_grid_columns: bool,
     pending_edits: usize,
@@ -368,7 +381,7 @@ fn render_grid_edit_controls(
     let can_add_row = is_connected && has_grid_columns;
     let can_commit = is_connected && pending_edits > 0;
 
-    let commit_el = render_commit_badge_button(can_commit, pending_edits, skip_anim, cx);
+    let commit_el = render_commit_badge_button(s, can_commit, pending_edits, skip_anim, cx);
     let commit_el = if can_commit {
         animate_fade_in(
             div().child(commit_el),
@@ -384,12 +397,13 @@ fn render_grid_edit_controls(
         .flex()
         .items_center()
         .gap(px(6.0))
-        .child(render_grid_edit_group(can_add_row, pending_edits, cx))
+        .child(render_grid_edit_group(s, can_add_row, pending_edits, cx))
         .child(commit_el)
         .into_any_element()
 }
 
 fn render_grid_edit_group(
+    s: &crate::i18n::Strings,
     can_add_row: bool,
     pending_edits: usize,
     cx: &Context<DataForgeWorkspace>,
@@ -403,7 +417,7 @@ fn render_grid_edit_group(
         .button(
             Button::new("toolbar-add-row")
                 .is_disabled(!can_add_row)
-                .aria_label("Add Row")
+                .aria_label(s.add_row)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     let col_count = ws.controller.grid_columns.len();
                     if col_count == 0 {
@@ -422,12 +436,12 @@ fn render_grid_edit_group(
                             colors.muted
                         }),
                 )
-                .child("Add Row"),
+                .child(s.add_row),
         )
         .button(
             Button::new("toolbar-rollback")
                 .is_disabled(pending_edits == 0)
-                .aria_label("Rollback Pending Edits")
+                .aria_label(s.cmd_rollback_edits)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     ws.controller.rollback_grid_edits();
                     ws.workspace_pane.inline_edit = None;
@@ -442,12 +456,13 @@ fn render_grid_edit_group(
                             colors.muted
                         }),
                 )
-                .child("Rollback"),
+                .child(s.rollback),
         )
         .into_any_element()
 }
 
 fn render_commit_badge_button(
+    s: &crate::i18n::Strings,
     can_commit: bool,
     pending_edits: usize,
     skip_anim: bool,
@@ -462,7 +477,7 @@ fn render_commit_badge_button(
         })
         .size(Size::Sm)
         .is_disabled(!can_commit)
-        .aria_label("Commit Pending Grid Edits")
+        .aria_label(s.cmd_commit_edits)
         .on_press(cx.listener(|ws, _, _, cx| {
             ws.workspace_pane.confirm_commit_open = true;
             cx.notify();
@@ -476,7 +491,7 @@ fn render_commit_badge_button(
                     colors.muted
                 }),
         )
-        .child("Commit");
+        .child(s.commit);
 
     let wrapped = if pending_edits > 0 {
         BadgeAnchor::new()
@@ -495,9 +510,10 @@ fn render_commit_badge_button(
     };
 
     Tooltip::new(if pending_edits > 0 {
-        format!("Commit {pending_edits} uncommitted edit(s)")
+        s.commit_edits_count_tpl
+            .replace("{count}", &pending_edits.to_string())
     } else {
-        "No uncommitted grid edits".to_owned()
+        s.no_uncommitted_edits.to_owned()
     })
     .id("toolbar-commit-tip")
     .placement(TooltipPlacement::Bottom)
@@ -515,15 +531,16 @@ fn render_right_controls(
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &controller.strings;
     let status_node = match phase {
         Some(ConnectionWindowPhase::Connected) => {
             return render_connected_right_controls(controller, window, cx);
         }
         Some(ConnectionWindowPhase::Connecting { .. }) => {
-            render_right_spinner_chip("toolbar-status-spin", "Connecting...")
+            render_right_spinner_chip("toolbar-status-spin", s.connecting)
         }
         Some(ConnectionWindowPhase::Reconnecting { .. }) => {
-            render_right_spinner_chip("toolbar-reconn-spin", "Reconnecting...")
+            render_right_spinner_chip("toolbar-reconn-spin", s.reconnecting)
         }
         Some(ConnectionWindowPhase::Unavailable { .. }) => Chip::new()
             .variant(ChipVariant::Soft)
@@ -534,7 +551,7 @@ fn render_right_controls(
                     .size(px(12.0))
                     .color(colors.danger.color),
             )
-            .child(ChipLabel::new().child("Unavailable"))
+            .child(ChipLabel::new().child(s.unavailable))
             .into_any_element(),
         Some(ConnectionWindowPhase::Disconnected) | None => Chip::new()
             .variant(ChipVariant::Secondary)
@@ -545,7 +562,7 @@ fn render_right_controls(
                     .size(px(12.0))
                     .color(colors.muted),
             )
-            .child(ChipLabel::new().child("Disconnected"))
+            .child(ChipLabel::new().child(s.disconnected))
             .into_any_element(),
     };
 
@@ -593,7 +610,7 @@ fn render_connected_right_controls(
                         .size(px(12.0))
                         .color(colors.warning.color),
                 )
-                .child(ChipLabel::new().child("Safe Mode")),
+                .child(ChipLabel::new().child(controller.strings.safe_mode)),
         );
     }
 
@@ -604,10 +621,11 @@ fn render_connected_right_controls(
                 .variant(Variant::Ghost)
                 .size(Size::Sm)
                 .is_icon_only(true)
-                .aria_label("Refresh Schema Objects")
+                .aria_label(controller.strings.refresh_schema)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     super::sidebar::refresh_active_schema(ws, cx);
-                    ws.notify_toast(ToastSeverity::Info, "Refreshing schema...", None, cx);
+                    let msg = ws.controller.strings.refreshing_schema;
+                    ws.notify_toast(ToastSeverity::Info, msg, None, cx);
                     cx.notify();
                 }))
                 .child(
@@ -640,7 +658,7 @@ fn render_db_switcher_popover(
     let trigger = build_db_popover_trigger(controller, cx);
     let saved_connections = build_saved_connection_tuples(controller);
     let host_summary = if controller.toolbar_status.host.is_empty() {
-        "Active connection".to_owned()
+        controller.strings.active_connection_fallback.to_owned()
     } else {
         format!(
             "{} · {}",
@@ -654,7 +672,7 @@ fn render_db_switcher_popover(
         .placement(PopoverPlacement::BottomEnd)
         .panel_width(px(300.0))
         .padding(px(12.0))
-        .title("Database & Schema")
+        .title(controller.strings.db_and_schema_title)
         .show_close_button(true)
         .child(
             div()
@@ -669,14 +687,23 @@ fn render_db_switcher_popover(
                         .truncate()
                         .child(host_summary),
                 )
-                .child(render_schema_select(&schema_items, selected_schema, cx))
-                .child(render_saved_connections_section(saved_connections, cx))
+                .child(render_schema_select(
+                    &controller.strings,
+                    &schema_items,
+                    selected_schema,
+                    cx,
+                ))
+                .child(render_saved_connections_section(
+                    &controller.strings,
+                    saved_connections,
+                    cx,
+                ))
                 .child(
                     Separator::new()
                         .id("toolbar-popover-sep")
                         .orientation(Orientation::Horizontal),
                 )
-                .child(render_popover_footer_actions(cx)),
+                .child(render_popover_footer_actions(&controller.strings, cx)),
         )
         .into_any_element()
 }
@@ -694,7 +721,7 @@ fn build_db_popover_trigger(
         .height(px(26.0))
         .padding_x(px(8.0))
         .radius(px(CONTROL_RADIUS_PX))
-        .aria_label("Database and schema switcher")
+        .aria_label(controller.strings.db_schema_switcher_aria)
         .child(engine.map_or_else(
             || {
                 Icon::new(IconName::Database)
@@ -740,6 +767,7 @@ fn build_saved_connection_tuples(
 }
 
 fn render_schema_select(
+    s: &crate::i18n::Strings,
     schema_items: &[PickerItem],
     selected_schema: Option<String>,
     cx: &Context<DataForgeWorkspace>,
@@ -749,8 +777,8 @@ fn render_schema_select(
         .or_else(|| schema_items.first().map(|first| first.key().clone()));
 
     Select::new("toolbar-schema-select", schema_items.to_vec())
-        .label("Active Schema")
-        .placeholder("No schemas loaded")
+        .label(s.active_schema_label)
+        .placeholder(s.no_schemas_loaded)
         .height(px(30.0))
         .trigger_text_size(px(12.0))
         .row_text_size(px(12.0))
@@ -772,6 +800,7 @@ fn render_schema_select(
 }
 
 fn render_saved_connections_section(
+    s: &crate::i18n::Strings,
     saved: Vec<(String, String, String, EngineKind)>,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
@@ -781,7 +810,7 @@ fn render_saved_connections_section(
             .text_size(px(11.0))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(colors.muted)
-            .child("Saved Connections"),
+            .child(s.cmd_group_saved_connections),
     );
 
     if saved.is_empty() {
@@ -790,7 +819,7 @@ fn render_saved_connections_section(
                 div()
                     .text_size(px(12.0))
                     .text_color(colors.muted)
-                    .child("No saved connections in library."),
+                    .child(s.no_saved_connections_library),
             )
             .into_any_element();
     }
@@ -803,9 +832,10 @@ fn render_saved_connections_section(
                 .full_width(true)
                 .on_press(cx.listener(move |ws, _, _, cx| {
                     if let Err(err) = ws.controller.connect_library_item_blocking(&id) {
+                        let msg = ws.controller.strings.connection_switch_failed_toast;
                         super::toasts::push_retry_connection_toast(
                             cx.entity().downgrade(),
-                            "Connection switch failed",
+                            msg,
                             err.to_string(),
                             cx,
                         );
@@ -849,7 +879,10 @@ fn render_saved_connections_section(
     section.into_any_element()
 }
 
-fn render_popover_footer_actions(cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_popover_footer_actions(
+    s: &crate::i18n::Strings,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
     div()
         .w_full()
         .flex()
@@ -863,7 +896,7 @@ fn render_popover_footer_actions(cx: &Context<DataForgeWorkspace>) -> AnyElement
                 .on_press(cx.listener(|ws, _, _, cx| {
                     ws.switch_screen(ScreenMode::ConnectionsLibrary, cx);
                 }))
-                .child("Manage..."),
+                .child(s.manage_btn),
         )
         .child(
             Button::new("toolbar-popover-disconnect")
@@ -871,16 +904,17 @@ fn render_popover_footer_actions(cx: &Context<DataForgeWorkspace>) -> AnyElement
                 .size(Size::Sm)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     if let Err(err) = ws.controller.disconnect_active_workspace() {
+                        let msg = ws.controller.strings.disconnect_failed_toast;
                         ws.notify_toast(
                             ToastSeverity::Error,
-                            "Disconnect failed",
+                            msg,
                             Some(err.to_string().into()),
                             cx,
                         );
                     }
                     cx.notify();
                 }))
-                .child("Disconnect"),
+                .child(s.disconnect_btn),
         )
         .into_any_element()
 }
@@ -889,10 +923,16 @@ fn build_schema_picker_items(controller: &AppController) -> Vec<PickerItem> {
     if controller.cached_schemas.is_empty() {
         return Vec::new();
     }
-    let mut items = vec![PickerItem::new(ALL_SCHEMAS_KEY, "All Schemas")];
+    let mut items = vec![PickerItem::new(
+        ALL_SCHEMAS_KEY,
+        controller.strings.all_schemas,
+    )];
     for schema in &controller.cached_schemas {
         let label = if schema.is_default {
-            format!("{} (default)", schema.name)
+            controller
+                .strings
+                .schema_default_tpl
+                .replace("{name}", &schema.name)
         } else {
             schema.name.clone()
         };
@@ -910,7 +950,7 @@ fn active_db_label(controller: &AppController) -> String {
     if !form_db.is_empty() {
         return form_db.to_owned();
     }
-    "Default Database".to_owned()
+    controller.strings.default_database.to_owned()
 }
 
 fn active_engine(controller: &AppController) -> Option<EngineKind> {
@@ -934,16 +974,18 @@ fn pending_edit_count(controller: &AppController) -> usize {
 }
 
 fn save_active_tab_query(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    let default_title = ws.controller.strings.new_query_tab;
+    let saved_toast = ws.controller.strings.query_saved_toast;
     let title = ws
         .controller
         .tabs
         .active_tab()
         .and_then(|id| ws.controller.tabs.tabs().iter().find(|t| t.id == id))
-        .map_or_else(|| "Query".to_owned(), |t| t.title.clone());
+        .map_or_else(|| default_title.to_owned(), |t| t.title.clone());
     ws.controller.save_current_query(&title, None);
     ws.notify_toast(
         ToastSeverity::Success,
-        "Query saved",
+        saved_toast,
         Some(title.into()),
         cx,
     );
@@ -971,9 +1013,10 @@ fn run_active_or_selected_sql(ws: &mut DataForgeWorkspace, cx: &mut Context<Data
             if let Some(tab_id) = active_tab {
                 ws.ensure_tab_result(tab_id).fail(err.to_string());
             }
+            let msg = ws.controller.strings.query_failed;
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Query failed",
+                msg,
                 Some(err.to_string().into()),
                 cx,
             );
@@ -1011,9 +1054,10 @@ fn reload_objects_for_scope(
             ws.controller.rebuild_sidebar_rows();
         }
         Err(err) => {
+            let msg = ws.controller.strings.load_schema_objects_failed_toast;
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Failed to load schema objects",
+                msg,
                 Some(err.into()),
                 cx,
             );
