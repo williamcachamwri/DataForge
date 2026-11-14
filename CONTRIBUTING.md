@@ -150,6 +150,45 @@ We keep the Git history clean, bisectable, and easy to review:
 
 ---
 
+## Release & Versioning Workflow
+
+DataForge follows [Semantic Versioning](https://semver.org/) and keeps all `crates/dataforge-*/Cargo.toml` crate versions synchronized.
+
+### 1. Maintain `CHANGELOG.md`
+
+- Document notable changes under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) using [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) categories (`Added`, `Changed`, `Fixed`, etc.).
+- Use Conventional Commits (`feat`, `fix`, `perf`, `i18n`, `refactor`, `docs`, `ci`, `build`, `chore`) so [cliff.toml](cliff.toml) and [.github/release.yml](.github/release.yml) categorize release notes automatically.
+
+### 2. Bump the Version
+
+Preview a release bump without modifying tracked files:
+
+```powershell
+.\scripts\bump-version.ps1 -Bump patch -DryRun
+```
+
+Apply a bump (`patch`, `minor`, `major`, or an explicit `-Version X.Y.Z`), update `Cargo.lock` and `CHANGELOG.md`, and create the release commit and annotated `vX.Y.Z` tag:
+
+```powershell
+.\scripts\bump-version.ps1 -Bump patch -Tag
+```
+
+> [!NOTE]
+> `scripts/bump-version.ps1` uses `git-cliff` when installed locally and falls back to built-in Conventional Commit grouping when `git-cliff` is absent.
+
+### 3. Publish via Tag Push
+
+Push the release commit and tag (or pass `-Push` directly to `bump-version.ps1`) to trigger [.github/workflows/release.yml](.github/workflows/release.yml):
+
+```powershell
+git push origin main
+git push origin vX.Y.Z
+```
+
+The release workflow validates that the `vX.Y.Z` tag matches `crates/dataforge-windows-app/Cargo.toml`, runs release tests and `--smoke-startup`, packages `DataForge-win-Setup.exe`, `DataForge-win-Portable.zip`, and Velopack delta/full `.nupkg` assets, generates `SHA256SUMS.txt` and `git-cliff` notes, and publishes the GitHub Release. Maintainers can also run a non-publishing dry run from GitHub Actions (`workflow_dispatch` with `dry_run: true`).
+
+---
+
 ## Security & Licensing
 
 - **Reporting Security Vulnerabilities**: Please **do not** report security vulnerabilities in public GitHub issues. Follow the private disclosure instructions in [SECURITY.md](SECURITY.md).
