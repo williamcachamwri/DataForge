@@ -35,6 +35,7 @@ use super::theme::{
     panel_surface_bg, value_gpui_font,
 };
 use crate::app::ScreenMode;
+use crate::i18n::{Locale, Strings};
 
 const SAMPLE_PREVIEW_SQL: &str = "-- DataForge Live Theme Preview\n\
 SELECT u.id, u.email, COALESCE(p.plan, 'free') AS plan_name, NULL AS deleted_at\n\
@@ -75,14 +76,14 @@ impl SettingsCategory {
         }
     }
 
-    const fn label(self) -> &'static str {
+    const fn label(self, s: &Strings) -> &'static str {
         match self {
-            Self::Appearance => "Appearance",
-            Self::EditorAndFonts => "Editor & Fonts",
-            Self::BehaviorAndSafety => "Behavior & Safety",
-            Self::McpServer => "MCP Server",
-            Self::Diagnostics => "Diagnostics",
-            Self::About => "About",
+            Self::Appearance => s.cat_appearance,
+            Self::EditorAndFonts => s.cat_editor_fonts,
+            Self::BehaviorAndSafety => s.cat_behavior_safety,
+            Self::McpServer => s.cat_mcp_server,
+            Self::Diagnostics => s.cat_diagnostics,
+            Self::About => s.cat_about,
         }
     }
 
@@ -305,6 +306,7 @@ pub fn render_settings_screen(
 
 fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let notice = ws.settings_view.status_notice.clone();
 
     div()
@@ -332,7 +334,7 @@ fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
                                 .items_center()
                                 .gap(px(4.0))
                                 .child(Icon::new(IconName::ArrowLeft).size(IconSize::Sm))
-                                .child("Workspace"),
+                                .child(s.workspace),
                         ),
                 )
                 .child(
@@ -340,7 +342,7 @@ fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
                         .text_sm()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
-                        .child("Settings"),
+                        .child(s.settings),
                 ),
         )
         .child(
@@ -364,7 +366,7 @@ fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
                         .on_press(cx.listener(|ws, _, _window, cx| {
                             persist_settings(ws, cx);
                         }))
-                        .child("Save Settings"),
+                        .child(s.save_settings),
                 ),
         )
         .into_any_element()
@@ -373,6 +375,7 @@ fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
 fn render_sidebar_nav_item(
     cat: SettingsCategory,
     active_cat: SettingsCategory,
+    strings: &Strings,
     nav_motion: Motion,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
@@ -452,7 +455,7 @@ fn render_sidebar_nav_item(
                     FontWeight::NORMAL
                 })
                 .text_color(label_fg)
-                .child(cat.label()),
+                .child(cat.label(strings)),
         )
         .when(is_active, |el| {
             let indicator = div()
@@ -490,7 +493,13 @@ fn render_sidebar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
         if cat == SettingsCategory::About {
             list = list.child(div().py(px(4.0)).px(px(6.0)).child(Separator::new()));
         }
-        list = list.child(render_sidebar_nav_item(cat, active_cat, nav_motion, cx));
+        list = list.child(render_sidebar_nav_item(
+            cat,
+            active_cat,
+            &ws.controller.strings,
+            nav_motion,
+            cx,
+        ));
     }
 
     div()
@@ -522,6 +531,7 @@ fn render_category_body(
         SettingsCategory::About => render_about_section(ws, cx),
     };
 
+    let s = ws.controller.strings.clone();
     let container = div()
         .w_full()
         .max_w(px(740.0))
@@ -539,13 +549,13 @@ fn render_category_body(
                         .text_lg()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
-                        .child(category.label()),
+                        .child(category.label(&s)),
                 )
                 .child(
                     div()
                         .text_xs()
                         .text_color(colors.muted)
-                        .child(category_subtitle(category)),
+                        .child(category_subtitle(category, &s)),
                 ),
         )
         .child(section_el);
@@ -620,12 +630,29 @@ fn render_appearance_section(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
+    let language_items: Vec<PickerItem> = Locale::ALL
+        .into_iter()
+        .map(|loc| PickerItem::new(loc.code(), loc.native_name()))
+        .collect();
+    let language_select = div().w(px(230.0)).flex_shrink_0().child(
+        Select::new("settings-interface-language", language_items)
+            .full_width(true)
+            .value(Some(SharedString::from(ws.controller.locale.code())))
+            .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _window, cx| {
+                if let Some(next_locale) = key.as_deref().and_then(Locale::from_code) {
+                    ws.controller.set_locale(next_locale);
+                    persist_settings(ws, cx);
+                }
+            })),
+    );
+
     let pref_key = theme_pref_key(ws.controller.settings.theme);
     let pref_items = vec![
-        PickerItem::new("system", "System (Follow Windows)"),
-        PickerItem::new("light", "Light"),
-        PickerItem::new("dark", "Dark"),
-        PickerItem::new("high-contrast", "High Contrast"),
+        PickerItem::new("system", s.theme_pref_system),
+        PickerItem::new("light", s.theme_pref_light),
+        PickerItem::new("dark", s.theme_pref_dark),
+        PickerItem::new("high-contrast", s.theme_pref_high_contrast),
     ];
     let pref_select = div().w(px(230.0)).flex_shrink_0().child(
         Select::new("settings-theme-pref", pref_items)
@@ -644,38 +671,43 @@ fn render_appearance_section(
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Theme & Content Palette"))
-                .child(CardDescription::new().child(
-                    "Choose window blur, matching UI + syntax themes, or mix any SQL codeblock palette.",
-                )),
+                .child(CardTitle::new().child(s.theme_card_title))
+                .child(CardDescription::new().child(s.theme_card_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
                 .child(settings_row(
-                    "Interface Appearance",
-                    Some("Controls window chrome, sidebars, and drawers."),
+                    s.language_label,
+                    Some(s.language_desc),
+                    language_select,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    s.interface_appearance,
+                    Some(s.interface_appearance_desc),
                     pref_select,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Window Backdrop",
-                    Some("Enable Gaussian Blur frosted glass or Windows 11 Mica translucency."),
+                    s.window_backdrop,
+                    Some(s.window_backdrop_desc),
                     backdrop_select,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "UI + Syntax Theme Preset",
-                    Some("Harmonized 26-slot UI surface and SQL codeblock theme presets."),
+                    s.theme_preset_label,
+                    Some(s.theme_preset_desc),
                     preset_select,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Codeblock Syntax Palette",
-                    Some("Override SQL keyword, string, comment, and operator colors independently."),
+                    s.syntax_palette_label,
+                    Some(s.syntax_palette_desc),
                     syntax_select,
                     cx,
                 )),
@@ -696,12 +728,13 @@ fn render_theme_and_blur_selects(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> (AnyElement, AnyElement, AnyElement) {
+    let s = &ws.controller.strings;
     let backdrop_key = backdrop_pref_key(ws.controller.settings.window_backdrop);
     let backdrop_items = vec![
-        PickerItem::new("opaque", "Standard (Opaque)"),
-        PickerItem::new("gaussian_blur", "Gaussian Blur (Frosted Glass)"),
-        PickerItem::new("mica", "Windows 11 Mica"),
-        PickerItem::new("mica_alt", "Windows 11 Mica Alt"),
+        PickerItem::new("opaque", s.backdrop_opaque),
+        PickerItem::new("gaussian_blur", s.backdrop_gaussian_blur),
+        PickerItem::new("mica", s.backdrop_mica),
+        PickerItem::new("mica_alt", s.backdrop_mica_alt),
     ];
     let backdrop_select = div()
         .w(px(230.0))
@@ -754,7 +787,7 @@ fn render_theme_and_blur_selects(
         .syntax_palette_id
         .clone()
         .unwrap_or_else(|| "match_theme".to_owned());
-    let mut syntax_items = vec![PickerItem::new("match_theme", "Match Active Theme")];
+    let mut syntax_items = vec![PickerItem::new("match_theme", s.match_active_theme)];
     for t in &all_presets {
         syntax_items.push(PickerItem::new(t.id.0.clone(), t.name.clone()));
     }
@@ -780,6 +813,7 @@ fn render_theme_and_blur_selects(
 
 fn render_vscode_theme_preview(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let sql_preview = div()
         .p(px(12.0))
         .rounded(px(CONTROL_RADIUS_PX))
@@ -804,7 +838,7 @@ fn render_vscode_theme_preview(ws: &DataForgeWorkspace, cx: &App) -> AnyElement 
                 .text_xs()
                 .font_weight(herogpui::gpui::FontWeight::MEDIUM)
                 .text_color(colors.muted)
-                .child("Live 26-Slot Syntax & Surface Preview"),
+                .child(s.vscode_preview_heading),
         )
         .child(sql_preview)
         .child(render_26_slot_swatches(&ws.content_palette, cx))
@@ -815,6 +849,7 @@ fn render_vscode_theme_import_card(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let import_err = ws.settings_ui.theme_json_error.clone();
     let active_name = ws.controller.content_theme.name.clone();
     let active_slot_count = ws.controller.content_theme.colors.len();
@@ -824,7 +859,7 @@ fn render_vscode_theme_import_card(
         .rows(5)
         .font_family(editor_gpui_font(&ws.controller.settings).family)
         .full_width()
-        .placeholder("Paste VS Code color theme JSON or load a .json theme file...");
+        .placeholder(s.vscode_import_placeholder);
     if let Some(err) = import_err {
         json_area = json_area.is_invalid(true).error_message(err);
     }
@@ -850,7 +885,7 @@ fn render_vscode_theme_import_card(
                 .items_center()
                 .gap(px(6.0))
                 .child(Icon::new(IconName::FolderOpen).size(IconSize::Xs))
-                .child("Load Theme JSON..."),
+                .child(s.vscode_load_json),
         );
 
     let apply_json_btn = Button::new("settings-apply-vscode-json")
@@ -860,7 +895,7 @@ fn render_vscode_theme_import_card(
             let raw = ws.settings_ui.theme_json_input.read(cx).value().to_owned();
             apply_imported_theme_bytes(ws, raw.as_bytes(), window, cx);
         }))
-        .child("Import & Preview");
+        .child(s.vscode_import_btn);
 
     let mut content = CardContent::new().sx(|d| d.gap(px(12.0)));
     if let Some(msg) = last_import {
@@ -889,10 +924,14 @@ fn render_vscode_theme_import_card(
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("VS Code JSON Theme Import"))
-                .child(CardDescription::new().child(format!(
-                    "Active content theme: {active_name} ({active_slot_count}/26 ThemeSlots mapped)"
-                ))),
+                .child(CardTitle::new().child(s.vscode_import_title))
+                .child(
+                    CardDescription::new().child(
+                        s.theme_slots_summary_tpl
+                            .replace("{name}", &active_name)
+                            .replace("{count}", &active_slot_count.to_string()),
+                    ),
+                ),
         )
         .child(content)
         .into_any_element()
@@ -1008,43 +1047,36 @@ fn render_editor_font_card(
             persist_settings(ws, cx);
         }));
 
+    let s = &ws.controller.strings;
     Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("SQL Editor Font (editor_font)"))
-                .child(
-                    CardDescription::new()
-                        .child("Monospace typography for SQL queries and AI SQL blocks."),
-                ),
+                .child(CardTitle::new().child(s.editor_font_title))
+                .child(CardDescription::new().child(s.editor_font_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
-                .child(settings_row(
-                    "SQL & Structure Font Family",
-                    None,
-                    family_select,
-                    cx,
-                ))
+                .child(settings_row(s.sql_font_family, None, family_select, cx))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Font Size (pt)",
+                    s.font_size_pt,
                     Some("9.0 – 28.0 pt."),
                     size_field,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Line Height",
-                    Some("Multiplier (1.00 – 2.20)."),
+                    s.line_height_label,
+                    Some("1.00 – 2.20."),
                     line_height_field,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Programming Ligatures",
-                    Some("Renders >=, !=, => ligatures in fonts that support OpenType features."),
+                    s.ligatures_label,
+                    Some(s.ligatures_desc),
                     ligatures_switch,
                     cx,
                 )),
@@ -1099,27 +1131,21 @@ fn render_value_font_card(
         .text_xs()
         .child("1,048,576  |  2026-11-14 01:05:12.409  |  order_uuid_7f9c");
 
+    let s = &ws.controller.strings;
     Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Tabular Value Font (value_font)"))
-                .child(CardDescription::new().child(
-                    "Dedicated font for Data Grid cells, Row Inspector values, and query results.",
-                )),
+                .child(CardTitle::new().child(s.value_font_title))
+                .child(CardDescription::new().child(s.value_font_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
-                .child(settings_row(
-                    "Data Grid & Inspector Value Font Family",
-                    None,
-                    family_select,
-                    cx,
-                ))
+                .child(settings_row(s.value_font_family, None, family_select, cx))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Value Size (pt)",
+                    s.value_size_pt,
                     Some("9.0 – 24.0 pt."),
                     size_field,
                     cx,
@@ -1133,6 +1159,7 @@ fn render_editor_behavior_card(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let vim_on = ws.controller.vim_mode.is_some();
     let reduced_motion = detect_reduced_motion();
 
@@ -1154,34 +1181,31 @@ fn render_editor_behavior_card(
         })
         .size(HeroSize::Sm)
         .child(ChipLabel::new().child(if reduced_motion {
-            "Reduced Motion Active"
+            s.reduced_motion_active
         } else {
-            "Standard Motion"
+            s.standard_motion
         }));
 
     Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Editing & Accessibility"))
-                .child(
-                    CardDescription::new()
-                        .child("Editor modal bindings and Windows motion preferences."),
-                ),
+                .child(CardTitle::new().child(s.editing_access_title))
+                .child(CardDescription::new().child(s.editing_access_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
                 .child(settings_row(
-                    "Vim Keybindings in SQL Editor",
-                    Some("Enables Normal, Insert, Visual, and Command modes in the SQL editor."),
+                    s.vim_keybindings,
+                    Some(s.vim_keybindings_desc),
                     vim_switch,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Windows Reduced Motion (SPI_GETCLIENTAREAANIMATION)",
-                    Some("Drawers and modals automatically snap in 0ms when Windows animation is disabled."),
+                    s.reduced_motion_label,
+                    Some(s.reduced_motion_desc),
                     motion_chip,
                     cx,
                 )),
@@ -1193,6 +1217,7 @@ fn render_behavior_safety_section(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let restore_switch = Switch::new("settings-restore-session")
         .is_selected(ws.controller.settings.restore_session)
         .on_change(cx.listener(|ws, &val: &bool, _w, cx| {
@@ -1235,39 +1260,36 @@ fn render_behavior_safety_section(
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Session, Execution & Safety"))
-                .child(
-                    CardDescription::new()
-                        .child("Controls startup restore behavior and Safe Mode guardrails."),
-                ),
+                .child(CardTitle::new().child(s.behavior_card_title))
+                .child(CardDescription::new().child(s.behavior_card_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
                 .child(settings_row(
-                    "Restore Workspace Tabs on Startup",
-                    Some("Automatically reopen previous tabs and connection windows when launching DataForge."),
+                    s.restore_tabs_label,
+                    Some(s.restore_tabs_desc),
                     restore_switch,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Safe Mode Confirmation Prompts",
-                    Some("Require explicit modal approval before committing batch table edits or mutating writes."),
+                    s.safe_mode_prompt_label,
+                    Some(s.safe_mode_prompt_desc),
                     safe_mode_switch,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Default Row Fetch Limit",
-                    Some("Rows per Data Grid page (10 – 10,000)."),
+                    s.fetch_limit_label,
+                    Some(s.fetch_limit_desc),
                     fetch_limit,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Query Timeout (seconds)",
-                    Some("Maximum statement runtime before cancellation (5 – 600s)."),
+                    s.query_timeout_label,
+                    Some(s.query_timeout_desc),
                     timeout_field,
                     cx,
                 )),
@@ -1284,10 +1306,11 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
         .and_then(|s| s.mcp_server.lock().ok()?.address());
     let port = live_addr.map_or(ws.controller.settings.mcp.port, |a| a.port());
     let endpoint_url = format!("http://127.0.0.1:{port}{MCP_PATH}");
+    let s = &ws.controller.strings;
     let status_label = if running {
-        format!("Running · {endpoint_url}")
+        format!("{} · {endpoint_url}", s.mcp_running_prefix)
     } else {
-        "Stopped".to_owned()
+        s.mcp_stopped.to_owned()
     };
 
     let enable_switch = Switch::new("settings-mcp-enable")
@@ -1311,6 +1334,7 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
 
     let token_card = render_mcp_token_and_snippets_card(ws, &endpoint_url, cx);
 
+    let s = &ws.controller.strings;
     let lifecycle_card = Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
@@ -1320,7 +1344,7 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
                         .flex()
                         .items_center()
                         .justify_between()
-                        .child(CardTitle::new().child("Model Context Protocol Endpoint"))
+                        .child(CardTitle::new().child(s.mcp_card_title))
                         .child(
                             Chip::new()
                                 .variant(ChipVariant::Soft)
@@ -1333,23 +1357,21 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
                                 .child(ChipLabel::new().child(status_label)),
                         ),
                 )
-                .child(CardDescription::new().child(
-                    "Local loopback endpoint strictly protected by Windows Credential Manager bearer token.",
-                )),
+                .child(CardDescription::new().child(s.mcp_card_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
                 .child(settings_row(
-                    "Enable Local Loopback MCP Server",
-                    Some("Exposes active connections and schema inspection over authenticated loopback HTTP."),
+                    s.mcp_enable_label,
+                    Some(s.mcp_enable_desc),
                     enable_switch,
                     cx,
                 ))
                 .child(Separator::new())
                 .child(settings_row(
-                    "Loopback Port (127.0.0.1)",
-                    Some("TCP port bound on localhost (1024 – 65535)."),
+                    s.mcp_port_label,
+                    Some(s.mcp_port_desc),
                     port_field,
                     cx,
                 )),
@@ -1370,13 +1392,14 @@ fn render_mcp_token_row(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let masked = match (
         ws.settings_ui.mcp_token.as_ref(),
         ws.settings_ui.reveal_mcp_token,
     ) {
         (Some(tok), true) => tok.clone(),
         (Some(_), false) => "tp_••••••••••••••••••••••••••••••••".to_owned(),
-        (None, _) => "Unavailable (start MCP or refresh vault)".to_owned(),
+        (None, _) => s.mcp_token_unavailable.to_owned(),
     };
     let token_copied = ws.settings_ui.copied_key.as_deref() == Some("mcp-token");
 
@@ -1410,7 +1433,7 @@ fn render_mcp_token_row(
                         .variant(Variant::Ghost)
                         .size(HeroSize::Sm)
                         .is_icon_only(true)
-                        .aria_label("Reveal or Hide Bearer Token")
+                        .aria_label(s.mcp_reveal_token_aria)
                         .on_press(cx.listener(|ws, _, _w, cx| {
                             ws.settings_ui.reveal_mcp_token = !ws.settings_ui.reveal_mcp_token;
                             cx.notify();
@@ -1426,7 +1449,8 @@ fn render_mcp_token_row(
                 )
                 .child(copy_chip_button(
                     "settings-mcp-copy-token",
-                    "Copy Token",
+                    s.mcp_copy_token,
+                    s.copied,
                     token_copied,
                     has_token,
                     cx.listener(|ws, _, _w, cx| {
@@ -1444,7 +1468,7 @@ fn render_mcp_token_row(
                         .on_press(cx.listener(|ws, _, _w, cx| {
                             rotate_mcp_token(ws, cx);
                         }))
-                        .child("Rotate"),
+                        .child(s.mcp_rotate),
                 ),
         )
         .into_any_element()
@@ -1455,6 +1479,7 @@ fn render_mcp_token_and_snippets_card(
     endpoint_url: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let raw_token = ws.settings_ui.mcp_token.clone();
     let claude_copied = ws.settings_ui.copied_key.as_deref() == Some("mcp-claude");
     let cursor_copied = ws.settings_ui.copied_key.as_deref() == Some("mcp-cursor");
@@ -1468,10 +1493,8 @@ fn render_mcp_token_and_snippets_card(
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Bearer Token & IDE Integration"))
-                .child(CardDescription::new().child(
-                    "Copy ready-to-paste client configs computed from live port and keyring token.",
-                )),
+                .child(CardTitle::new().child(s.mcp_tokens_title))
+                .child(CardDescription::new().child(s.mcp_tokens_desc)),
         )
         .child(
             CardContent::new()
@@ -1484,7 +1507,8 @@ fn render_mcp_token_and_snippets_card(
                         .gap(px(8.0))
                         .child(copy_chip_button(
                             "settings-mcp-copy-claude",
-                            "Copy Claude Desktop Config",
+                            s.mcp_copy_claude,
+                            s.copied,
                             claude_copied,
                             true,
                             cx.listener(move |ws, _, _w, cx| {
@@ -1498,7 +1522,8 @@ fn render_mcp_token_and_snippets_card(
                         ))
                         .child(copy_chip_button(
                             "settings-mcp-copy-cursor",
-                            "Copy Cursor Config",
+                            s.mcp_copy_cursor,
+                            s.copied,
                             cursor_copied,
                             true,
                             cx.listener(move |ws, _, _w, cx| {
@@ -1532,10 +1557,11 @@ fn render_diagnostics_logs_card(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let log_dir = resolve_log_dir();
     let log_display = log_dir
         .as_ref()
-        .map_or_else(|| "Unavailable".to_owned(), |p| p.display().to_string());
+        .map_or_else(|| s.unavailable.to_owned(), |p| p.display().to_string());
     let log_copied = ws.settings_ui.copied_key.as_deref() == Some("diag-log");
     let log_copy_val = log_display.clone();
     let log_open_path = log_dir.clone();
@@ -1544,11 +1570,8 @@ fn render_diagnostics_logs_card(
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Logs & Crash Reports"))
-                .child(
-                    CardDescription::new()
-                        .child("Structured tracing and panic crash dumps stored locally."),
-                ),
+                .child(CardTitle::new().child(s.diag_logs_title))
+                .child(CardDescription::new().child(s.diag_logs_desc)),
         )
         .child(
             CardContent::new()
@@ -1576,11 +1599,11 @@ fn render_diagnostics_logs_card(
                                 .variant(Variant::Primary)
                                 .size(HeroSize::Sm)
                                 .is_disabled(log_open_path.is_none())
-                                .on_press(cx.listener(move |_ws, _, _w, cx| {
+                                .on_press(cx.listener(move |ws, _, _w, cx| {
                                     if let Some(dir) = log_open_path.as_ref() {
                                         if let Err(err) = std::fs::create_dir_all(dir) {
                                             push_error_toast(
-                                                "Failed to prepare log folder",
+                                                ws.controller.strings.diag_prepare_logs_failed,
                                                 Some(SharedString::from(err.to_string())),
                                                 cx,
                                             );
@@ -1595,12 +1618,13 @@ fn render_diagnostics_logs_card(
                                         .items_center()
                                         .gap(px(6.0))
                                         .child(Icon::new(IconName::FolderOpen).size(IconSize::Xs))
-                                        .child("Open Log Folder"),
+                                        .child(s.diag_open_logs),
                                 ),
                         )
                         .child(copy_chip_button(
                             "settings-copy-log-path",
-                            "Copy Path",
+                            s.diag_copy_path,
+                            s.copied,
                             log_copied,
                             log_dir.is_some(),
                             cx.listener(move |ws, _, _w, cx| {
@@ -1621,13 +1645,14 @@ fn render_diagnostics_section(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let engine_ver = if ws.controller.toolbar_status.engine_version.is_empty() {
-        "Not connected".to_owned()
+        s.not_connected.to_owned()
     } else {
         ws.controller.toolbar_status.engine_version.clone()
     };
     let host_label = if ws.controller.toolbar_status.host.is_empty() {
-        "None".to_owned()
+        s.none_label.to_owned()
     } else {
         ws.controller.toolbar_status.host.clone()
     };
@@ -1636,29 +1661,26 @@ fn render_diagnostics_section(
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Build & Connected Runtime"))
-                .child(
-                    CardDescription::new()
-                        .child("Genuine binary metadata and active session telemetry."),
-                ),
+                .child(CardTitle::new().child(s.diag_runtime_title))
+                .child(CardDescription::new().child(s.diag_runtime_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(8.0)))
-                .child(diag_kv_row("DataForge App", env!("CARGO_PKG_VERSION"), cx))
+                .child(diag_kv_row(s.diag_app_label, env!("CARGO_PKG_VERSION"), cx))
                 .child(Separator::new())
                 .child(diag_kv_row(
-                    "Platform",
+                    s.diag_platform_label,
                     &format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH),
                     cx,
                 ))
                 .child(Separator::new())
-                .child(diag_kv_row("Active Engine", &engine_ver, cx))
+                .child(diag_kv_row(s.diag_engine_label, &engine_ver, cx))
                 .child(Separator::new())
-                .child(diag_kv_row("Active Endpoint", &host_label, cx))
+                .child(diag_kv_row(s.diag_endpoint_label, &host_label, cx))
                 .child(Separator::new())
                 .child(diag_kv_row(
-                    "Pending Cell Edits",
+                    s.diag_pending_edits_label,
                     &ws.controller
                         .grid_model
                         .edits
@@ -1678,7 +1700,7 @@ fn render_diagnostics_section(
         .into_any_element()
 }
 
-fn render_about_hero_card(version: &str, cx: &App) -> AnyElement {
+fn render_about_hero_card(version: &str, strings: &Strings, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     Card::new()
         .sx(|s| s.overflow_hidden())
@@ -1713,7 +1735,7 @@ fn render_about_hero_card(version: &str, cx: &App) -> AnyElement {
                                                 .text_lg()
                                                 .font_weight(FontWeight::SEMIBOLD)
                                                 .text_color(colors.foreground)
-                                                .child("DataForge"),
+                                                .child(strings.app_title),
                                         )
                                         .child(
                                             Chip::new()
@@ -1729,13 +1751,13 @@ fn render_about_hero_card(version: &str, cx: &App) -> AnyElement {
                                     div()
                                         .text_xs()
                                         .text_color(colors.muted)
-                                        .child("High-performance native SQL & database workbench."),
+                                        .child(strings.about_tagline),
                                 )
                                 .child(
                                     div()
                                         .text_xs()
                                         .text_color(with_alpha(colors.muted, 0.8))
-                                        .child("Precision-built in Rust with GPU-accelerated Direct3D 11 rendering."),
+                                        .child(strings.about_sub_tagline),
                                 ),
                         ),
                 ),
@@ -1747,46 +1769,82 @@ fn render_about_section(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
+    let colors = cx.colors().clone();
     let version = env!("CARGO_PKG_VERSION");
     let os_arch = format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH);
     let ui_stack = "Rust + HeroGPUI (Direct3D 11)";
     let motion_label = if is_reduced_motion(cx) {
-        "Reduced Motion Active"
+        s.reduced_motion_active
     } else {
-        "Standard Motion"
+        s.standard_motion
     };
     let theme_name = ws.controller.content_theme.name.clone();
     let sys_info_payload = format!(
-        "DataForge v{version}\nPlatform: {os_arch}\nUI Stack: {ui_stack}\nMotion: {motion_label}\nContent Theme: {theme_name}"
+        "{} v{version}\n{}: {os_arch}\n{}: {ui_stack}\n{}: {motion_label}\n{}: {} ({})\n{}: {theme_name}",
+        s.app_title,
+        s.diag_platform_label,
+        s.about_ui_stack,
+        s.about_motion_pref,
+        s.about_locale_label,
+        ws.controller.locale.native_name(),
+        ws.controller.locale.code(),
+        s.about_content_theme_label,
+    );
+    let license_payload = format!(
+        "{} v{version}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}:\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}",
+        s.app_title,
+        s.lic_app_k,
+        s.lic_app_v,
+        s.lic_upstream_k,
+        s.lic_upstream_v,
+        s.lic_coc_k,
+        s.lic_coc_v,
+        s.lic_dual_k,
+        s.lic_dual_v,
+        s.about_security_policy_label,
+        s.sec_ai_privacy_k,
+        s.sec_ai_privacy_v,
+        s.sec_credentials_k,
+        s.sec_credentials_v,
+        s.sec_safe_mode_k,
+        s.sec_safe_mode_v,
+        s.sec_filter_k,
+        s.sec_filter_v,
+        s.sec_disclosure_k,
+        s.sec_disclosure_v,
     );
     let sys_info_copied = ws.settings_ui.copied_key.as_deref() == Some("about-sys-info");
-    let hero_card = render_about_hero_card(version, cx);
+    let license_copied = ws.settings_ui.copied_key.as_deref() == Some("about-license-info");
+    let hero_card = render_about_hero_card(version, s, cx);
 
     let runtime_card = Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("System & Runtime"))
-                .child(
-                    CardDescription::new()
-                        .child("Application build, rendering stack, and host environment."),
-                ),
+                .child(CardTitle::new().child(s.about_runtime_title))
+                .child(CardDescription::new().child(s.about_runtime_desc)),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(10.0)))
-                .child(diag_kv_row("Version", version, cx))
+                .child(diag_kv_row(s.about_version, version, cx))
                 .child(Separator::new())
-                .child(diag_kv_row("Architecture", &os_arch, cx))
+                .child(diag_kv_row(s.about_arch, &os_arch, cx))
                 .child(Separator::new())
-                .child(diag_kv_row("UI Stack", ui_stack, cx))
+                .child(diag_kv_row(s.about_ui_stack, ui_stack, cx))
                 .child(Separator::new())
-                .child(diag_kv_row("Motion Preference", motion_label, cx))
+                .child(diag_kv_row(s.about_motion_pref, motion_label, cx))
+                .child(Separator::new())
+                .child(
+                    diag_kv_row(s.language_label, ws.controller.locale.native_name(), cx),
+                )
                 .child(Separator::new())
                 .child(div().pt(px(2.0)).flex().items_center().justify_end().child(
                     copy_chip_button(
                         "settings-about-copy-info",
-                        "Copy System Info",
+                        s.about_copy_sys_info,
+                        s.copied,
                         sys_info_copied,
                         true,
                         cx.listener(move |ws, _, _w, cx| {
@@ -1801,11 +1859,110 @@ fn render_about_section(
                 )),
         );
 
+    let security_card = Card::new()
+        .sx(|s| s.overflow_hidden())
+        .child(
+            CardHeader::new()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(8.0))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(8.0))
+                                .child(
+                                    Icon::new(IconName::ShieldCheck)
+                                        .size(IconSize::Sm)
+                                        .color(colors.success.color),
+                                )
+                                .child(CardTitle::new().child(s.about_security_title)),
+                        )
+                        .child(
+                            Chip::new()
+                                .variant(ChipVariant::Soft)
+                                .color(HeroColor::Success)
+                                .size(HeroSize::Sm)
+                                .child(ChipLabel::new().child("SECURITY.md")),
+                        ),
+                )
+                .child(CardDescription::new().child(s.about_security_desc)),
+        )
+        .child(
+            CardContent::new()
+                .sx(|d| d.gap(px(10.0)))
+                .child(diag_kv_row(s.sec_ai_privacy_k, s.sec_ai_privacy_v, cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.sec_credentials_k, s.sec_credentials_v, cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.sec_safe_mode_k, s.sec_safe_mode_v, cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.sec_filter_k, s.sec_filter_v, cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.sec_disclosure_k, s.sec_disclosure_v, cx)),
+        );
+
+    let license_card = Card::new()
+        .sx(|s| s.overflow_hidden())
+        .child(
+            CardHeader::new()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(px(8.0))
+                        .child(CardTitle::new().child(s.about_license_title))
+                        .child(
+                            Chip::new()
+                                .variant(ChipVariant::Soft)
+                                .color(HeroColor::Accent)
+                                .size(HeroSize::Sm)
+                                .child(ChipLabel::new().child("MIT & AGPL-3.0")),
+                        ),
+                )
+                .child(CardDescription::new().child(s.about_license_desc)),
+        )
+        .child(
+            CardContent::new()
+                .sx(|d| d.gap(px(10.0)))
+                .child(diag_kv_row(s.lic_app_k, s.lic_app_v, cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.lic_upstream_k, s.lic_upstream_v, cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.lic_coc_k, s.lic_coc_v, cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.lic_dual_k, s.lic_dual_v, cx))
+                .child(Separator::new())
+                .child(div().pt(px(2.0)).flex().items_center().justify_end().child(
+                    copy_chip_button(
+                        "settings-about-copy-license",
+                        s.about_copy_license_info,
+                        s.copied,
+                        license_copied,
+                        true,
+                        cx.listener(move |ws, _, _w, cx| {
+                            ws.settings_ui.copy_with_feedback(
+                                "about-license-info".to_owned(),
+                                license_payload.clone(),
+                                cx,
+                            );
+                        }),
+                        cx,
+                    ),
+                )),
+        );
+
     div()
         .flex()
         .flex_col()
         .gap(px(14.0))
         .child(hero_card)
+        .child(security_card)
+        .child(license_card)
         .child(runtime_card)
         .into_any_element()
 }
@@ -1830,6 +1987,7 @@ fn diag_kv_row(label: &str, value: &str, cx: &App) -> AnyElement {
 fn copy_chip_button(
     id: &'static str,
     label: &'static str,
+    copied_label: &'static str,
     copied: bool,
     enabled: bool,
     handler: impl Fn(&herogpui::gpui::ClickEvent, &mut Window, &mut App) + 'static,
@@ -1859,7 +2017,7 @@ fn copy_chip_button(
                         colors.foreground
                     }),
                 )
-                .child(if copied { "Copied" } else { label }),
+                .child(if copied { copied_label } else { label }),
         )
         .into_any_element()
 }
@@ -1870,18 +2028,18 @@ fn persist_settings(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorks
             let path = AppSettings::file_path(&paths);
             if let Err(err) = ws.controller.save_settings_to(&path) {
                 push_error_toast(
-                    "Failed to save settings",
+                    ws.controller.strings.settings_save_failed,
                     Some(SharedString::from(err.to_string())),
                     cx,
                 );
             } else {
                 ws.settings_ui.dirty = false;
-                ws.settings_view.status_notice = Some("Saved".to_owned());
+                ws.settings_view.status_notice = Some(ws.controller.strings.settings_saved.to_owned());
             }
         }
         Err(err) => {
             push_error_toast(
-                "Storage paths unavailable",
+                ws.controller.strings.storage_paths_unavailable,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -1989,18 +2147,27 @@ fn apply_imported_theme_bytes(
 ) {
     match VsCodeThemeImporter::import_bytes(bytes) {
         Ok(def) => {
-            let summary = format!("Imported '{}' ({} slots)", def.name, def.colors.len());
+            let summary = ws
+                .controller
+                .strings
+                .vscode_imported_summary_tpl
+                .replace("{name}", &def.name)
+                .replace("{count}", &def.colors.len().to_string());
             ws.controller.content_theme = def;
             ws.controller.last_theme_import = Some(summary.clone());
             ws.settings_ui.theme_json_error = None;
             ws.refresh_theme(window, cx);
-            push_success_toast("Theme applied", Some(SharedString::from(summary)), cx);
+            push_success_toast(
+                ws.controller.strings.theme_applied_toast,
+                Some(SharedString::from(summary)),
+                cx,
+            );
             cx.notify();
         }
         Err(err) => {
             ws.settings_ui.theme_json_error = Some(err.to_string());
             push_error_toast(
-                "Invalid theme JSON",
+                ws.controller.strings.invalid_theme_json_toast,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -2018,7 +2185,7 @@ fn browse_vscode_theme_file(
         files: true,
         directories: false,
         multiple: false,
-        prompt: Some("Select VS Code Theme JSON".into()),
+        prompt: Some(ws.controller.strings.select_vscode_theme_prompt.into()),
     });
     ws.settings_ui.picker_task = Some(cx.spawn(
         async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
@@ -2029,8 +2196,12 @@ fn browse_vscode_theme_file(
                 return;
             };
             let Ok(bytes) = std::fs::read(&path) else {
-                let _ = this.update(cx, |_, cx| {
-                    push_error_toast("Could not read theme file", None, cx);
+                let _ = this.update(cx, |ws, cx| {
+                    push_error_toast(
+                        ws.controller.strings.theme_file_read_failed_toast,
+                        None,
+                        cx,
+                    );
                 });
                 return;
             };
@@ -2038,8 +2209,12 @@ fn browse_vscode_theme_file(
             let _ = this.update(cx, |ws, cx| {
                 match VsCodeThemeImporter::import_bytes(&bytes) {
                     Ok(def) => {
-                        let summary =
-                            format!("Imported '{}' ({} slots)", def.name, def.colors.len());
+                        let summary = ws
+                            .controller
+                            .strings
+                            .vscode_imported_summary_tpl
+                            .replace("{name}", &def.name)
+                            .replace("{count}", &def.colors.len().to_string());
                         ws.controller.content_theme = def;
                         ws.controller.last_theme_import = Some(summary.clone());
                         ws.settings_ui.theme_json_error = None;
@@ -2049,12 +2224,16 @@ fn browse_vscode_theme_file(
                             input.set_value(text);
                             cx.notify();
                         });
-                        push_success_toast("Theme imported", Some(SharedString::from(summary)), cx);
+                        push_success_toast(
+                            ws.controller.strings.theme_imported_toast,
+                            Some(SharedString::from(summary)),
+                            cx,
+                        );
                     }
                     Err(err) => {
                         ws.settings_ui.theme_json_error = Some(err.to_string());
                         push_error_toast(
-                            "Invalid VS Code theme JSON",
+                            ws.controller.strings.invalid_vscode_theme_json_toast,
                             Some(SharedString::from(err.to_string())),
                             cx,
                         );
@@ -2072,7 +2251,7 @@ fn toggle_mcp_with_vault_token(
     cx: &mut Context<DataForgeWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
-        push_error_toast("Services unavailable", None, cx);
+        push_error_toast(ws.controller.strings.services_unavailable_toast, None, cx);
         return;
     };
     let port = ws.controller.settings.mcp.port;
@@ -2086,7 +2265,7 @@ fn toggle_mcp_with_vault_token(
         ws.controller.settings.mcp.enabled = false;
         ws.settings_ui.mcp_loading = false;
         persist_settings(ws, cx);
-        push_success_toast("MCP Server stopped", None, cx);
+        push_success_toast(ws.controller.strings.mcp_stopped_toast, None, cx);
         return;
     }
 
@@ -2098,7 +2277,7 @@ fn toggle_mcp_with_vault_token(
         Err(err) => {
             ws.settings_ui.mcp_loading = false;
             push_error_toast(
-                "MCP credential vault error",
+                ws.controller.strings.mcp_vault_error_toast,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -2108,10 +2287,11 @@ fn toggle_mcp_with_vault_token(
     };
     ws.settings_ui.mcp_token = Some(token.secret().expose_secret().to_owned());
 
+    let lock_poisoned_msg = ws.controller.strings.mcp_lock_poisoned_err;
     let start_res = services.runtime.block_on(async {
         let mut ctrl = {
             let Ok(mut guard) = services.mcp_server.lock() else {
-                return Err("MCP controller lock poisoned".to_owned());
+                return Err(lock_poisoned_msg.to_owned());
             };
             if !guard.is_running() {
                 *guard = dataforge_services::McpServerController::new(Some(port));
@@ -2143,14 +2323,14 @@ fn toggle_mcp_with_vault_token(
             ws.controller.settings.mcp.port = addr.port();
             persist_settings(ws, cx);
             push_success_toast(
-                "MCP Server running",
+                ws.controller.strings.mcp_running_toast,
                 Some(SharedString::from(format!("http://{addr}{MCP_PATH}"))),
                 cx,
             );
         }
         Err(err) => {
             push_error_toast(
-                "Failed to start MCP Server",
+                ws.controller.strings.mcp_start_failed_toast,
                 Some(SharedString::from(err)),
                 cx,
             );
@@ -2170,16 +2350,16 @@ fn rotate_mcp_token(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorks
         Ok(tok) => {
             ws.settings_ui.mcp_token = Some(tok.secret().expose_secret().to_owned());
             push_success_toast(
-                "MCP bearer token rotated",
+                ws.controller.strings.mcp_token_rotated_toast,
                 ws.controller
                     .is_mcp_server_running()
-                    .then(|| SharedString::from("Restart MCP Server to enforce the new token.")),
+                    .then(|| SharedString::from(ws.controller.strings.mcp_restart_enforce_desc)),
                 cx,
             );
         }
         Err(err) => {
             push_error_toast(
-                "Failed to rotate token",
+                ws.controller.strings.mcp_rotate_failed_toast,
                 Some(SharedString::from(err.to_string())),
                 cx,
             );
@@ -2214,16 +2394,14 @@ fn sync_number_if_diff(entity: &Entity<NumberState>, target: f64, cx: &mut App) 
     }
 }
 
-const fn category_subtitle(cat: SettingsCategory) -> &'static str {
+const fn category_subtitle(cat: SettingsCategory, s: &Strings) -> &'static str {
     match cat {
-        SettingsCategory::Appearance => "System light/dark/high-contrast & VS Code theme import",
-        SettingsCategory::EditorAndFonts => "SQL monospace & Data Grid value fonts, Vim mode",
-        SettingsCategory::BehaviorAndSafety => {
-            "Startup restore, Safe Mode, fetch limits & timeouts"
-        }
-        SettingsCategory::McpServer => "Local HTTP MCP server, bearer token & client snippets",
-        SettingsCategory::Diagnostics => "Log directory, app metadata & live connection telemetry",
-        SettingsCategory::About => "Version, architecture & system information",
+        SettingsCategory::Appearance => s.cat_appearance_sub,
+        SettingsCategory::EditorAndFonts => s.cat_editor_fonts_sub,
+        SettingsCategory::BehaviorAndSafety => s.cat_behavior_safety_sub,
+        SettingsCategory::McpServer => s.cat_mcp_server_sub,
+        SettingsCategory::Diagnostics => s.cat_diagnostics_sub,
+        SettingsCategory::About => s.cat_about_sub,
     }
 }
 
