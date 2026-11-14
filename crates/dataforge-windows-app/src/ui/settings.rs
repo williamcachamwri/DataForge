@@ -13,7 +13,7 @@ use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
     Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Chip, ChipLabel,
     ChipVariant, Icon, IconName, IconSize, InputState, NumberField, NumberState, PickerItem,
-    Scrollbar, Select, Separator, Switch, TextArea, Variant,
+    ProgressBar, Scrollbar, Select, Separator, Switch, TextArea, Variant,
 };
 use herogpui::core::{Color as HeroColor, Size as HeroSize, with_alpha};
 use herogpui::gpui::prelude::FluentBuilder as _;
@@ -27,7 +27,9 @@ use secrecy::ExposeSecret;
 use tablepro_mcp::{DEFAULT_PORT, MCP_PATH, obtain_token, replace_token};
 
 use super::DataForgeWorkspace;
-use super::shell_state::{SettingsSection, push_error_toast, push_success_toast};
+use super::shell_state::{
+    SettingsSection, ToastSeverity, push_error_toast, push_success_toast, push_toast,
+};
 use super::syntax_bridge::styled_sql_block;
 use super::theme::{
     CONTROL_RADIUS_PX, ContentThemePalette, HAIRLINE_BORDER_PX, MICRO_GAP_PX, editor_gpui_font,
@@ -36,6 +38,7 @@ use super::theme::{
 };
 use crate::app::ScreenMode;
 use crate::i18n::{Locale, Strings};
+use crate::updater::{InstallMode, UpdateState};
 
 const SAMPLE_PREVIEW_SQL: &str = "-- DataForge Live Theme Preview\n\
 SELECT u.id, u.email, COALESCE(p.plan, 'free') AS plan_name, NULL AS deleted_at\n\
@@ -140,6 +143,7 @@ pub struct SettingsScreenState {
     copy_reset_task: Option<Task<()>>,
     async_task: Option<Task<()>>,
     picker_task: Option<Task<()>>,
+    updater_task: Option<Task<()>>,
 }
 
 impl SettingsScreenState {
@@ -176,9 +180,51 @@ impl SettingsScreenState {
             copy_reset_task: None,
             async_task: None,
             picker_task: None,
+            updater_task: None,
         };
         state.load_mcp_token_async(cx);
+        state.start_updater_bridge(cx);
         state
+    }
+
+    fn start_updater_bridge(&mut self, cx: &mut Context<DataForgeWorkspace>) {
+        self.updater_task = Some(cx.spawn(
+            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+                let Ok(rx) = this.update(cx, |ws, cx| {
+                    let rx = ws.controller.updater.subscribe();
+                    if ws.controller.trigger_auto_update_check() {
+                        cx.notify();
+                    }
+                    rx
+                }) else {
+                    return;
+                };
+                while rx.recv().await.is_ok() {
+                    let Ok(()) = this.update(cx, |ws, cx| {
+                        if ws.controller.updater.drain_events() {
+                            if let UpdateState::Available { version, .. } =
+                                ws.controller.updater.state().clone()
+                            {
+                                let msg = ws
+                                    .controller
+                                    .strings
+                                    .updates_status_available_tpl
+                                    .replace("{version}", &version);
+                                push_toast(
+                                    ToastSeverity::Info,
+                                    ws.controller.strings.updates_toast_available_title,
+                                    Some(SharedString::from(msg)),
+                                    cx,
+                                );
+                            }
+                            cx.notify();
+                        }
+                    }) else {
+                        break;
+                    };
+                }
+            },
+        ));
     }
 
     fn load_mcp_token_async(&mut self, cx: &mut Context<DataForgeWorkspace>) {
@@ -743,13 +789,11 @@ fn render_theme_and_blur_selects(
             Select::new("settings-window-backdrop", backdrop_items)
                 .full_width(true)
                 .value(Some(SharedString::from(backdrop_key)))
-                .on_selection_change(cx.listener(
-                    |ws, key: &Option<SharedString>, window, cx| {
-                        if let Some(next_backdrop) = key.as_deref().and_then(parse_backdrop_pref) {
-                            apply_window_backdrop(ws, next_backdrop, window, cx);
-                        }
-                    },
-                )),
+                .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, window, cx| {
+                    if let Some(next_backdrop) = key.as_deref().and_then(parse_backdrop_pref) {
+                        apply_window_backdrop(ws, next_backdrop, window, cx);
+                    }
+                })),
         )
         .into_any_element();
 
@@ -771,13 +815,11 @@ fn render_theme_and_blur_selects(
             Select::new("settings-content-preset", preset_items)
                 .full_width(true)
                 .value(Some(SharedString::from(preset_key)))
-                .on_selection_change(cx.listener(
-                    |ws, key: &Option<SharedString>, window, cx| {
-                        if let Some(id) = key.as_deref() {
-                            apply_builtin_content_theme(ws, id, window, cx);
-                        }
-                    },
-                )),
+                .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, window, cx| {
+                    if let Some(id) = key.as_deref() {
+                        apply_builtin_content_theme(ws, id, window, cx);
+                    }
+                })),
         )
         .into_any_element();
 
@@ -798,13 +840,11 @@ fn render_theme_and_blur_selects(
             Select::new("settings-syntax-palette", syntax_items)
                 .full_width(true)
                 .value(Some(SharedString::from(syntax_key)))
-                .on_selection_change(cx.listener(
-                    |ws, key: &Option<SharedString>, window, cx| {
-                        if let Some(id) = key.as_deref() {
-                            apply_syntax_palette(ws, id, window, cx);
-                        }
-                    },
-                )),
+                .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, window, cx| {
+                    if let Some(id) = key.as_deref() {
+                        apply_syntax_palette(ws, id, window, cx);
+                    }
+                })),
         )
         .into_any_element();
 
@@ -1705,62 +1745,58 @@ fn render_about_hero_card(version: &str, strings: &Strings, cx: &App) -> AnyElem
     Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
-            CardContent::new()
-                .sx(|d| d.py(px(18.0)))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(18.0))
-                        .child(
-                            img(ImageSource::Image(crate::branding::dataforge_logo_image()))
-                                .w(px(64.0))
-                                .h(px(64.0))
-                                .flex_shrink_0(),
-                        )
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w(px(0.0))
-                                .flex()
-                                .flex_col()
-                                .gap(px(4.0))
-                                .child(
-                                    div()
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(8.0))
-                                        .child(
-                                            div()
-                                                .text_lg()
-                                                .font_weight(FontWeight::SEMIBOLD)
-                                                .text_color(colors.foreground)
-                                                .child(strings.app_title),
-                                        )
-                                        .child(
-                                            Chip::new()
-                                                .variant(ChipVariant::Soft)
-                                                .color(HeroColor::Accent)
-                                                .size(HeroSize::Sm)
-                                                .child(
-                                                    ChipLabel::new().child(format!("v{version}")),
-                                                ),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(colors.muted)
-                                        .child(strings.about_tagline),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(with_alpha(colors.muted, 0.8))
-                                        .child(strings.about_sub_tagline),
-                                ),
-                        ),
-                ),
+            CardContent::new().sx(|d| d.py(px(18.0))).child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(18.0))
+                    .child(
+                        img(ImageSource::Image(crate::branding::dataforge_logo_image()))
+                            .w(px(64.0))
+                            .h(px(64.0))
+                            .flex_shrink_0(),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .flex()
+                            .flex_col()
+                            .gap(px(4.0))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(8.0))
+                                    .child(
+                                        div()
+                                            .text_lg()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(colors.foreground)
+                                            .child(strings.app_title),
+                                    )
+                                    .child(
+                                        Chip::new()
+                                            .variant(ChipVariant::Soft)
+                                            .color(HeroColor::Accent)
+                                            .size(HeroSize::Sm)
+                                            .child(ChipLabel::new().child(format!("v{version}"))),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(colors.muted)
+                                    .child(strings.about_tagline),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(with_alpha(colors.muted, 0.8))
+                                    .child(strings.about_sub_tagline),
+                            ),
+                    ),
+            ),
         )
         .into_any_element()
 }
@@ -1770,8 +1806,31 @@ fn render_about_section(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
-    let colors = cx.colors().clone();
     let version = env!("CARGO_PKG_VERSION");
+    let hero_card = render_about_hero_card(version, s, cx);
+    let updates_card = render_about_updates_card(ws, cx);
+    let security_card = render_about_security_card(s, cx);
+    let license_card = render_about_license_card(ws, version, cx);
+    let runtime_card = render_about_runtime_card(ws, version, cx);
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(14.0))
+        .child(hero_card)
+        .child(updates_card)
+        .child(security_card)
+        .child(license_card)
+        .child(runtime_card)
+        .into_any_element()
+}
+
+fn render_about_runtime_card(
+    ws: &DataForgeWorkspace,
+    version: &str,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> Card {
+    let s = &ws.controller.strings;
     let os_arch = format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH);
     let ui_stack = "Rust + HeroGPUI (Direct3D 11)";
     let motion_label = if is_reduced_motion(cx) {
@@ -1791,34 +1850,9 @@ fn render_about_section(
         ws.controller.locale.code(),
         s.about_content_theme_label,
     );
-    let license_payload = format!(
-        "{} v{version}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}:\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}",
-        s.app_title,
-        s.lic_app_k,
-        s.lic_app_v,
-        s.lic_upstream_k,
-        s.lic_upstream_v,
-        s.lic_coc_k,
-        s.lic_coc_v,
-        s.lic_dual_k,
-        s.lic_dual_v,
-        s.about_security_policy_label,
-        s.sec_ai_privacy_k,
-        s.sec_ai_privacy_v,
-        s.sec_credentials_k,
-        s.sec_credentials_v,
-        s.sec_safe_mode_k,
-        s.sec_safe_mode_v,
-        s.sec_filter_k,
-        s.sec_filter_v,
-        s.sec_disclosure_k,
-        s.sec_disclosure_v,
-    );
     let sys_info_copied = ws.settings_ui.copied_key.as_deref() == Some("about-sys-info");
-    let license_copied = ws.settings_ui.copied_key.as_deref() == Some("about-license-info");
-    let hero_card = render_about_hero_card(version, s, cx);
 
-    let runtime_card = Card::new()
+    Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
@@ -1836,9 +1870,11 @@ fn render_about_section(
                 .child(Separator::new())
                 .child(diag_kv_row(s.about_motion_pref, motion_label, cx))
                 .child(Separator::new())
-                .child(
-                    diag_kv_row(s.language_label, ws.controller.locale.native_name(), cx),
-                )
+                .child(diag_kv_row(
+                    s.language_label,
+                    ws.controller.locale.native_name(),
+                    cx,
+                ))
                 .child(Separator::new())
                 .child(div().pt(px(2.0)).flex().items_center().justify_end().child(
                     copy_chip_button(
@@ -1857,9 +1893,12 @@ fn render_about_section(
                         cx,
                     ),
                 )),
-        );
+        )
+}
 
-    let security_card = Card::new()
+fn render_about_security_card(s: &Strings, cx: &App) -> Card {
+    let colors = cx.colors().clone();
+    Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
@@ -1903,9 +1942,41 @@ fn render_about_section(
                 .child(diag_kv_row(s.sec_filter_k, s.sec_filter_v, cx))
                 .child(Separator::new())
                 .child(diag_kv_row(s.sec_disclosure_k, s.sec_disclosure_v, cx)),
-        );
+        )
+}
 
-    let license_card = Card::new()
+fn render_about_license_card(
+    ws: &DataForgeWorkspace,
+    version: &str,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> Card {
+    let s = &ws.controller.strings;
+    let license_payload = format!(
+        "{} v{version}\n{}: {}\n{}: {}\n{}: {}\n{}: {}\n{}:\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}\n- {}: {}",
+        s.app_title,
+        s.lic_app_k,
+        s.lic_app_v,
+        s.lic_upstream_k,
+        s.lic_upstream_v,
+        s.lic_coc_k,
+        s.lic_coc_v,
+        s.lic_dual_k,
+        s.lic_dual_v,
+        s.about_security_policy_label,
+        s.sec_ai_privacy_k,
+        s.sec_ai_privacy_v,
+        s.sec_credentials_k,
+        s.sec_credentials_v,
+        s.sec_safe_mode_k,
+        s.sec_safe_mode_v,
+        s.sec_filter_k,
+        s.sec_filter_v,
+        s.sec_disclosure_k,
+        s.sec_disclosure_v,
+    );
+    let license_copied = ws.settings_ui.copied_key.as_deref() == Some("about-license-info");
+
+    Card::new()
         .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
@@ -1954,17 +2025,280 @@ fn render_about_section(
                         cx,
                     ),
                 )),
-        );
+        )
+}
 
+fn render_about_updates_card(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let version = env!("CARGO_PKG_VERSION");
+    let install_mode = ws.controller.updater.install_mode();
+    let update_state = ws.controller.updater.state().clone();
+
+    let mode_label = match install_mode {
+        InstallMode::VelopackManaged => s.updates_mode_velopack,
+        InstallMode::Standalone => s.updates_mode_standalone,
+    };
+
+    let auto_check_switch = Switch::new("settings-auto-check-updates")
+        .is_selected(ws.controller.settings.auto_check_updates)
+        .on_change(cx.listener(|ws, &val: &bool, _w, cx| {
+            ws.controller.settings.auto_check_updates = val;
+            persist_settings(ws, cx);
+        }));
+
+    Card::new()
+        .sx(|c| c.overflow_hidden())
+        .child(render_updates_card_header(install_mode, mode_label, s, cx))
+        .child(
+            CardContent::new()
+                .sx(|d| d.gap(px(12.0)))
+                .child(diag_kv_row(s.about_version, &format!("v{version}"), cx))
+                .child(Separator::new())
+                .child(diag_kv_row(s.updates_install_mode_label, mode_label, cx))
+                .child(Separator::new())
+                .child(settings_row(
+                    s.updates_auto_check_label,
+                    Some(s.updates_auto_check_desc),
+                    auto_check_switch,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(render_updates_status_block(&update_state, s, cx))
+                .child(render_updates_actions(install_mode, &update_state, s, cx)),
+        )
+        .into_any_element()
+}
+
+fn render_updates_card_header(
+    install_mode: InstallMode,
+    mode_label: &'static str,
+    s: &Strings,
+    cx: &App,
+) -> CardHeader {
+    let colors = cx.colors().clone();
+    let chip_color = match install_mode {
+        InstallMode::VelopackManaged => HeroColor::Success,
+        InstallMode::Standalone => HeroColor::Default,
+    };
+    CardHeader::new()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(8.0))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(8.0))
+                        .child(
+                            Icon::new(IconName::CloudDownload)
+                                .size(IconSize::Sm)
+                                .color(colors.accent.color),
+                        )
+                        .child(CardTitle::new().child(s.about_updates_title)),
+                )
+                .child(
+                    Chip::new()
+                        .variant(ChipVariant::Soft)
+                        .color(chip_color)
+                        .size(HeroSize::Sm)
+                        .child(ChipLabel::new().child(mode_label)),
+                ),
+        )
+        .child(CardDescription::new().child(s.about_updates_desc))
+}
+
+fn update_status_text(state: &UpdateState, s: &Strings) -> (String, bool) {
+    match state {
+        UpdateState::Idle => (s.updates_status_idle.to_owned(), false),
+        UpdateState::Checking => (s.updates_status_checking.to_owned(), false),
+        UpdateState::UpToDate => (s.updates_status_up_to_date.to_owned(), false),
+        UpdateState::Available { version, .. } => (
+            s.updates_status_available_tpl.replace("{version}", version),
+            false,
+        ),
+        UpdateState::Downloading { percent } => (
+            s.updates_status_downloading_tpl
+                .replace("{percent}", &percent.to_string()),
+            false,
+        ),
+        UpdateState::ReadyToRestart { version } => (
+            s.updates_status_ready_tpl.replace("{version}", version),
+            false,
+        ),
+        UpdateState::StandaloneMode => (s.updates_status_standalone.to_owned(), false),
+        UpdateState::Error(err) => (s.updates_status_error_tpl.replace("{error}", err), true),
+    }
+}
+
+fn render_updates_status_block(state: &UpdateState, s: &Strings, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let (status_text, is_error) = update_status_text(state, s);
+    let status_color = match state {
+        UpdateState::Available { .. } | UpdateState::ReadyToRestart { .. } => colors.accent.color,
+        UpdateState::UpToDate => colors.success.color,
+        UpdateState::Error(_) if is_error => colors.danger.color,
+        _ => colors.muted,
+    };
+
+    let mut block = div()
+        .flex()
+        .flex_col()
+        .gap(px(8.0))
+        .child(diag_kv_row(s.updates_status_label, "", cx))
+        .child(div().text_xs().text_color(status_color).child(status_text));
+
+    match state {
+        UpdateState::Checking => {
+            block = block.child(
+                ProgressBar::new("settings-update-checking-progress")
+                    .is_indeterminate(true)
+                    .size(HeroSize::Sm)
+                    .color(HeroColor::Accent),
+            );
+        }
+        UpdateState::Downloading { percent } => {
+            block = block.child(
+                ProgressBar::new("settings-update-download-progress")
+                    .value(f32::from(*percent))
+                    .min_value(0.0)
+                    .max_value(100.0)
+                    .size(HeroSize::Sm)
+                    .color(HeroColor::Accent),
+            );
+        }
+        UpdateState::Available { notes, .. } if !notes.trim().is_empty() => {
+            block = block.child(render_release_notes_preview(notes, s, cx));
+        }
+        _ => {}
+    }
+    block.into_any_element()
+}
+
+fn render_release_notes_preview(notes: &str, s: &Strings, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
     div()
         .flex()
         .flex_col()
-        .gap(px(14.0))
-        .child(hero_card)
-        .child(security_card)
-        .child(license_card)
-        .child(runtime_card)
+        .gap(px(4.0))
+        .child(
+            div()
+                .text_xs()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(colors.muted)
+                .child(s.updates_release_notes_label),
+        )
+        .child(
+            div()
+                .id("settings-update-release-notes")
+                .w_full()
+                .max_h(px(140.0))
+                .overflow_y_scroll()
+                .rounded(px(CONTROL_RADIUS_PX))
+                .border_1()
+                .border_color(hairline_border_color(cx))
+                .p(px(10.0))
+                .text_xs()
+                .text_color(colors.foreground)
+                .child(notes.to_owned()),
+        )
         .into_any_element()
+}
+
+fn render_updates_actions(
+    install_mode: InstallMode,
+    state: &UpdateState,
+    s: &Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let is_checking = matches!(state, UpdateState::Checking);
+    let is_downloading = matches!(state, UpdateState::Downloading { .. });
+    let is_standalone = install_mode == InstallMode::Standalone;
+
+    let check_btn = Button::new("settings-update-check-btn")
+        .variant(Variant::Secondary)
+        .size(HeroSize::Sm)
+        .is_disabled(is_standalone || is_checking || is_downloading)
+        .on_press(cx.listener(|ws, _, _w, cx| {
+            ws.controller.check_for_updates();
+            cx.notify();
+        }))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .child(Icon::new(IconName::RefreshCw).size(IconSize::Xs))
+                .child(if is_checking {
+                    s.updates_btn_checking
+                } else {
+                    s.updates_btn_check
+                }),
+        );
+
+    let mut row = div()
+        .pt(px(2.0))
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(px(8.0))
+        .child(check_btn);
+
+    if matches!(state, UpdateState::Available { .. }) || is_downloading {
+        let download_btn = Button::new("settings-update-download-btn")
+            .variant(Variant::Primary)
+            .size(HeroSize::Sm)
+            .is_disabled(is_downloading)
+            .on_press(cx.listener(|ws, _, _w, cx| {
+                ws.controller.download_update();
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0))
+                    .child(Icon::new(IconName::Download).size(IconSize::Xs))
+                    .child(if is_downloading {
+                        s.updates_btn_downloading
+                    } else {
+                        s.updates_btn_download
+                    }),
+            );
+        row = row.child(download_btn);
+    }
+
+    if matches!(state, UpdateState::ReadyToRestart { .. }) {
+        let restart_btn = Button::new("settings-update-restart-btn")
+            .variant(Variant::Primary)
+            .size(HeroSize::Sm)
+            .on_press(cx.listener(|ws, _, _w, cx| {
+                if let Err(err) = ws.controller.apply_update_and_restart() {
+                    push_error_toast(
+                        ws.controller.strings.updates_toast_apply_failed,
+                        Some(SharedString::from(err)),
+                        cx,
+                    );
+                    cx.notify();
+                }
+            }))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0))
+                    .child(Icon::new(IconName::RotateCw).size(IconSize::Xs))
+                    .child(s.updates_btn_restart),
+            );
+        row = row.child(restart_btn);
+    }
+
+    row.into_any_element()
 }
 
 fn diag_kv_row(label: &str, value: &str, cx: &App) -> AnyElement {
@@ -2034,7 +2368,8 @@ fn persist_settings(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorks
                 );
             } else {
                 ws.settings_ui.dirty = false;
-                ws.settings_view.status_notice = Some(ws.controller.strings.settings_saved.to_owned());
+                ws.settings_view.status_notice =
+                    Some(ws.controller.strings.settings_saved.to_owned());
             }
         }
         Err(err) => {
@@ -2080,7 +2415,8 @@ fn apply_builtin_content_theme(
     window: &Window,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
-    let mut base = ThemeDefinition::from_builtin_id(id).unwrap_or_else(ThemeDefinition::builtin_dark);
+    let mut base =
+        ThemeDefinition::from_builtin_id(id).unwrap_or_else(ThemeDefinition::builtin_dark);
     // Sync chrome appearance & Gaussian blur automatically when selecting a theme preset.
     ws.controller.settings.theme = match base.appearance {
         ThemeAppearance::Light => ThemePreference::Light,
@@ -2197,11 +2533,7 @@ fn browse_vscode_theme_file(
             };
             let Ok(bytes) = std::fs::read(&path) else {
                 let _ = this.update(cx, |ws, cx| {
-                    push_error_toast(
-                        ws.controller.strings.theme_file_read_failed_toast,
-                        None,
-                        cx,
-                    );
+                    push_error_toast(ws.controller.strings.theme_file_read_failed_toast, None, cx);
                 });
                 return;
             };
