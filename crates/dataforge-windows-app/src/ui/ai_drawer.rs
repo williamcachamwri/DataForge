@@ -584,12 +584,7 @@ fn render_empty_transcript_card(ws: &DataForgeWorkspace, cx: &App) -> AnyElement
                         .text_color(colors.foreground)
                         .child(s.ai_empty_title),
                 )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(colors.muted)
-                        .child(context_line),
-                )
+                .child(div().text_xs().text_color(colors.muted).child(context_line))
                 .child(
                     div()
                         .text_xs()
