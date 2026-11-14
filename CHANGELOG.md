@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-15
+
+### Maintenance
+
+- Maintenance release.
 ## [0.1.1] - 2026-11-15
 
 ### Fixed
@@ -37,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Full 6-Locale Localization (i18n)**: Complete UI and diagnostic coverage for `en-US`, `vi-VN`, `zh-CN`, `ja-JP`, `es-ES`, and `fr-FR`, including runtime language switching in Settings.
 - **CI/CD & Release Packaging**: Automated GitHub Actions release verification, Velopack (`Setup.exe`, `Portable.zip`, and delta `.nupkg`) packaging, `SHA256SUMS.txt`, and `git-cliff` release notes.
 
-[Unreleased]: https://github.com/williamcachamwri/DataForge/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/williamcachamwri/DataForge/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/williamcachamwri/DataForge/compare/v0.1.0...v0.1.2
 [0.1.1]: https://github.com/williamcachamwri/DataForge/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/williamcachamwri/DataForge/releases/tag/v0.1.0
