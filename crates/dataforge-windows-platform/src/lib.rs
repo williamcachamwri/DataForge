@@ -23,7 +23,7 @@ pub use paths::{APP_DIR_NAME, storage_paths, storage_paths_for};
 pub use secrets::{DEFAULT_CREDENTIAL_PREFIX, LAYOUT_KEYWORD, PART_SIZE, WindowsCredentialStore};
 pub use settings::{
     AppSettings, EditorFont, FontSpec, McpSettings, SETTINGS_FILENAME, ThemePreference,
-    WindowGeometry,
+    WindowBackdropPreference, WindowGeometry,
 };
 pub use single_instance::{
     DEFAULT_MUTEX_NAME, DEFAULT_PIPE_NAME, ForwardPayload, NamedPipeServer, SingleInstanceLock,
