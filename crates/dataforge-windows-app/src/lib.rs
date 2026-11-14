@@ -18,6 +18,7 @@ pub mod ipc;
 pub mod services;
 pub mod shell_layout;
 pub mod ui;
+pub mod updater;
 pub mod views;
 pub mod window;
 
