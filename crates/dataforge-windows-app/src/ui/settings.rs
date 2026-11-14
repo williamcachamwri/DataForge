@@ -2,25 +2,25 @@
 //! & VS Code Theme JSON import, separate Editor/Value fonts, Behavior & Safety,
 //! live MCP Server lifecycle + IDE configs, and real Diagnostics.
 
-use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use dataforge_state::theme::{ThemeAppearance, ThemeDefinition, ThemeSlot, VsCodeThemeImporter};
 use dataforge_windows_platform::{
-    AppSettings, ThemePreference, detect_reduced_motion, storage_paths,
+    AppSettings, ThemePreference, WindowBackdropPreference, detect_reduced_motion, storage_paths,
 };
+use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
     Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Chip, ChipLabel,
-    ChipVariant, Icon, IconName, IconSize, InputState, ListBox, ListBoxItem, NumberField,
-    NumberState, PickerItem, Scrollbar, Select, Separator, Slider, Switch, TextArea, Variant,
+    ChipVariant, Icon, IconName, IconSize, InputState, NumberField, NumberState, PickerItem,
+    Scrollbar, Select, Separator, Switch, TextArea, Variant,
 };
-use herogpui::core::{Color as HeroColor, SelectionMode, Size as HeroSize};
+use herogpui::core::{Color as HeroColor, Size as HeroSize, with_alpha};
 use herogpui::gpui::prelude::FluentBuilder as _;
 use herogpui::gpui::{
-    AnyElement, App, AppContext as _, AsyncApp, ClipboardItem, Context, Entity, InteractiveElement,
-    IntoElement, ParentElement, PathPromptOptions, ScrollHandle, SharedString,
-    StatefulInteractiveElement, Styled, Task, WeakEntity, Window, div, px,
+    AnyElement, App, AppContext as _, AsyncApp, ClipboardItem, Context, Entity, FontWeight,
+    ImageSource, InteractiveElement, IntoElement, ParentElement, PathPromptOptions, ScrollHandle,
+    SharedString, StatefulInteractiveElement, Styled, Task, WeakEntity, Window, div, img, px,
 };
 use herogpui::theme::ActiveTheme;
 use secrecy::ExposeSecret;
@@ -31,7 +31,8 @@ use super::shell_state::{SettingsSection, push_error_toast, push_success_toast};
 use super::syntax_bridge::styled_sql_block;
 use super::theme::{
     CONTROL_RADIUS_PX, ContentThemePalette, HAIRLINE_BORDER_PX, MICRO_GAP_PX, editor_gpui_font,
-    hairline_border_color, muted_surface_bg, panel_surface_bg, value_gpui_font,
+    effective_duration_ms, hairline_border_color, is_reduced_motion, muted_surface_bg,
+    panel_surface_bg, value_gpui_font,
 };
 use crate::app::ScreenMode;
 
@@ -50,15 +51,17 @@ enum SettingsCategory {
     BehaviorAndSafety,
     McpServer,
     Diagnostics,
+    About,
 }
 
 impl SettingsCategory {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::Appearance,
         Self::EditorAndFonts,
         Self::BehaviorAndSafety,
         Self::McpServer,
         Self::Diagnostics,
+        Self::About,
     ];
 
     const fn key(self) -> &'static str {
@@ -68,11 +71,8 @@ impl SettingsCategory {
             Self::BehaviorAndSafety => "behavior-safety",
             Self::McpServer => "mcp-server",
             Self::Diagnostics => "diagnostics",
+            Self::About => "about",
         }
-    }
-
-    fn from_key(key: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|cat| cat.key() == key)
     }
 
     const fn label(self) -> &'static str {
@@ -82,6 +82,7 @@ impl SettingsCategory {
             Self::BehaviorAndSafety => "Behavior & Safety",
             Self::McpServer => "MCP Server",
             Self::Diagnostics => "Diagnostics",
+            Self::About => "About",
         }
     }
 
@@ -92,6 +93,7 @@ impl SettingsCategory {
             Self::BehaviorAndSafety => IconName::Shield,
             Self::McpServer => IconName::Server,
             Self::Diagnostics => IconName::Activity,
+            Self::About => IconName::Info,
         }
     }
 
@@ -106,11 +108,10 @@ impl SettingsCategory {
 
     const fn to_section(self) -> SettingsSection {
         match self {
-            Self::Appearance => SettingsSection::Appearance,
+            Self::Appearance | Self::Diagnostics | Self::About => SettingsSection::Appearance,
             Self::EditorAndFonts => SettingsSection::Editor,
             Self::BehaviorAndSafety => SettingsSection::Shortcuts,
             Self::McpServer => SettingsSection::McpServer,
-            Self::Diagnostics => SettingsSection::Appearance,
         }
     }
 }
@@ -124,6 +125,7 @@ pub struct SettingsScreenState {
     theme_json_input: Entity<InputState>,
     theme_json_error: Option<String>,
     editor_size_state: Entity<NumberState>,
+    editor_line_height_state: Entity<NumberState>,
     value_size_state: Entity<NumberState>,
     fetch_limit_state: Entity<NumberState>,
     query_timeout_state: Entity<NumberState>,
@@ -145,6 +147,7 @@ impl SettingsScreenState {
     pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
         let theme_json_input = cx.new(|cx| InputState::new(cx));
         let editor_size_state = cx.new(|cx| NumberState::new(cx, 13.0));
+        let editor_line_height_state = cx.new(|cx| NumberState::new(cx, 1.4));
         let value_size_state = cx.new(|cx| NumberState::new(cx, 12.0));
         let fetch_limit_state = cx.new(|cx| NumberState::new(cx, 100.0));
         let query_timeout_state = cx.new(|cx| NumberState::new(cx, 30.0));
@@ -158,6 +161,7 @@ impl SettingsScreenState {
             theme_json_input,
             theme_json_error: None,
             editor_size_state,
+            editor_line_height_state,
             value_size_state,
             fetch_limit_state,
             query_timeout_state,
@@ -241,6 +245,11 @@ fn sync_settings_from_controller(ws: &mut DataForgeWorkspace, cx: &mut App) {
     sync_number_if_diff(
         &ws.settings_ui.editor_size_state,
         f64::from(ws.controller.settings.editor_font.size),
+        cx,
+    );
+    sync_number_if_diff(
+        &ws.settings_ui.editor_line_height_state,
+        f64::from(ws.controller.settings.editor_font.line_height),
         cx,
     );
     sync_number_if_diff(
@@ -329,7 +338,7 @@ fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
                 .child(
                     div()
                         .text_sm()
-                        .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
+                        .font_weight(FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
                         .child("Settings"),
                 ),
@@ -361,45 +370,138 @@ fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         .into_any_element()
 }
 
-fn render_sidebar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
-    let active_key = ws.settings_ui.active_category.key();
-    let items: Vec<ListBoxItem> = SettingsCategory::ALL
-        .into_iter()
-        .map(|cat| {
-            ListBoxItem::new(cat.key(), cat.label())
-                .icon(cat.icon())
-                .description(category_subtitle(cat))
-        })
-        .collect();
+fn render_sidebar_nav_item(
+    cat: SettingsCategory,
+    active_cat: SettingsCategory,
+    nav_motion: Motion,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let is_active = cat == active_cat;
+    let row_bg = if is_active {
+        with_alpha(colors.accent.color, 0.13)
+    } else {
+        herogpui::gpui::transparent_black()
+    };
+    let row_border = if is_active {
+        with_alpha(colors.accent.color, 0.24)
+    } else {
+        herogpui::gpui::transparent_black()
+    };
+    let badge_bg = if is_active {
+        colors.accent.color
+    } else {
+        with_alpha(colors.foreground, 0.07)
+    };
+    let icon_fg = if is_active {
+        colors.accent.foreground
+    } else {
+        colors.muted
+    };
+    let label_fg = if is_active {
+        colors.foreground
+    } else {
+        colors.muted
+    };
+    let hover_bg = with_alpha(colors.foreground, 0.055);
 
     div()
-        .w(px(232.0))
+        .id(SharedString::from(format!("settings-nav-{}", cat.key())))
+        .h(px(34.0))
+        .w_full()
+        .px(px(8.0))
+        .rounded(px(7.0))
+        .bg(row_bg)
+        .border_1()
+        .border_color(row_border)
+        .flex()
+        .items_center()
+        .gap(px(10.0))
+        .cursor_pointer()
+        .when(!is_active, |el| el.hover(move |s| s.bg(hover_bg)))
+        .on_click(cx.listener(move |ws, _, _window, cx| {
+            if ws.settings_ui.active_category != cat {
+                ws.settings_ui.active_category = cat;
+                let mapped = cat.to_section();
+                ws.settings_view.section = mapped;
+                ws.settings_ui.last_external_section = mapped;
+                cx.notify();
+            }
+        }))
+        .child(
+            div()
+                .w(px(22.0))
+                .h(px(22.0))
+                .rounded(px(5.0))
+                .flex_shrink_0()
+                .bg(badge_bg)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(Icon::new(cat.icon()).size(IconSize::Xs).color(icon_fg)),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .text_sm()
+                .truncate()
+                .font_weight(if is_active {
+                    FontWeight::SEMIBOLD
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(label_fg)
+                .child(cat.label()),
+        )
+        .when(is_active, |el| {
+            let indicator = div()
+                .w(px(3.0))
+                .h(px(14.0))
+                .rounded(px(2.0))
+                .bg(colors.accent.color);
+            el.child(entering_from(
+                indicator,
+                SharedString::from(format!("settings-nav-pill-{}", cat.key())),
+                Edge::Left,
+                px(4.0),
+                nav_motion,
+                cx,
+            ))
+        })
+        .into_any_element()
+}
+
+fn render_sidebar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+    let active_cat = ws.settings_ui.active_category;
+    let nav_motion = Motion {
+        ms: effective_duration_ms(140, cx),
+        scale: 1.0,
+        curve: Curve::OutFluid,
+    };
+
+    let mut list = div()
+        .id("settings-category-list")
+        .flex()
+        .flex_col()
+        .gap(px(3.0));
+
+    for cat in SettingsCategory::ALL {
+        if cat == SettingsCategory::About {
+            list = list.child(div().py(px(4.0)).px(px(6.0)).child(Separator::new()));
+        }
+        list = list.child(render_sidebar_nav_item(cat, active_cat, nav_motion, cx));
+    }
+
+    div()
+        .w(px(224.0))
         .h_full()
         .flex_shrink_0()
         .p(px(10.0))
         .bg(muted_surface_bg(cx))
         .border_r(px(HAIRLINE_BORDER_PX))
         .border_color(hairline_border_color(cx))
-        .child(
-            ListBox::new("settings-category-list", items)
-                .selection_mode(SelectionMode::Single)
-                .selected_key(active_key)
-                .on_selection_change(cx.listener(
-                    |ws, selected: &HashSet<SharedString>, _window, cx| {
-                        if let Some(cat) = selected
-                            .iter()
-                            .next()
-                            .and_then(|k| SettingsCategory::from_key(k.as_ref()))
-                        {
-                            ws.settings_ui.active_category = cat;
-                            let mapped = cat.to_section();
-                            ws.settings_view.section = mapped;
-                            ws.settings_ui.last_external_section = mapped;
-                            cx.notify();
-                        }
-                    },
-                )),
-        )
+        .child(list)
         .into_any_element()
 }
 
@@ -417,24 +519,25 @@ fn render_category_body(
         SettingsCategory::BehaviorAndSafety => render_behavior_safety_section(ws, cx),
         SettingsCategory::McpServer => render_mcp_section(ws, cx),
         SettingsCategory::Diagnostics => render_diagnostics_section(ws, cx),
+        SettingsCategory::About => render_about_section(ws, cx),
     };
 
     let container = div()
         .w_full()
-        .max_w(px(760.0))
+        .max_w(px(740.0))
         .p(px(24.0))
         .flex()
         .flex_col()
-        .gap(px(16.0))
+        .gap(px(18.0))
         .child(
             div()
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(px(3.0))
                 .child(
                     div()
-                        .text_base()
-                        .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
+                        .text_lg()
+                        .font_weight(FontWeight::SEMIBOLD)
                         .text_color(colors.foreground)
                         .child(category.label()),
                 )
@@ -447,6 +550,20 @@ fn render_category_body(
         )
         .child(section_el);
 
+    let body_motion = Motion {
+        ms: effective_duration_ms(220, cx),
+        scale: 0.992,
+        curve: Curve::OutFluid,
+    };
+    let animated_container = entering_from(
+        container,
+        SharedString::from(format!("settings-cat-enter-{}", category.key())),
+        Edge::Bottom,
+        px(10.0),
+        body_motion,
+        cx,
+    );
+
     div()
         .relative()
         .flex_1()
@@ -457,9 +574,45 @@ fn render_category_body(
                 .size_full()
                 .overflow_y_scroll()
                 .track_scroll(&scroll_handle)
-                .child(container),
+                .child(animated_container),
         )
         .child(Scrollbar::new("settings-scrollbar", scroll_handle))
+        .into_any_element()
+}
+
+fn settings_row(
+    label: impl Into<SharedString>,
+    description: Option<&'static str>,
+    control: impl IntoElement,
+    cx: &App,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    div()
+        .w_full()
+        .overflow_hidden()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(16.0))
+        .child(
+            div()
+                .flex_1()
+                .min_w(px(0.0))
+                .flex()
+                .flex_col()
+                .gap(px(2.0))
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(colors.foreground)
+                        .child(label.into()),
+                )
+                .when_some(description, |el, desc| {
+                    el.child(div().text_xs().text_color(colors.muted).child(desc))
+                }),
+        )
+        .child(control)
         .into_any_element()
 }
 
@@ -474,48 +627,58 @@ fn render_appearance_section(
         PickerItem::new("dark", "Dark"),
         PickerItem::new("high-contrast", "High Contrast"),
     ];
-    let pref_select = Select::new("settings-theme-pref", pref_items)
-        .label("Interface Appearance")
-        .description("Controls window chrome, sidebars, and drawers.")
-        .full_width(true)
-        .value(Some(SharedString::from(pref_key)))
-        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, window, cx| {
-            if let Some(next_pref) = key.as_deref().and_then(parse_theme_pref) {
-                apply_theme_preference(ws, next_pref, window, cx);
-            }
-        }));
+    let pref_select = div().w(px(230.0)).flex_shrink_0().child(
+        Select::new("settings-theme-pref", pref_items)
+            .full_width(true)
+            .value(Some(SharedString::from(pref_key)))
+            .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, window, cx| {
+                if let Some(next_pref) = key.as_deref().and_then(parse_theme_pref) {
+                    apply_theme_preference(ws, next_pref, window, cx);
+                }
+            })),
+    );
 
-    let preset_key = ws.controller.content_theme.id.0.clone();
-    let preset_items = vec![
-        PickerItem::new("builtin.light", "DataForge Light"),
-        PickerItem::new("builtin.dark", "DataForge Dark"),
-        PickerItem::new("builtin.high_contrast", "DataForge High Contrast"),
-    ];
-    let preset_select = Select::new("settings-content-preset", preset_items)
-        .label("Content Theme Preset")
-        .description("Drives SQL syntax highlighting and Data Grid surfaces (26 ThemeSlots).")
-        .full_width(true)
-        .value(Some(SharedString::from(preset_key)))
-        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, window, cx| {
-            if let Some(id) = key.as_deref() {
-                apply_builtin_content_theme(ws, id, window, cx);
-            }
-        }));
+    let (backdrop_select, preset_select, syntax_select) = render_theme_and_blur_selects(ws, cx);
 
     let appearance_card = Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("Theme & Content Palette"))
                 .child(CardDescription::new().child(
-                    "Chrome adapts cleanly to Windows while preserving custom SQL syntax palettes.",
+                    "Choose window blur, matching UI + syntax themes, or mix any SQL codeblock palette.",
                 )),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
-                .child(pref_select)
+                .child(settings_row(
+                    "Interface Appearance",
+                    Some("Controls window chrome, sidebars, and drawers."),
+                    pref_select,
+                    cx,
+                ))
                 .child(Separator::new())
-                .child(preset_select),
+                .child(settings_row(
+                    "Window Backdrop",
+                    Some("Enable Gaussian Blur frosted glass or Windows 11 Mica translucency."),
+                    backdrop_select,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    "UI + Syntax Theme Preset",
+                    Some("Harmonized 26-slot UI surface and SQL codeblock theme presets."),
+                    preset_select,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    "Codeblock Syntax Palette",
+                    Some("Override SQL keyword, string, comment, and operator colors independently."),
+                    syntax_select,
+                    cx,
+                )),
         );
 
     let importer_card = render_vscode_theme_import_card(ws, cx);
@@ -527,6 +690,92 @@ fn render_appearance_section(
         .child(appearance_card)
         .child(importer_card)
         .into_any_element()
+}
+
+fn render_theme_and_blur_selects(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> (AnyElement, AnyElement, AnyElement) {
+    let backdrop_key = backdrop_pref_key(ws.controller.settings.window_backdrop);
+    let backdrop_items = vec![
+        PickerItem::new("opaque", "Standard (Opaque)"),
+        PickerItem::new("gaussian_blur", "Gaussian Blur (Frosted Glass)"),
+        PickerItem::new("mica", "Windows 11 Mica"),
+        PickerItem::new("mica_alt", "Windows 11 Mica Alt"),
+    ];
+    let backdrop_select = div()
+        .w(px(230.0))
+        .flex_shrink_0()
+        .child(
+            Select::new("settings-window-backdrop", backdrop_items)
+                .full_width(true)
+                .value(Some(SharedString::from(backdrop_key)))
+                .on_selection_change(cx.listener(
+                    |ws, key: &Option<SharedString>, window, cx| {
+                        if let Some(next_backdrop) = key.as_deref().and_then(parse_backdrop_pref) {
+                            apply_window_backdrop(ws, next_backdrop, window, cx);
+                        }
+                    },
+                )),
+        )
+        .into_any_element();
+
+    let all_presets = ThemeDefinition::builtin_presets();
+    let preset_key = ws
+        .controller
+        .settings
+        .content_theme_id
+        .clone()
+        .unwrap_or_else(|| ws.controller.content_theme.id.0.clone());
+    let preset_items: Vec<PickerItem> = all_presets
+        .iter()
+        .map(|t| PickerItem::new(t.id.0.clone(), t.name.clone()))
+        .collect();
+    let preset_select = div()
+        .w(px(230.0))
+        .flex_shrink_0()
+        .child(
+            Select::new("settings-content-preset", preset_items)
+                .full_width(true)
+                .value(Some(SharedString::from(preset_key)))
+                .on_selection_change(cx.listener(
+                    |ws, key: &Option<SharedString>, window, cx| {
+                        if let Some(id) = key.as_deref() {
+                            apply_builtin_content_theme(ws, id, window, cx);
+                        }
+                    },
+                )),
+        )
+        .into_any_element();
+
+    let syntax_key = ws
+        .controller
+        .settings
+        .syntax_palette_id
+        .clone()
+        .unwrap_or_else(|| "match_theme".to_owned());
+    let mut syntax_items = vec![PickerItem::new("match_theme", "Match Active Theme")];
+    for t in &all_presets {
+        syntax_items.push(PickerItem::new(t.id.0.clone(), t.name.clone()));
+    }
+    let syntax_select = div()
+        .w(px(230.0))
+        .flex_shrink_0()
+        .child(
+            Select::new("settings-syntax-palette", syntax_items)
+                .full_width(true)
+                .value(Some(SharedString::from(syntax_key)))
+                .on_selection_change(cx.listener(
+                    |ws, key: &Option<SharedString>, window, cx| {
+                        if let Some(id) = key.as_deref() {
+                            apply_syntax_palette(ws, id, window, cx);
+                        }
+                    },
+                )),
+        )
+        .into_any_element();
+
+    (backdrop_select, preset_select, syntax_select)
 }
 
 fn render_vscode_theme_preview(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
@@ -580,6 +829,15 @@ fn render_vscode_theme_import_card(
         json_area = json_area.is_invalid(true).error_message(err);
     }
 
+    let json_container = div()
+        .w_full()
+        .p(px(4.0))
+        .rounded(px(CONTROL_RADIUS_PX))
+        .bg(muted_surface_bg(cx))
+        .border_1()
+        .border_color(hairline_border_color(cx))
+        .child(json_area);
+
     let browse_btn = Button::new("settings-browse-vscode-theme")
         .variant(Variant::Secondary)
         .size(HeroSize::Sm)
@@ -604,7 +862,7 @@ fn render_vscode_theme_import_card(
         }))
         .child("Import & Preview");
 
-    let mut content = CardContent::new().sx(|d| d.gap(px(10.0)));
+    let mut content = CardContent::new().sx(|d| d.gap(px(12.0)));
     if let Some(msg) = last_import {
         content = content.child(
             Chip::new()
@@ -615,7 +873,7 @@ fn render_vscode_theme_import_card(
         );
     }
     content = content
-        .child(json_area)
+        .child(json_container)
         .child(
             div()
                 .flex()
@@ -628,6 +886,7 @@ fn render_vscode_theme_import_card(
         .child(render_vscode_theme_preview(ws, cx));
 
     Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("VS Code JSON Theme Import"))
@@ -689,71 +948,68 @@ fn render_editor_fonts_section(
         .into_any_element()
 }
 
+const EDITOR_FONT_FAMILIES: [&str; 5] = [
+    "Cascadia Mono",
+    "Cascadia Code",
+    "Consolas",
+    "JetBrains Mono",
+    "Fira Code",
+];
+
 fn render_editor_font_card(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let spec = &ws.controller.settings.editor_font;
-    let family_items = vec![
-        PickerItem::new("Cascadia Mono", "Cascadia Mono"),
-        PickerItem::new("Cascadia Code", "Cascadia Code"),
-        PickerItem::new("Consolas", "Consolas"),
-        PickerItem::new("JetBrains Mono", "JetBrains Mono"),
-        PickerItem::new("Fira Code", "Fira Code"),
-    ];
-    let family_select = Select::new("settings-editor-font-family", family_items)
-        .label("SQL & Structure Font Family")
-        .full_width(true)
-        .value(Some(SharedString::from(spec.family.clone())))
-        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _w, cx| {
-            if let Some(fam) = key.as_ref() {
-                ws.controller.settings.editor_font.family = fam.to_string();
+    let family_items: Vec<PickerItem> = EDITOR_FONT_FAMILIES
+        .into_iter()
+        .map(|f| PickerItem::new(f, f))
+        .collect();
+    let family_select = div().w(px(230.0)).flex_shrink_0().child(
+        Select::new("settings-editor-font-family", family_items)
+            .full_width(true)
+            .value(Some(SharedString::from(spec.family.clone())))
+            .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _w, cx| {
+                if let Some(fam) = key.as_ref() {
+                    ws.controller.settings.editor_font.family = fam.to_string();
+                    persist_settings(ws, cx);
+                }
+            })),
+    );
+
+    let size_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
+        NumberField::new(&ws.settings_ui.editor_size_state)
+            .full_width(true)
+            .min_value(9.0)
+            .max_value(28.0)
+            .step(0.5)
+            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                ws.controller.settings.editor_font.size = (val as f32).clamp(9.0, 28.0);
                 persist_settings(ws, cx);
-            }
-        }));
+            })),
+    );
 
-    let size_slider = Slider::new("settings-editor-font-size-slider", spec.size)
-        .min_value(9.0)
-        .max_value(28.0)
-        .step(0.5)
-        .label("Font Size (pt)")
-        .show_value(true)
-        .on_change(cx.listener(|ws, &val: &f32, _w, cx| {
-            ws.controller.settings.editor_font.size = val.clamp(9.0, 28.0);
-            persist_settings(ws, cx);
-        }));
-
-    let size_field = NumberField::new(&ws.settings_ui.editor_size_state)
-        .label("Exact Size")
-        .min_value(9.0)
-        .max_value(28.0)
-        .step(0.5)
-        .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-            ws.controller.settings.editor_font.size = (val as f32).clamp(9.0, 28.0);
-            persist_settings(ws, cx);
-        }));
-
-    let line_height_slider = Slider::new("settings-editor-line-height", spec.line_height)
-        .min_value(1.0)
-        .max_value(2.2)
-        .step(0.05)
-        .label("Line Height")
-        .show_value(true)
-        .on_change(cx.listener(|ws, &val: &f32, _w, cx| {
-            ws.controller.settings.editor_font.line_height = val.clamp(1.0, 2.2);
-            persist_settings(ws, cx);
-        }));
+    let line_height_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
+        NumberField::new(&ws.settings_ui.editor_line_height_state)
+            .full_width(true)
+            .min_value(1.0)
+            .max_value(2.2)
+            .step(0.05)
+            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                ws.controller.settings.editor_font.line_height = (val as f32).clamp(1.0, 2.2);
+                persist_settings(ws, cx);
+            })),
+    );
 
     let ligatures_switch = Switch::new("settings-editor-ligatures")
         .is_selected(spec.ligatures)
-        .label("Programming Ligatures")
-        .description("Renders >=, !=, => ligatures in fonts that support OpenType features.")
         .on_change(cx.listener(|ws, &enabled: &bool, _w, cx| {
             ws.controller.settings.editor_font.ligatures = enabled;
             persist_settings(ws, cx);
         }));
 
     Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("SQL Editor Font (editor_font)"))
@@ -764,19 +1020,34 @@ fn render_editor_font_card(
         )
         .child(
             CardContent::new()
-                .sx(|d| d.gap(px(10.0)))
-                .child(family_select)
-                .child(
-                    div()
-                        .flex()
-                        .items_end()
-                        .gap(px(12.0))
-                        .child(div().flex_1().child(size_slider))
-                        .child(div().w(px(120.0)).child(size_field)),
-                )
-                .child(line_height_slider)
+                .sx(|d| d.gap(px(12.0)))
+                .child(settings_row(
+                    "SQL & Structure Font Family",
+                    None,
+                    family_select,
+                    cx,
+                ))
                 .child(Separator::new())
-                .child(ligatures_switch),
+                .child(settings_row(
+                    "Font Size (pt)",
+                    Some("9.0 – 28.0 pt."),
+                    size_field,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    "Line Height",
+                    Some("Multiplier (1.00 – 2.20)."),
+                    line_height_field,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    "Programming Ligatures",
+                    Some("Renders >=, !=, => ligatures in fonts that support OpenType features."),
+                    ligatures_switch,
+                    cx,
+                )),
         )
         .into_any_element()
 }
@@ -793,48 +1064,43 @@ fn render_value_font_card(
         PickerItem::new("Consolas", "Consolas"),
         PickerItem::new("Inter", "Inter"),
     ];
-    let family_select = Select::new("settings-value-font-family", family_items)
-        .label("Data Grid & Inspector Value Font Family")
-        .full_width(true)
-        .value(Some(SharedString::from(spec.family.clone())))
-        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _w, cx| {
-            if let Some(fam) = key.as_ref() {
-                ws.controller.settings.value_font.family = fam.to_string();
+    let family_select = div().w(px(230.0)).flex_shrink_0().child(
+        Select::new("settings-value-font-family", family_items)
+            .full_width(true)
+            .value(Some(SharedString::from(spec.family.clone())))
+            .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _w, cx| {
+                if let Some(fam) = key.as_ref() {
+                    ws.controller.settings.value_font.family = fam.to_string();
+                    persist_settings(ws, cx);
+                }
+            })),
+    );
+
+    let size_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
+        NumberField::new(&ws.settings_ui.value_size_state)
+            .full_width(true)
+            .min_value(9.0)
+            .max_value(24.0)
+            .step(0.5)
+            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                ws.controller.settings.value_font.size = (val as f32).clamp(9.0, 24.0);
                 persist_settings(ws, cx);
-            }
-        }));
-
-    let size_slider = Slider::new("settings-value-font-size-slider", spec.size)
-        .min_value(9.0)
-        .max_value(24.0)
-        .step(0.5)
-        .label("Value Size (pt)")
-        .show_value(true)
-        .on_change(cx.listener(|ws, &val: &f32, _w, cx| {
-            ws.controller.settings.value_font.size = val.clamp(9.0, 24.0);
-            persist_settings(ws, cx);
-        }));
-
-    let size_field = NumberField::new(&ws.settings_ui.value_size_state)
-        .label("Exact Size")
-        .min_value(9.0)
-        .max_value(24.0)
-        .step(0.5)
-        .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-            ws.controller.settings.value_font.size = (val as f32).clamp(9.0, 24.0);
-            persist_settings(ws, cx);
-        }));
+            })),
+    );
 
     let sample_text = div()
         .px(px(10.0))
         .py(px(8.0))
         .rounded(px(CONTROL_RADIUS_PX))
         .bg(muted_surface_bg(cx))
+        .border_1()
+        .border_color(hairline_border_color(cx))
         .font(value_gpui_font(&ws.controller.settings))
         .text_xs()
         .child("1,048,576  |  2026-11-14 01:05:12.409  |  order_uuid_7f9c");
 
     Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("Tabular Value Font (value_font)"))
@@ -844,16 +1110,20 @@ fn render_value_font_card(
         )
         .child(
             CardContent::new()
-                .sx(|d| d.gap(px(10.0)))
-                .child(family_select)
-                .child(
-                    div()
-                        .flex()
-                        .items_end()
-                        .gap(px(12.0))
-                        .child(div().flex_1().child(size_slider))
-                        .child(div().w(px(120.0)).child(size_field)),
-                )
+                .sx(|d| d.gap(px(12.0)))
+                .child(settings_row(
+                    "Data Grid & Inspector Value Font Family",
+                    None,
+                    family_select,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    "Value Size (pt)",
+                    Some("9.0 – 24.0 pt."),
+                    size_field,
+                    cx,
+                ))
                 .child(sample_text),
         )
         .into_any_element()
@@ -868,8 +1138,6 @@ fn render_editor_behavior_card(
 
     let vim_switch = Switch::new("settings-vim-mode")
         .is_selected(vim_on)
-        .label("Vim Keybindings in SQL Editor")
-        .description("Enables Normal, Insert, Visual, and Command modes in the SQL editor.")
         .on_change(cx.listener(|ws, &want_on: &bool, _w, cx| {
             if (ws.controller.vim_mode.is_some()) != want_on {
                 ws.controller.toggle_vim_mode();
@@ -877,56 +1145,46 @@ fn render_editor_behavior_card(
             cx.notify();
         }));
 
+    let motion_chip = Chip::new()
+        .variant(ChipVariant::Soft)
+        .color(if reduced_motion {
+            HeroColor::Accent
+        } else {
+            HeroColor::Default
+        })
+        .size(HeroSize::Sm)
+        .child(ChipLabel::new().child(if reduced_motion {
+            "Reduced Motion Active"
+        } else {
+            "Standard Motion"
+        }));
+
     Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("Editing & Accessibility"))
-                .child(CardDescription::new().child("Editor modal bindings and Windows motion preferences.")),
+                .child(
+                    CardDescription::new()
+                        .child("Editor modal bindings and Windows motion preferences."),
+                ),
         )
         .child(
             CardContent::new()
-                .sx(|d| d.gap(px(10.0)))
-                .child(vim_switch)
+                .sx(|d| d.gap(px(12.0)))
+                .child(settings_row(
+                    "Vim Keybindings in SQL Editor",
+                    Some("Enables Normal, Insert, Visual, and Command modes in the SQL editor."),
+                    vim_switch,
+                    cx,
+                ))
                 .child(Separator::new())
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .child(
-                            div()
-                                .flex()
-                                .flex_col()
-                                .gap(px(2.0))
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .font_weight(herogpui::gpui::FontWeight::MEDIUM)
-                                        .child("Windows Reduced Motion (SPI_GETCLIENTAREAANIMATION)"),
-                                )
-                                .child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.colors().muted)
-                                        .child("Drawers and modals automatically snap in 0ms when Windows animation is disabled."),
-                                ),
-                        )
-                        .child(
-                            Chip::new()
-                                .variant(ChipVariant::Soft)
-                                .color(if reduced_motion {
-                                    HeroColor::Accent
-                                } else {
-                                    HeroColor::Default
-                                })
-                                .size(HeroSize::Sm)
-                                .child(ChipLabel::new().child(if reduced_motion {
-                                    "Reduced Motion Active"
-                                } else {
-                                    "Standard Motion"
-                                })),
-                        ),
-                ),
+                .child(settings_row(
+                    "Windows Reduced Motion (SPI_GETCLIENTAREAANIMATION)",
+                    Some("Drawers and modals automatically snap in 0ms when Windows animation is disabled."),
+                    motion_chip,
+                    cx,
+                )),
         )
         .into_any_element()
 }
@@ -937,10 +1195,6 @@ fn render_behavior_safety_section(
 ) -> AnyElement {
     let restore_switch = Switch::new("settings-restore-session")
         .is_selected(ws.controller.settings.restore_session)
-        .label("Restore Workspace Tabs on Startup")
-        .description(
-            "Automatically reopen previous tabs and connection windows when launching DataForge.",
-        )
         .on_change(cx.listener(|ws, &val: &bool, _w, cx| {
             ws.controller.settings.restore_session = val;
             persist_settings(ws, cx);
@@ -948,36 +1202,37 @@ fn render_behavior_safety_section(
 
     let safe_mode_switch = Switch::new("settings-safe-mode")
         .is_selected(ws.controller.safe_mode_enabled)
-        .label("Safe Mode Confirmation Prompts")
-        .description("Require explicit modal approval before committing batch table edits or mutating writes.")
         .on_change(cx.listener(|ws, &val: &bool, _w, cx| {
             ws.controller.safe_mode_enabled = val;
             cx.notify();
         }));
 
-    let fetch_limit = NumberField::new(&ws.settings_ui.fetch_limit_state)
-        .label("Default Row Fetch Limit")
-        .description("Rows per Data Grid page (10 - 10,000).")
-        .min_value(10.0)
-        .max_value(10_000.0)
-        .step(50.0)
-        .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-            ws.controller.grid_model.page.limit = (val.round() as u64).clamp(10, 10_000);
-            cx.notify();
-        }));
+    let fetch_limit = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
+        NumberField::new(&ws.settings_ui.fetch_limit_state)
+            .full_width(true)
+            .min_value(10.0)
+            .max_value(10_000.0)
+            .step(50.0)
+            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                ws.controller.grid_model.page.limit = (val.round() as u64).clamp(10, 10_000);
+                cx.notify();
+            })),
+    );
 
-    let timeout_field = NumberField::new(&ws.settings_ui.query_timeout_state)
-        .label("Query Timeout (seconds)")
-        .description("Maximum statement runtime before cancellation (5 - 600s).")
-        .min_value(5.0)
-        .max_value(600.0)
-        .step(5.0)
-        .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-            ws.settings_ui.query_timeout_secs = (val.round() as u32).clamp(5, 600);
-            cx.notify();
-        }));
+    let timeout_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
+        NumberField::new(&ws.settings_ui.query_timeout_state)
+            .full_width(true)
+            .min_value(5.0)
+            .max_value(600.0)
+            .step(5.0)
+            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                ws.settings_ui.query_timeout_secs = (val.round() as u32).clamp(5, 600);
+                cx.notify();
+            })),
+    );
 
     Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("Session, Execution & Safety"))
@@ -989,17 +1244,33 @@ fn render_behavior_safety_section(
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
-                .child(restore_switch)
+                .child(settings_row(
+                    "Restore Workspace Tabs on Startup",
+                    Some("Automatically reopen previous tabs and connection windows when launching DataForge."),
+                    restore_switch,
+                    cx,
+                ))
                 .child(Separator::new())
-                .child(safe_mode_switch)
+                .child(settings_row(
+                    "Safe Mode Confirmation Prompts",
+                    Some("Require explicit modal approval before committing batch table edits or mutating writes."),
+                    safe_mode_switch,
+                    cx,
+                ))
                 .child(Separator::new())
-                .child(
-                    div()
-                        .flex()
-                        .gap(px(12.0))
-                        .child(div().flex_1().child(fetch_limit))
-                        .child(div().flex_1().child(timeout_field)),
-                ),
+                .child(settings_row(
+                    "Default Row Fetch Limit",
+                    Some("Rows per Data Grid page (10 – 10,000)."),
+                    fetch_limit,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    "Query Timeout (seconds)",
+                    Some("Maximum statement runtime before cancellation (5 – 600s)."),
+                    timeout_field,
+                    cx,
+                )),
         )
         .into_any_element()
 }
@@ -1022,27 +1293,26 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
     let enable_switch = Switch::new("settings-mcp-enable")
         .is_selected(running)
         .is_disabled(ws.settings_ui.mcp_loading)
-        .label("Enable Local Loopback MCP Server")
-        .description(
-            "Exposes active connections and schema inspection over authenticated loopback HTTP.",
-        )
         .on_change(cx.listener(|ws, &enable: &bool, _w, cx| {
             toggle_mcp_with_vault_token(ws, enable, cx);
         }));
 
-    let port_field = NumberField::new(&ws.settings_ui.mcp_port_state)
-        .label("Loopback Port (127.0.0.1)")
-        .min_value(1024.0)
-        .max_value(65535.0)
-        .step(1.0)
-        .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-            ws.controller.settings.mcp.port = (val.round() as u16).clamp(1024, u16::MAX);
-            persist_settings(ws, cx);
-        }));
+    let port_field = div().w(px(156.0)).flex_shrink_0().overflow_hidden().child(
+        NumberField::new(&ws.settings_ui.mcp_port_state)
+            .full_width(true)
+            .min_value(1024.0)
+            .max_value(65535.0)
+            .step(1.0)
+            .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                ws.controller.settings.mcp.port = (val.round() as u16).clamp(1024, u16::MAX);
+                persist_settings(ws, cx);
+            })),
+    );
 
     let token_card = render_mcp_token_and_snippets_card(ws, &endpoint_url, cx);
 
     let lifecycle_card = Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(
@@ -1063,14 +1333,26 @@ fn render_mcp_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
                                 .child(ChipLabel::new().child(status_label)),
                         ),
                 )
-                .child(CardDescription::new().child("Local loopback endpoint strictly protected by Windows Credential Manager bearer token.")),
+                .child(CardDescription::new().child(
+                    "Local loopback endpoint strictly protected by Windows Credential Manager bearer token.",
+                )),
         )
         .child(
             CardContent::new()
                 .sx(|d| d.gap(px(12.0)))
-                .child(enable_switch)
+                .child(settings_row(
+                    "Enable Local Loopback MCP Server",
+                    Some("Exposes active connections and schema inspection over authenticated loopback HTTP."),
+                    enable_switch,
+                    cx,
+                ))
                 .child(Separator::new())
-                .child(div().w(px(220.0)).child(port_field)),
+                .child(settings_row(
+                    "Loopback Port (127.0.0.1)",
+                    Some("TCP port bound on localhost (1024 – 65535)."),
+                    port_field,
+                    cx,
+                )),
         );
 
     div()
@@ -1183,6 +1465,7 @@ fn render_mcp_token_and_snippets_card(
     let claude_preview = claude_json.clone();
 
     Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("Bearer Token & IDE Integration"))
@@ -1258,6 +1541,7 @@ fn render_diagnostics_logs_card(
     let log_open_path = log_dir.clone();
 
     Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("Logs & Crash Reports"))
@@ -1349,6 +1633,7 @@ fn render_diagnostics_section(
     };
 
     let versions_card = Card::new()
+        .sx(|s| s.overflow_hidden())
         .child(
             CardHeader::new()
                 .child(CardTitle::new().child("Build & Connected Runtime"))
@@ -1390,6 +1675,138 @@ fn render_diagnostics_section(
         .gap(px(14.0))
         .child(render_diagnostics_logs_card(ws, cx))
         .child(versions_card)
+        .into_any_element()
+}
+
+fn render_about_hero_card(version: &str, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    Card::new()
+        .sx(|s| s.overflow_hidden())
+        .child(
+            CardContent::new()
+                .sx(|d| d.py(px(18.0)))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(18.0))
+                        .child(
+                            img(ImageSource::Image(crate::branding::dataforge_logo_image()))
+                                .w(px(64.0))
+                                .h(px(64.0))
+                                .flex_shrink_0(),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .flex()
+                                .flex_col()
+                                .gap(px(4.0))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(8.0))
+                                        .child(
+                                            div()
+                                                .text_lg()
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(colors.foreground)
+                                                .child("DataForge"),
+                                        )
+                                        .child(
+                                            Chip::new()
+                                                .variant(ChipVariant::Soft)
+                                                .color(HeroColor::Accent)
+                                                .size(HeroSize::Sm)
+                                                .child(
+                                                    ChipLabel::new().child(format!("v{version}")),
+                                                ),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(colors.muted)
+                                        .child("High-performance native SQL & database workbench."),
+                                )
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(with_alpha(colors.muted, 0.8))
+                                        .child("Precision-built in Rust with GPU-accelerated Direct3D 11 rendering."),
+                                ),
+                        ),
+                ),
+        )
+        .into_any_element()
+}
+
+fn render_about_section(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let version = env!("CARGO_PKG_VERSION");
+    let os_arch = format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH);
+    let ui_stack = "Rust + HeroGPUI (Direct3D 11)";
+    let motion_label = if is_reduced_motion(cx) {
+        "Reduced Motion Active"
+    } else {
+        "Standard Motion"
+    };
+    let theme_name = ws.controller.content_theme.name.clone();
+    let sys_info_payload = format!(
+        "DataForge v{version}\nPlatform: {os_arch}\nUI Stack: {ui_stack}\nMotion: {motion_label}\nContent Theme: {theme_name}"
+    );
+    let sys_info_copied = ws.settings_ui.copied_key.as_deref() == Some("about-sys-info");
+    let hero_card = render_about_hero_card(version, cx);
+
+    let runtime_card = Card::new()
+        .sx(|s| s.overflow_hidden())
+        .child(
+            CardHeader::new()
+                .child(CardTitle::new().child("System & Runtime"))
+                .child(
+                    CardDescription::new()
+                        .child("Application build, rendering stack, and host environment."),
+                ),
+        )
+        .child(
+            CardContent::new()
+                .sx(|d| d.gap(px(10.0)))
+                .child(diag_kv_row("Version", version, cx))
+                .child(Separator::new())
+                .child(diag_kv_row("Architecture", &os_arch, cx))
+                .child(Separator::new())
+                .child(diag_kv_row("UI Stack", ui_stack, cx))
+                .child(Separator::new())
+                .child(diag_kv_row("Motion Preference", motion_label, cx))
+                .child(Separator::new())
+                .child(div().pt(px(2.0)).flex().items_center().justify_end().child(
+                    copy_chip_button(
+                        "settings-about-copy-info",
+                        "Copy System Info",
+                        sys_info_copied,
+                        true,
+                        cx.listener(move |ws, _, _w, cx| {
+                            ws.settings_ui.copy_with_feedback(
+                                "about-sys-info".to_owned(),
+                                sys_info_payload.clone(),
+                                cx,
+                            );
+                        }),
+                        cx,
+                    ),
+                )),
+        );
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(14.0))
+        .child(hero_card)
+        .child(runtime_card)
         .into_any_element()
 }
 
@@ -1505,13 +1922,61 @@ fn apply_builtin_content_theme(
     window: &Window,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
-    ws.controller.content_theme = match id {
-        "builtin.light" => ThemeDefinition::builtin_light(),
-        "builtin.high_contrast" => ThemeDefinition::builtin_high_contrast(),
-        _ => ThemeDefinition::builtin_dark(),
+    let mut base = ThemeDefinition::from_builtin_id(id).unwrap_or_else(ThemeDefinition::builtin_dark);
+    // Sync chrome appearance & Gaussian blur automatically when selecting a theme preset.
+    ws.controller.settings.theme = match base.appearance {
+        ThemeAppearance::Light => ThemePreference::Light,
+        ThemeAppearance::Dark => ThemePreference::Dark,
+        ThemeAppearance::HighContrast => ThemePreference::HighContrast,
     };
+    if id == "builtin.gaussian_dark" || id == "builtin.gaussian_light" {
+        ws.controller.settings.window_backdrop = WindowBackdropPreference::GaussianBlur;
+    }
+    ws.controller.settings.content_theme_id = Some(id.to_owned());
+    if let Some(syntax_id) = ws.controller.settings.syntax_palette_id.as_deref()
+        && let Some(syntax_src) = ThemeDefinition::from_builtin_id(syntax_id)
+    {
+        base = base.with_syntax_from(&syntax_src);
+    }
+    ws.controller.content_theme = base;
     ws.controller.last_theme_import = None;
     ws.settings_ui.theme_json_error = None;
+    ws.refresh_theme(window, cx);
+    persist_settings(ws, cx);
+}
+
+fn apply_window_backdrop(
+    ws: &mut DataForgeWorkspace,
+    backdrop: WindowBackdropPreference,
+    window: &Window,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    ws.controller.settings.window_backdrop = backdrop;
+    ws.refresh_theme(window, cx);
+    persist_settings(ws, cx);
+}
+
+fn apply_syntax_palette(
+    ws: &mut DataForgeWorkspace,
+    id: &str,
+    window: &Window,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    if id == "match_theme" {
+        ws.controller.settings.syntax_palette_id = None;
+        let base_id = ws
+            .controller
+            .settings
+            .content_theme_id
+            .as_deref()
+            .unwrap_or(&ws.controller.content_theme.id.0);
+        if let Some(base) = ThemeDefinition::from_builtin_id(base_id) {
+            ws.controller.content_theme = base;
+        }
+    } else if let Some(syntax_src) = ThemeDefinition::from_builtin_id(id) {
+        ws.controller.settings.syntax_palette_id = Some(id.to_owned());
+        ws.controller.content_theme = ws.controller.content_theme.with_syntax_from(&syntax_src);
+    }
     ws.refresh_theme(window, cx);
     persist_settings(ws, cx);
 }
@@ -1758,6 +2223,7 @@ const fn category_subtitle(cat: SettingsCategory) -> &'static str {
         }
         SettingsCategory::McpServer => "Local HTTP MCP server, bearer token & client snippets",
         SettingsCategory::Diagnostics => "Log directory, app metadata & live connection telemetry",
+        SettingsCategory::About => "Version, architecture & system information",
     }
 }
 
@@ -1776,6 +2242,25 @@ fn parse_theme_pref(key: &str) -> Option<ThemePreference> {
         "light" => Some(ThemePreference::Light),
         "dark" => Some(ThemePreference::Dark),
         "high-contrast" => Some(ThemePreference::HighContrast),
+        _ => None,
+    }
+}
+
+const fn backdrop_pref_key(pref: WindowBackdropPreference) -> &'static str {
+    match pref {
+        WindowBackdropPreference::Opaque => "opaque",
+        WindowBackdropPreference::GaussianBlur => "gaussian_blur",
+        WindowBackdropPreference::Mica => "mica",
+        WindowBackdropPreference::MicaAlt => "mica_alt",
+    }
+}
+
+fn parse_backdrop_pref(key: &str) -> Option<WindowBackdropPreference> {
+    match key {
+        "opaque" => Some(WindowBackdropPreference::Opaque),
+        "gaussian_blur" => Some(WindowBackdropPreference::GaussianBlur),
+        "mica" => Some(WindowBackdropPreference::Mica),
+        "mica_alt" => Some(WindowBackdropPreference::MicaAlt),
         _ => None,
     }
 }
