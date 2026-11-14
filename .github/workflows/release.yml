@@ -1,0 +1,262 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0; defaults to v<Cargo.toml version> when empty)'
+        required: false
+        default: ''
+        type: string
+      prerelease:
+        description: 'Mark GitHub Release as a prerelease'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'Build, pack Velopack assets, and generate notes without publishing a GitHub Release'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-windows:
+    name: Build & Package Windows Release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag and workspace versions
+        id: meta
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $appCargo = Get-Content -Raw -Path 'crates/dataforge-windows-app/Cargo.toml'
+          if ($appCargo -notmatch '(?m)^version\s*=\s*"([^"]+)"') {
+            throw 'Could not parse version from crates/dataforge-windows-app/Cargo.toml'
+          }
+          $cargoVersion = $Matches[1]
+
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $inputTag = '${{ inputs.tag }}'.Trim()
+            if ([string]::IsNullOrWhiteSpace($inputTag)) {
+              $tag = "v$cargoVersion"
+            } else {
+              $tag = $inputTag
+            }
+            $dryRun = ('${{ inputs.dry_run }}' -eq 'true').ToString().ToLowerInvariant()
+            $inputPrerelease = ('${{ inputs.prerelease }}' -eq 'true')
+          } else {
+            $tag = '${{ github.ref_name }}'
+            $dryRun = 'false'
+            $inputPrerelease = $false
+          }
+
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$') {
+            throw "Release tag '$tag' must match SemVer format vX.Y.Z (optional -prerelease)."
+          }
+          $tagVersion = $Matches[1]
+
+          if ($tagVersion -ne $cargoVersion) {
+            throw "Version mismatch: tag '$tag' ($tagVersion) != crates/dataforge-windows-app/Cargo.toml ($cargoVersion)."
+          }
+
+          Get-ChildItem -Path 'crates' -Filter 'Cargo.toml' -Recurse | ForEach-Object {
+            $content = Get-Content -Raw -Path $_.FullName
+            if ($content -match '(?m)^version\s*=\s*"([^"]+)"') {
+              if ($Matches[1] -ne $cargoVersion) {
+                throw "Crate version mismatch in $($_.FullName): expected $cargoVersion, found $($Matches[1])."
+              }
+            }
+          }
+
+          $isPrerelease = ($inputPrerelease -or ($tagVersion -match '-')).ToString().ToLowerInvariant()
+
+          $null = git rev-parse -q --verify "refs/tags/$tag" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $cliffArgs = "--latest --strip header"
+          } else {
+            $cliffArgs = "--unreleased --tag $tag --strip header"
+          }
+
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "version=$cargoVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "prerelease=$isPrerelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "dry_run=$dryRun" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "cliff_args=$cliffArgs" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          Write-Host "Validated release tag=$tag version=$cargoVersion prerelease=$isPrerelease dry_run=$dryRun"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Restore Cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run unit tests (release)
+        run: >
+          cargo test --release
+          -p dataforge-windows-platform
+          -p dataforge-state
+          -p dataforge-services
+          -p dataforge-windows-app
+          --lib
+
+      - name: Run app integration tests (release)
+        run: >
+          cargo test --release
+          -p dataforge-windows-app
+          --test startup_shell
+          --test layout_hit_test
+
+      - name: Build release binary
+        run: cargo build --release -p dataforge-windows-app
+
+      - name: Verify smoke startup
+        run: .\target\release\dataforge.exe --smoke-startup
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Velopack CLI (vpk)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet tool install -g vpk
+          $dotnetTools = Join-Path $HOME '.dotnet\tools'
+          if ($env:PATH -notlike "*$dotnetTools*") {
+            $dotnetTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Stage release payload
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stageDir = '.\release-stage'
+          if (Test-Path $stageDir) {
+            Remove-Item -Recurse -Force $stageDir
+          }
+          New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
+          New-Item -ItemType Directory -Force -Path '.\velopack-out' | Out-Null
+
+          Copy-Item -Path '.\target\release\dataforge.exe' -Destination $stageDir
+          Copy-Item -Path '.\README.md' -Destination $stageDir
+          Copy-Item -Path '.\LICENSE' -Destination $stageDir
+          Copy-Item -Path '.\LICENSE-MIT' -Destination $stageDir
+
+          Get-ChildItem -Path $stageDir | Format-Table Name, Length
+
+      - name: Download previous Velopack release assets for delta packages
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          vpk download github
+          --repoUrl "https://github.com/${{ github.repository }}"
+          --outputDir ./velopack-out
+
+      - name: Pack Velopack installer, portable archive, and delta packages
+        run: >
+          vpk pack
+          --packId DataForge
+          --packVersion ${{ steps.meta.outputs.version }}
+          --packDir ./release-stage
+          --mainExe dataforge.exe
+          --packTitle DataForge
+          --packAuthors williamcachamwri
+          --icon crates/dataforge-windows-app/assets/dataforge.ico
+          --outputDir ./velopack-out
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = Get-ChildItem -Path '.\velopack-out' -File | Sort-Object Name
+          if ($files.Count -eq 0) {
+            throw 'No files found in .\velopack-out'
+          }
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($file.Name)"
+          }
+          $lines | Set-Content -Path '.\SHA256SUMS.txt' -Encoding utf8NoBOM
+          Get-Content -Path '.\SHA256SUMS.txt'
+
+      - name: Generate changelog with git-cliff
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: ${{ steps.meta.outputs.cliff_args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble release notes
+        env:
+          CLIFF_CONTENT: ${{ steps.cliff.outputs.content }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installNotes = @"
+          ## Windows Installation
+
+          - **Installer (Recommended)**: Download ``DataForge-win-Setup.exe`` for desktop/Start Menu integration and automatic delta updates via Velopack.
+          - **Portable Archive**: Download ``DataForge-win-Portable.zip``, extract anywhere, and run ``dataforge.exe`` directly with no installation required.
+          - **Checksums**: Verify download integrity against ``SHA256SUMS.txt``.
+
+          ---
+
+          "@
+          $body = $env:CLIFF_CONTENT
+          if ([string]::IsNullOrWhiteSpace($body)) {
+            $body = "Release $($env:RELEASE_TAG)."
+          }
+          ($installNotes + $body.Trim() + "`n") | Set-Content -Path '.\release-notes.md' -Encoding utf8NoBOM
+
+      - name: Upload dry-run artifacts
+        if: ${{ steps.meta.outputs.dry_run == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dataforge-${{ steps.meta.outputs.tag }}-dry-run
+          path: |
+            velopack-out/*
+            SHA256SUMS.txt
+            release-notes.md
+
+      - name: Publish GitHub Release
+        if: ${{ steps.meta.outputs.dry_run != 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: DataForge ${{ steps.meta.outputs.tag }}
+          body_path: release-notes.md
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          draft: false
+          generate_release_notes: false
+          files: |
+            ./velopack-out/*
+            ./SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
