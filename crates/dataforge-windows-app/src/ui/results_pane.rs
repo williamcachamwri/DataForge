@@ -195,7 +195,7 @@ fn render_results_pane_body(
     let result_snapshot = active_tab.and_then(|id| ws.tab_results.get(&id).cloned());
 
     let Some(res) = result_snapshot else {
-        return render_honest_empty_results(cx);
+        return render_honest_empty_results(ws, cx);
     };
 
     let has_any_output = res.running
@@ -206,7 +206,7 @@ fn render_results_pane_body(
         || res.accumulator.summary.is_some();
 
     if !has_any_output {
-        return render_honest_empty_results(cx);
+        return render_honest_empty_results(ws, cx);
     }
 
     let header = render_results_header(ws, &res, cx);
@@ -237,9 +237,9 @@ fn render_results_pane_body(
             {
                 render_messages_view(&res, ws, cx)
             } else if res.running {
-                render_running_placeholder(cx)
+                render_running_placeholder(ws, cx)
             } else {
-                render_honest_empty_results(cx)
+                render_honest_empty_results(ws, cx)
             }
         }
         ResultPaneSubView::Messages => render_messages_view(&res, ws, cx),
@@ -256,7 +256,7 @@ fn render_results_pane_body(
         .into_any_element()
 }
 
-fn render_honest_empty_results(cx: &App) -> AnyElement {
+fn render_honest_empty_results(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
     let muted = cx.colors().muted;
     let border = theme::hairline_border_color(cx);
 
@@ -284,7 +284,7 @@ fn render_honest_empty_results(cx: &App) -> AnyElement {
                         .text_size(px(12.0))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(muted)
-                        .child("Results"),
+                        .child(ws.controller.strings.result_prefix),
                 ),
         )
         .child(
@@ -301,19 +301,19 @@ fn render_honest_empty_results(cx: &App) -> AnyElement {
                         .text_size(px(13.0))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(cx.colors().foreground)
-                        .child("No results yet"),
+                        .child(ws.controller.strings.results_empty_title),
                 )
                 .child(
                     div()
                         .text_size(px(12.0))
                         .text_color(muted)
-                        .child("Run a query with Ctrl+Enter or press Run in the SQL toolbar."),
+                        .child(ws.controller.strings.results_empty_desc),
                 ),
         )
         .into_any_element()
 }
 
-fn render_running_placeholder(cx: &App) -> AnyElement {
+fn render_running_placeholder(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
     div()
         .size_full()
         .flex()
@@ -325,7 +325,7 @@ fn render_running_placeholder(cx: &App) -> AnyElement {
             div()
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("Executing statement and awaiting first rows..."),
+                .child(ws.controller.strings.executing_awaiting),
         )
         .into_any_element()
 }
@@ -335,11 +335,12 @@ fn render_results_header(
     res: &QueryTabResultState,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let tab_id = res.tab_id;
     let mut tab_items = Vec::new();
     for (idx, set) in res.accumulator.result_sets.iter().enumerate() {
         let key = format!("result-{idx}");
-        let label = format!("Result {} ({})", idx + 1, set.rows.len());
+        let label = format!("{} {} ({})", s.result_prefix, idx + 1, set.rows.len());
         tab_items.push(TabItem::new(key, label));
     }
     let msg_count = res.accumulator.notices.len()
@@ -348,12 +349,12 @@ fn render_results_header(
     tab_items.push(TabItem::new(
         "messages",
         if msg_count > 0 {
-            format!("Messages ({msg_count})")
+            format!("{} ({msg_count})", s.messages)
         } else {
-            "Messages".to_owned()
+            s.messages.to_owned()
         },
     ));
-    tab_items.push(TabItem::new("summary", "Summary"));
+    tab_items.push(TabItem::new("summary", s.summary));
 
     let selected_key: SharedString = match res.sub_view {
         ResultPaneSubView::Results if !res.accumulator.result_sets.is_empty() => {
@@ -424,39 +425,42 @@ fn render_results_header_right(
         .font_features(tabular_nums_features());
 
     if res.running {
-        return render_running_header_controls(row, cx);
+        return render_running_header_controls(row, ws, cx);
     }
 
-    row = append_result_status_chips(row, res);
+    row = append_result_status_chips(row, ws, res);
     append_result_action_buttons(row, ws, res, cx).into_any_element()
 }
 
 fn render_running_header_controls(
     row: gpui::Div,
+    ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     row.child(Spinner::new("results-running-spin").size(SpinnerSize::Sm))
         .child(
             Chip::new()
                 .variant(ChipVariant::Soft)
                 .size(HeroSize::Sm)
                 .color(HeroColor::Accent)
-                .child(ChipLabel::new().child("Running")),
+                .child(ChipLabel::new().child(s.running)),
         )
         .child(
             Button::new("results-cancel-query")
                 .variant(Variant::Danger)
                 .size(HeroSize::Sm)
-                .label("Cancel")
+                .label(s.cancel_label)
                 .on_press(cx.listener(|ws, _ev, _w, cx| {
                     if let Some(cancel) = ws.results_ui.active_cancel.take() {
                         cancel.cancel();
                     }
                     if let Some(tab_id) = ws.controller.tabs.active_tab() {
+                        let cancel_msg = ws.controller.strings.query_cancelled_msg.to_owned();
                         let tab_res = ws.ensure_tab_result(tab_id);
                         tab_res.running = false;
                         if tab_res.active_error.is_none() {
-                            tab_res.active_error = Some("Query cancelled by user.".to_owned());
+                            tab_res.active_error = Some(cancel_msg);
                         }
                     }
                     cx.notify();
@@ -465,14 +469,19 @@ fn render_running_header_controls(
         .into_any_element()
 }
 
-fn append_result_status_chips(mut row: gpui::Div, res: &QueryTabResultState) -> gpui::Div {
+fn append_result_status_chips(
+    mut row: gpui::Div,
+    ws: &DataForgeWorkspace,
+    res: &QueryTabResultState,
+) -> gpui::Div {
+    let s = &ws.controller.strings;
     if res.active_error.is_some() {
         row = row.child(
             Chip::new()
                 .variant(ChipVariant::Soft)
                 .size(HeroSize::Sm)
                 .color(HeroColor::Danger)
-                .child(ChipLabel::new().child("Failed")),
+                .child(ChipLabel::new().child(s.failed)),
         );
     }
 
@@ -490,9 +499,9 @@ fn append_result_status_chips(mut row: gpui::Div, res: &QueryTabResultState) -> 
     {
         let row_label = match set.total_rows {
             Some(total) if total > set.retained => {
-                format!("{} / {} rows", set.rows.len(), total)
+                format!("{} / {} {}", set.rows.len(), total, s.rows_suffix)
             }
-            _ => format!("{} rows", set.rows.len()),
+            _ => format!("{} {}", set.rows.len(), s.rows_suffix),
         };
         row = row.child(
             Chip::new()
@@ -512,7 +521,7 @@ fn append_result_status_chips(mut row: gpui::Div, res: &QueryTabResultState) -> 
                     .variant(ChipVariant::Soft)
                     .size(HeroSize::Sm)
                     .color(HeroColor::Warning)
-                    .child(ChipLabel::new().child("Truncated")),
+                    .child(ChipLabel::new().child(s.truncated)),
             );
         }
     }
@@ -525,6 +534,7 @@ fn append_result_action_buttons(
     res: &QueryTabResultState,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> gpui::Div {
+    let s = &ws.controller.strings;
     let has_active_set = res
         .accumulator
         .result_sets
@@ -538,9 +548,9 @@ fn append_result_action_buttons(
                 .size(HeroSize::Sm)
                 .child(Icon::new(IconName::Copy).size(IconSize::Xs))
                 .label(if ws.results_ui.selected_cell.is_some() {
-                    "Copy Cell"
+                    s.copy_cell
                 } else {
-                    "Copy TSV"
+                    s.copy_tsv
                 })
                 .on_press(cx.listener(move |ws, _ev, _w, cx| {
                     copy_results_to_clipboard(ws, active_set_idx, cx);
@@ -554,7 +564,7 @@ fn append_result_action_buttons(
                 .variant(Variant::Secondary)
                 .size(HeroSize::Sm)
                 .child(Icon::new(IconName::Download).size(IconSize::Xs))
-                .label("Export")
+                .label(s.export)
                 .on_press(cx.listener(move |ws, _ev, window, cx| {
                     sync_result_set_for_export(ws, active_set_idx);
                     ws.modals_ui.open_export(window, cx);
@@ -592,7 +602,7 @@ fn render_result_set_grid(
             .justify_center()
             .text_size(px(12.0))
             .text_color(cx.colors().muted)
-            .child("Statement returned 0 columns and 0 rows.")
+            .child(ws.controller.strings.results_zero_cols_rows)
             .into_any_element();
     }
 
@@ -965,8 +975,9 @@ fn render_result_grid_cell(
                     && let Some(cell_val) = set.rows.get(row_idx).and_then(|r| r.get(col_idx))
                 {
                     let text = format_core_value(cell_val);
+                    let toast_msg = ws.controller.strings.cell_copied_toast;
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
-                    ws.notify_toast(ToastSeverity::Info, "Cell copied", None, cx);
+                    ws.notify_toast(ToastSeverity::Info, toast_msg, None, cx);
                 }
                 cx.notify();
             }),
@@ -980,6 +991,7 @@ fn render_messages_view(
     ws: &DataForgeWorkspace,
     cx: &App,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let font = theme::value_gpui_font(&ws.controller.settings);
     let border = theme::hairline_border_color(cx);
     let mut stack = div()
@@ -995,7 +1007,7 @@ fn render_messages_view(
 
     if let Some(err) = &res.active_error {
         stack = stack.child(
-            Alert::new("Query Error")
+            Alert::new(s.query_error_title)
                 .status(HeroColor::Danger)
                 .description(err.clone()),
         );
@@ -1003,10 +1015,16 @@ fn render_messages_view(
 
     for (idx, rows_affected) in res.accumulator.commands_completed.iter().enumerate() {
         let msg = match rows_affected {
-            Some(n) => format!("Statement {} completed — {n} rows affected", idx + 1),
-            None => format!("Statement {} completed", idx + 1),
+            Some(n) => format!(
+                "{} {} — {} ({n} {})",
+                s.statement_prefix,
+                idx + 1,
+                s.status_completed,
+                s.rows_affected_suffix
+            ),
+            None => format!("{} {} — {}", s.statement_prefix, idx + 1, s.status_completed),
         };
-        stack = stack.child(render_command_completed_banner(msg, border, cx));
+        stack = stack.child(render_command_completed_banner(s.status_ok, msg, border, cx));
     }
 
     for notice in &res.accumulator.notices {
@@ -1015,9 +1033,9 @@ fn render_messages_view(
 
     if let Some(retained) = res.accumulator.notice_limit_reached {
         stack = stack.child(
-            Alert::new("Notice limit reached")
+            Alert::new(s.notice_limit_title)
                 .status(HeroColor::Warning)
-                .description(format!("Showing first {retained} notices from server.")),
+                .description(format!("{}: {retained}", s.notice_limit_retained_prefix)),
         );
     }
 
@@ -1029,14 +1047,19 @@ fn render_messages_view(
             div()
                 .text_size(px(12.0))
                 .text_color(cx.colors().muted)
-                .child("No server notices or warnings for this execution."),
+                .child(s.no_server_notices),
         );
     }
 
     stack.into_any_element()
 }
 
-fn render_command_completed_banner(msg: String, border: Hsla, cx: &App) -> AnyElement {
+fn render_command_completed_banner(
+    ok_label: &'static str,
+    msg: String,
+    border: Hsla,
+    cx: &App,
+) -> AnyElement {
     div()
         .px(px(10.0))
         .py(px(6.0))
@@ -1052,7 +1075,7 @@ fn render_command_completed_banner(msg: String, border: Hsla, cx: &App) -> AnyEl
                 .variant(ChipVariant::Soft)
                 .size(HeroSize::Sm)
                 .color(HeroColor::Success)
-                .child(ChipLabel::new().child("OK")),
+                .child(ChipLabel::new().child(ok_label)),
         )
         .child(
             div()
@@ -1109,6 +1132,7 @@ fn render_server_notice_banner(
 }
 
 fn render_summary_view(res: &QueryTabResultState, ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+    let s = &ws.controller.strings;
     let font = theme::value_gpui_font(&ws.controller.settings);
     let total_rows: usize = res
         .accumulator
@@ -1119,37 +1143,43 @@ fn render_summary_view(res: &QueryTabResultState, ws: &DataForgeWorkspace, cx: &
     let elapsed = res
         .elapsed_ms
         .map(format_duration_ms)
-        .unwrap_or_else(|| "In progress".to_owned());
+        .unwrap_or_else(|| s.in_progress_label.to_owned());
     let status = if res.running {
-        "Running"
+        s.status_running_label
     } else if res.active_error.is_some() {
-        "Failed"
+        s.failed
     } else {
-        "Completed"
+        s.status_completed
     };
     let tx_label = res
         .accumulator
         .summary
         .as_ref()
-        .map(|s| match s.transaction_state {
-            TransactionState::Idle => "Idle (Auto-commit)",
-            TransactionState::InTransaction => "In Transaction",
-            TransactionState::Failed => "Aborted Transaction",
-            TransactionState::Unknown => "Unknown",
+        .map(|summary| match summary.transaction_state {
+            TransactionState::Idle => s.tx_idle_autocommit,
+            TransactionState::InTransaction => s.tx_in_transaction,
+            TransactionState::Failed => s.tx_aborted,
+            TransactionState::Unknown => s.tx_unknown,
         })
-        .unwrap_or("Unknown");
+        .unwrap_or(s.tx_unknown);
 
     let pairs = [
-        ("Status", status.to_owned()),
-        ("Elapsed", elapsed),
-        ("Result Sets", res.accumulator.result_sets.len().to_string()),
-        ("Retained Rows", total_rows.to_string()),
+        (s.summary_status, status.to_owned()),
+        (s.summary_elapsed, elapsed),
         (
-            "Statements Completed",
+            s.summary_result_sets,
+            res.accumulator.result_sets.len().to_string(),
+        ),
+        (s.summary_retained_rows, total_rows.to_string()),
+        (
+            s.summary_statements_completed,
             res.accumulator.commands_completed.len().to_string(),
         ),
-        ("Server Notices", res.accumulator.notices.len().to_string()),
-        ("Transaction State", tx_label.to_owned()),
+        (
+            s.summary_server_notices,
+            res.accumulator.notices.len().to_string(),
+        ),
+        (s.summary_tx_state, tx_label.to_owned()),
     ];
 
     let border = theme::hairline_border_color(cx);
@@ -1231,8 +1261,9 @@ fn copy_results_to_clipboard(
         } else {
             format_core_value(val)
         };
+        let toast_msg = ws.controller.strings.cell_copied_toast;
         cx.write_to_clipboard(ClipboardItem::new_string(text));
-        ws.notify_toast(ToastSeverity::Info, "Cell value copied", None, cx);
+        ws.notify_toast(ToastSeverity::Info, toast_msg, None, cx);
         return;
     }
 
@@ -1257,9 +1288,10 @@ fn copy_results_to_clipboard(
         }
     }
     cx.write_to_clipboard(ClipboardItem::new_string(out));
+    let s = &ws.controller.strings;
     ws.notify_toast(
         ToastSeverity::Success,
-        format!("Copied {} result rows (TSV)", set.rows.len()),
+        format!("{}: {} {} (TSV)", s.copied, set.rows.len(), s.rows_suffix),
         None,
         cx,
     );
