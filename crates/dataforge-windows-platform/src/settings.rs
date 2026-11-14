@@ -27,6 +27,21 @@ pub enum ThemePreference {
     HighContrast,
 }
 
+/// Window backdrop material / blur effect on Windows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowBackdropPreference {
+    /// Standard solid opaque window background.
+    #[default]
+    Opaque,
+    /// Frosted glass / Gaussian blur behind translucent surfaces.
+    GaussianBlur,
+    /// Windows 11 Mica backdrop material.
+    Mica,
+    /// Windows 11 Mica Alt backdrop material.
+    MicaAlt,
+}
+
 /// SQL/code editor font configuration.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -130,6 +145,15 @@ impl Default for McpSettings {
 pub struct AppSettings {
     /// Appearance theme preference.
     pub theme: ThemePreference,
+    /// Window backdrop blur / Mica preference.
+    #[serde(default)]
+    pub window_backdrop: WindowBackdropPreference,
+    /// Selected built-in content + syntax theme preset ID (e.g. `builtin.tokyo_night`).
+    #[serde(default)]
+    pub content_theme_id: Option<String>,
+    /// Optional independent syntax highlight palette ID (overrides `editor.syntax.*` slots).
+    #[serde(default)]
+    pub syntax_palette_id: Option<String>,
     /// SQL editor font configuration.
     pub editor_font: EditorFont,
     /// Tabular value/grid font configuration.
@@ -147,6 +171,9 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             theme: ThemePreference::default(),
+            window_backdrop: WindowBackdropPreference::default(),
+            content_theme_id: None,
+            syntax_palette_id: None,
             editor_font: EditorFont::default(),
             value_font: FontSpec::default(),
             window: WindowGeometry::default(),
