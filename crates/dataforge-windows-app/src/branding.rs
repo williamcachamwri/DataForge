@@ -1,13 +1,32 @@
-//! Pure-Rust DataForge Win32 icon fallback using `CreateIconFromResourceEx`.
+//! Pure-Rust DataForge Win32 icon fallback using `CreateIconFromResourceEx`
+//! and embedded Apple HIG Liquid Glass app logo (`assets/dataforge_logo.png`).
 
+use std::sync::{Arc, OnceLock};
+
+use herogpui::gpui::{Image, ImageFormat};
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateIconFromResourceEx, HICON, ICON_BIG, ICON_SMALL, LR_DEFAULTCOLOR,
     LookupIconIdFromDirectoryEx, SendMessageW, WM_SETICON,
 };
 
-/// Embedded multi-size geometric DataForge icon (`assets/dataforge.ico`).
+/// Embedded multi-size Apple HIG DataForge icon (`assets/dataforge.ico`).
 pub const DATAFORGE_ICO_BYTES: &[u8] = include_bytes!("../assets/dataforge.ico");
+
+/// Embedded transparent-background Apple HIG Liquid Glass logo (`assets/dataforge_logo.png`).
+pub const DATAFORGE_LOGO_PNG_BYTES: &[u8] = include_bytes!("../assets/dataforge_logo.png");
+
+/// Returns the cached [`Image`] handle for the embedded DataForge Apple HIG logo.
+#[must_use]
+pub fn dataforge_logo_image() -> Arc<Image> {
+    static LOGO: OnceLock<Arc<Image>> = OnceLock::new();
+    Arc::clone(LOGO.get_or_init(|| {
+        Arc::new(Image::from_bytes(
+            ImageFormat::Png,
+            DATAFORGE_LOGO_PNG_BYTES.to_vec(),
+        ))
+    }))
+}
 
 /// Creates a Win32 `HICON` of `desired_px x desired_px` from [`DATAFORGE_ICO_BYTES`].
 #[must_use]
