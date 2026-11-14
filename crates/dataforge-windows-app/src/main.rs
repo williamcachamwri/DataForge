@@ -20,6 +20,9 @@ use dataforge_windows_platform::{
 use tablepro_cli::{Dispatch, classify, run as run_cli};
 
 fn main() -> ExitCode {
+    // Handle Velopack installer/updater lifecycle hooks (--veloapp-*) before CLI/GUI dispatch.
+    velopack::VelopackApp::build().run();
+
     let args: Vec<OsString> = std::env::args_os().collect();
     {
         let mut stdout = std::io::stdout().lock();
