@@ -449,8 +449,10 @@ impl DataForgeWorkspace {
             if !sql.trim().is_empty() {
                 ws.controller.set_editor_sql(&sql);
             }
-            ws.controller.save_current_query("Query", None);
-            ws.notify_toast(ToastSeverity::Success, "Query saved", None, cx);
+            let query_title = ws.controller.strings.new_query_tab;
+            let saved_toast = ws.controller.strings.query_saved_toast;
+            ws.controller.save_current_query(query_title, None);
+            ws.notify_toast(ToastSeverity::Success, saved_toast, None, cx);
             cx.notify();
         }))
         .on_action(cx.listener(|ws, _: &actions::CommitEdits, _window, cx| {
