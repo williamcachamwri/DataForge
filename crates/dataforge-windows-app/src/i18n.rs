@@ -927,6 +927,32 @@ pub struct Strings {
     pub sql_snip_ljoin: &'static str,
     pub sql_snip_cte: &'static str,
     pub sql_snip_ct: &'static str,
+
+    // Settings -> About -> Software Updates (Velopack)
+    pub about_updates_title: &'static str,
+    pub about_updates_desc: &'static str,
+    pub updates_install_mode_label: &'static str,
+    pub updates_mode_velopack: &'static str,
+    pub updates_mode_standalone: &'static str,
+    pub updates_auto_check_label: &'static str,
+    pub updates_auto_check_desc: &'static str,
+    pub updates_status_label: &'static str,
+    pub updates_status_idle: &'static str,
+    pub updates_status_checking: &'static str,
+    pub updates_status_up_to_date: &'static str,
+    pub updates_status_available_tpl: &'static str,
+    pub updates_status_downloading_tpl: &'static str,
+    pub updates_status_ready_tpl: &'static str,
+    pub updates_status_standalone: &'static str,
+    pub updates_status_error_tpl: &'static str,
+    pub updates_btn_check: &'static str,
+    pub updates_btn_checking: &'static str,
+    pub updates_btn_download: &'static str,
+    pub updates_btn_downloading: &'static str,
+    pub updates_btn_restart: &'static str,
+    pub updates_release_notes_label: &'static str,
+    pub updates_toast_available_title: &'static str,
+    pub updates_toast_apply_failed: &'static str,
 }
 
 impl Strings {
@@ -1739,6 +1765,30 @@ const EN_US: Strings = Strings {
     sql_snip_ljoin: "Left outer join snippet",
     sql_snip_cte: "Common Table Expression snippet",
     sql_snip_ct: "Create table DDL snippet",
+    about_updates_title: "Software Updates",
+    about_updates_desc: "Automatic delta updates powered by Velopack and GitHub Releases.",
+    updates_install_mode_label: "Install Mode",
+    updates_mode_velopack: "Velopack Managed",
+    updates_mode_standalone: "Standalone",
+    updates_auto_check_label: "Automatically check for updates on startup",
+    updates_auto_check_desc: "Checks GitHub Releases in the background when DataForge opens.",
+    updates_status_label: "Update Status",
+    updates_status_idle: "Ready to check for updates",
+    updates_status_checking: "Checking for updates...",
+    updates_status_up_to_date: "DataForge is up to date",
+    updates_status_available_tpl: "Version v{version} is available",
+    updates_status_downloading_tpl: "Downloading update... {percent}%",
+    updates_status_ready_tpl: "v{version} downloaded — restart to apply",
+    updates_status_standalone: "Auto-updates are only active in installed Velopack builds. Running in standalone or portable mode.",
+    updates_status_error_tpl: "Update check failed: {error}",
+    updates_btn_check: "Check for Updates",
+    updates_btn_checking: "Checking...",
+    updates_btn_download: "Download & Install",
+    updates_btn_downloading: "Downloading...",
+    updates_btn_restart: "Restart to Apply",
+    updates_release_notes_label: "Release Notes",
+    updates_toast_available_title: "Update Available",
+    updates_toast_apply_failed: "Failed to apply update",
 };
 
 const VI_VN: Strings = Strings {
@@ -2536,6 +2586,30 @@ const VI_VN: Strings = Strings {
     sql_snip_ljoin: "Mẫu kết nối LEFT OUTER JOIN",
     sql_snip_cte: "Mẫu Biểu thức bảng chung (CTE)",
     sql_snip_ct: "Mẫu DDL tạo bảng mới (CREATE TABLE)",
+    about_updates_title: "Cập nhật phần mềm",
+    about_updates_desc: "Tự động cập nhật gia tăng (delta) qua Velopack và GitHub Releases.",
+    updates_install_mode_label: "Chế độ cài đặt",
+    updates_mode_velopack: "Quản lý bởi Velopack",
+    updates_mode_standalone: "Độc lập (Standalone)",
+    updates_auto_check_label: "Tự động kiểm tra bản cập nhật khi khởi động",
+    updates_auto_check_desc: "Kiểm tra nền trên GitHub Releases mỗi khi mở DataForge.",
+    updates_status_label: "Trạng thái cập nhật",
+    updates_status_idle: "Sẵn sàng kiểm tra bản cập nhật",
+    updates_status_checking: "Đang kiểm tra bản cập nhật...",
+    updates_status_up_to_date: "DataForge đang ở phiên bản mới nhất",
+    updates_status_available_tpl: "Đã có phiên bản mới v{version}",
+    updates_status_downloading_tpl: "Đang tải bản cập nhật... {percent}%",
+    updates_status_ready_tpl: "Đã tải xong v{version} — khởi động lại để áp dụng",
+    updates_status_standalone: "Tự động cập nhật chỉ hoạt động ở bản cài đặt Velopack. Hiện đang chạy ở chế độ độc lập hoặc portable.",
+    updates_status_error_tpl: "Kiểm tra cập nhật thất bại: {error}",
+    updates_btn_check: "Kiểm tra cập nhật",
+    updates_btn_checking: "Đang kiểm tra...",
+    updates_btn_download: "Tải về & Cài đặt",
+    updates_btn_downloading: "Đang tải...",
+    updates_btn_restart: "Khởi động lại để áp dụng",
+    updates_release_notes_label: "Ghi chú phát hành",
+    updates_toast_available_title: "Có bản cập nhật mới",
+    updates_toast_apply_failed: "Không thể áp dụng bản cập nhật",
 };
 
 const ZH_CN: Strings = Strings {
@@ -3333,6 +3407,30 @@ const ZH_CN: Strings = Strings {
     sql_snip_ljoin: "左外连接代码片段",
     sql_snip_cte: "公用表表达式 (CTE) 代码片段",
     sql_snip_ct: "建表 DDL 代码片段",
+    about_updates_title: "软件更新",
+    about_updates_desc: "由 Velopack 与 GitHub Releases 驱动的增量自动更新。",
+    updates_install_mode_label: "安装模式",
+    updates_mode_velopack: "Velopack 托管",
+    updates_mode_standalone: "独立运行",
+    updates_auto_check_label: "启动时自动检查更新",
+    updates_auto_check_desc: "打开 DataForge 时在后台检查 GitHub Releases。",
+    updates_status_label: "更新状态",
+    updates_status_idle: "准备检查更新",
+    updates_status_checking: "正在检查更新...",
+    updates_status_up_to_date: "DataForge 已是最新版本",
+    updates_status_available_tpl: "发现新版本 v{version}",
+    updates_status_downloading_tpl: "正在下载更新... {percent}%",
+    updates_status_ready_tpl: "v{version} 下载完成 — 重启以应用更新",
+    updates_status_standalone: "自动更新仅在 Velopack 安装版本中启用。当前以独立或便携模式运行。",
+    updates_status_error_tpl: "检查更新失败：{error}",
+    updates_btn_check: "检查更新",
+    updates_btn_checking: "检查中...",
+    updates_btn_download: "下载并安装",
+    updates_btn_downloading: "下载中...",
+    updates_btn_restart: "重启并应用",
+    updates_release_notes_label: "发行说明",
+    updates_toast_available_title: "发现可用更新",
+    updates_toast_apply_failed: "应用更新失败",
 };
 
 const JA_JP: Strings = Strings {
@@ -4130,6 +4228,30 @@ const JA_JP: Strings = Strings {
     sql_snip_ljoin: "左外部結合スニペット",
     sql_snip_cte: "共通テーブル式 (CTE) スニペット",
     sql_snip_ct: "テーブル作成 DDL スニペット",
+    about_updates_title: "ソフトウェアアップデート",
+    about_updates_desc: "Velopack と GitHub Releases による差分自動アップデート。",
+    updates_install_mode_label: "インストールモード",
+    updates_mode_velopack: "Velopack 管理",
+    updates_mode_standalone: "スタンドアロン",
+    updates_auto_check_label: "起動時にアップデートを自動確認",
+    updates_auto_check_desc: "DataForge の起動時にバックグラウンドで GitHub Releases を確認します。",
+    updates_status_label: "アップデート状態",
+    updates_status_idle: "アップデートの確認準備完了",
+    updates_status_checking: "アップデートを確認中...",
+    updates_status_up_to_date: "DataForge は最新です",
+    updates_status_available_tpl: "バージョン v{version} が利用可能です",
+    updates_status_downloading_tpl: "アップデートをダウンロード中... {percent}%",
+    updates_status_ready_tpl: "v{version} のダウンロード完了 — 再起動して適用",
+    updates_status_standalone: "自動アップデートは Velopack でインストールされたビルドでのみ有効です。現在はスタンドアロンまたはポータブルモードで実行中です。",
+    updates_status_error_tpl: "アップデートの確認に失敗しました: {error}",
+    updates_btn_check: "アップデートを確認",
+    updates_btn_checking: "確認中...",
+    updates_btn_download: "ダウンロードしてインストール",
+    updates_btn_downloading: "ダウンロード中...",
+    updates_btn_restart: "再起動して適用",
+    updates_release_notes_label: "リリースノート",
+    updates_toast_available_title: "アップデートが利用可能",
+    updates_toast_apply_failed: "アップデートの適用に失敗しました",
 };
 
 const ES_ES: Strings = Strings {
@@ -4927,6 +5049,30 @@ const ES_ES: Strings = Strings {
     sql_snip_ljoin: "Fragmento de unión externa izquierda (LEFT JOIN)",
     sql_snip_cte: "Fragmento de expresión de tabla común (CTE)",
     sql_snip_ct: "Fragmento DDL de creación de tabla",
+    about_updates_title: "Actualizaciones de software",
+    about_updates_desc: "Actualizaciones diferenciales automáticas mediante Velopack y GitHub Releases.",
+    updates_install_mode_label: "Modo de instalación",
+    updates_mode_velopack: "Administrado por Velopack",
+    updates_mode_standalone: "Independiente",
+    updates_auto_check_label: "Buscar actualizaciones automáticamente al iniciar",
+    updates_auto_check_desc: "Consulta GitHub Releases en segundo plano al abrir DataForge.",
+    updates_status_label: "Estado de actualización",
+    updates_status_idle: "Listo para buscar actualizaciones",
+    updates_status_checking: "Buscando actualizaciones...",
+    updates_status_up_to_date: "DataForge está actualizado",
+    updates_status_available_tpl: "La versión v{version} está disponible",
+    updates_status_downloading_tpl: "Descargando actualización... {percent}%",
+    updates_status_ready_tpl: "v{version} descargada — reinicie para aplicar",
+    updates_status_standalone: "Las actualizaciones automáticas solo están activas en compilaciones instaladas con Velopack. Ejecutándose en modo independiente o portátil.",
+    updates_status_error_tpl: "Error al buscar actualizaciones: {error}",
+    updates_btn_check: "Buscar actualizaciones",
+    updates_btn_checking: "Buscando...",
+    updates_btn_download: "Descargar e instalar",
+    updates_btn_downloading: "Descargando...",
+    updates_btn_restart: "Reiniciar para aplicar",
+    updates_release_notes_label: "Notas de la versión",
+    updates_toast_available_title: "Actualización disponible",
+    updates_toast_apply_failed: "No se pudo aplicar la actualización",
 };
 
 const FR_FR: Strings = Strings {
@@ -5724,6 +5870,30 @@ const FR_FR: Strings = Strings {
     sql_snip_ljoin: "Extrait de jointure externe gauche (LEFT JOIN)",
     sql_snip_cte: "Extrait d'expression de table commune (CTE)",
     sql_snip_ct: "Extrait DDL de création de table",
+    about_updates_title: "Mises à jour logicielles",
+    about_updates_desc: "Mises à jour différentielles automatiques via Velopack et GitHub Releases.",
+    updates_install_mode_label: "Mode d'installation",
+    updates_mode_velopack: "Géré par Velopack",
+    updates_mode_standalone: "Autonome",
+    updates_auto_check_label: "Vérifier automatiquement les mises à jour au démarrage",
+    updates_auto_check_desc: "Interroge GitHub Releases en arrière-plan à l'ouverture de DataForge.",
+    updates_status_label: "État des mises à jour",
+    updates_status_idle: "Prêt à vérifier les mises à jour",
+    updates_status_checking: "Recherche de mises à jour...",
+    updates_status_up_to_date: "DataForge est à jour",
+    updates_status_available_tpl: "La version v{version} est disponible",
+    updates_status_downloading_tpl: "Téléchargement de la mise à jour... {percent}%",
+    updates_status_ready_tpl: "v{version} téléchargée — redémarrez pour appliquer",
+    updates_status_standalone: "Les mises à jour automatiques sont uniquement actives dans les versions installées via Velopack. Exécution en mode autonome ou portable.",
+    updates_status_error_tpl: "Échec de la vérification : {error}",
+    updates_btn_check: "Rechercher des mises à jour",
+    updates_btn_checking: "Recherche...",
+    updates_btn_download: "Télécharger et installer",
+    updates_btn_downloading: "Téléchargement...",
+    updates_btn_restart: "Redémarrer pour appliquer",
+    updates_release_notes_label: "Notes de version",
+    updates_toast_available_title: "Mise à jour disponible",
+    updates_toast_apply_failed: "Échec de l'application de la mise à jour",
 };
 
 /// Initializes i18n locale selection from saved preference or OS environment variables.
@@ -5763,6 +5933,16 @@ mod tests {
             assert!(!s.settings.is_empty());
             assert!(!s.about_security_title.is_empty());
             assert!(!s.about_license_title.is_empty());
+            assert!(!s.about_updates_title.is_empty());
+            assert!(!s.updates_mode_velopack.is_empty());
+            assert!(!s.updates_mode_standalone.is_empty());
+            assert!(!s.updates_btn_check.is_empty());
+            assert!(!s.updates_btn_download.is_empty());
+            assert!(!s.updates_btn_restart.is_empty());
+            assert!(s.updates_status_available_tpl.contains("{version}"));
+            assert!(s.updates_status_downloading_tpl.contains("{percent}"));
+            assert!(s.updates_status_ready_tpl.contains("{version}"));
+            assert!(s.updates_status_error_tpl.contains("{error}"));
             let diag = diagnostics_locale_table(locale);
             assert_eq!(diag.locale(), locale.code());
             assert_eq!(diag.get("app.name"), "DataForge");
