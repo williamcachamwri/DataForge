@@ -32,6 +32,7 @@ use crate::error::AppError;
 use crate::i18n::{Locale, Strings};
 use crate::services::ServiceHub;
 use crate::shell_layout::{ShellHitTarget, ShellLayout, ShellLayoutConfig};
+use crate::updater::UpdaterManager;
 use crate::views::ai_drawer::{AiDrawerState, render_ai_drawer};
 use crate::views::content::{
     StructureColumnRow, render_connecting_view, render_data_grid, render_sql_editor,
@@ -113,6 +114,7 @@ pub struct AppController {
     pub last_export_status: Option<String>,
     pub last_width_dip: f32,
     pub last_height_dip: f32,
+    pub updater: UpdaterManager,
     grid_renderer: DataGridRenderer,
     editor_renderer: SqlEditorRenderer,
 }
@@ -200,6 +202,7 @@ impl AppController {
             last_export_status: None,
             last_width_dip: 1280.0,
             last_height_dip: 800.0,
+            updater: UpdaterManager::new(),
             grid_renderer: DataGridRenderer::new(settings.value_font.family.clone()),
             editor_renderer: SqlEditorRenderer::new(settings.editor_font.family.clone()),
             settings,
@@ -727,6 +730,29 @@ impl AppController {
         self.services
             .as_ref()
             .ok_or_else(|| AppError::InvalidState("service hub is not initialized".to_owned()))
+    }
+
+    /// Triggers the one-time startup auto-update check in non-headless GUI sessions.
+    pub fn trigger_auto_update_check(&mut self) -> bool {
+        if self.headless || !self.settings.auto_check_updates {
+            return false;
+        }
+        self.updater.trigger_auto_check_once()
+    }
+
+    /// Starts an asynchronous update check against GitHub Releases.
+    pub fn check_for_updates(&mut self) {
+        self.updater.check_for_updates();
+    }
+
+    /// Starts downloading the currently available update package.
+    pub fn download_update(&mut self) {
+        self.updater.download_update();
+    }
+
+    /// Applies the staged update package and restarts the application.
+    pub fn apply_update_and_restart(&mut self) -> std::result::Result<(), String> {
+        self.updater.apply_and_restart()
     }
 }
 
