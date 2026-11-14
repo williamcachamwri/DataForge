@@ -48,6 +48,8 @@ pub fn workspace_key_bindings() -> Vec<KeyBinding> {
         binding("ctrl-shift-enter", RunSelectedQuery),
         binding("shift-escape", CancelQuery),
         binding("ctrl-k", OpenCommandPalette),
+        binding("ctrl-shift-k", OpenCommandPalette),
+        binding("ctrl-p", OpenCommandPalette),
         binding("ctrl-f", FocusSidebarFilter),
         binding("ctrl-t", NewQueryTab),
         binding("ctrl-w", CloseActiveTab),
@@ -82,6 +84,6 @@ mod tests {
     #[test]
     fn workspace_key_bindings_parse_without_errors() {
         let bindings = workspace_key_bindings();
-        assert_eq!(bindings.len(), 24);
+        assert_eq!(bindings.len(), 26);
     }
 }
