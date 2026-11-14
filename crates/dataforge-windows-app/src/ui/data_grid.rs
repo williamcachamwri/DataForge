@@ -271,10 +271,7 @@ fn render_grid_toolbar_left(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
                     .variant(ChipVariant::Soft)
                     .size(HeroSize::Sm)
                     .color(HeroColor::Warning)
-                    .child(
-                        ChipLabel::new()
-                            .child(format!("{pending_count} {}", s.pending_suffix)),
-                    ),
+                    .child(ChipLabel::new().child(format!("{pending_count} {}", s.pending_suffix))),
             )
         })
         .into_any_element()
@@ -765,12 +762,7 @@ fn render_active_filter_strip(
             Some(tablepro_core::filter::FilterValue::Single(v)) => format!(" '{v}'"),
             _ => String::new(),
         };
-        let summary = format!(
-            "{} {}{}",
-            rule.column,
-            filter_op_label(rule.op, s),
-            val_str
-        );
+        let summary = format!("{} {}{}", rule.column, filter_op_label(rule.op, s), val_str);
         row = row.child(
             Chip::new()
                 .variant(ChipVariant::Soft)
@@ -1078,13 +1070,8 @@ fn render_grid_header_cell(
         .map(|k| k.direction);
     let col_width = col.width as f32;
     let is_resizing = ws.data_grid_ui.resizing_col_idx == Some(display_pos);
-    let menu_btn = render_header_column_menu(
-        display_pos,
-        col,
-        viewport_w,
-        &ws.controller.strings,
-        cx,
-    );
+    let menu_btn =
+        render_header_column_menu(display_pos, col, viewport_w, &ws.controller.strings, cx);
     let resize_handle = render_header_resize_handle(display_pos, col_width, is_resizing, cx);
 
     div()
