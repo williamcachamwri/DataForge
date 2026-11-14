@@ -882,7 +882,7 @@ fn render_detail_pane(
 
     let content = div()
         .w_full()
-        .max_w(px(760.0))
+        .max_w(px(1080.0))
         .mx_auto()
         .flex()
         .flex_col()
