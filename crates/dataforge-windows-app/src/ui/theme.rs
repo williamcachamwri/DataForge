@@ -392,12 +392,9 @@ pub fn chrome_theme_for_mode(mode: ThemeMode) -> Theme {
     }
 }
 
-/// Applies the active HeroGPUI Chrome [`Theme`], backdrop translucency, and Windows reduced-motion setting.
-pub fn apply_chrome_theme_and_motion(
-    mode: ThemeMode,
-    backdrop: WindowBackdropPreference,
-    cx: &mut App,
-) {
+/// Builds the active HeroGPUI Chrome [`Theme`] with backdrop translucency applied.
+#[must_use]
+pub fn chrome_theme_with_backdrop(mode: ThemeMode, backdrop: WindowBackdropPreference) -> Theme {
     let mut theme = chrome_theme_for_mode(mode);
     let alphas = match backdrop {
         WindowBackdropPreference::Opaque => None,
@@ -415,6 +412,38 @@ pub fn apply_chrome_theme_and_motion(
         theme.colors.surface_secondary = with_alpha(theme.colors.surface_secondary, sec_a);
         theme.colors.surface_tertiary = with_alpha(theme.colors.surface_tertiary, tert_a);
     }
+    theme
+}
+
+/// Derives an opaque [`Theme`] snapshot for floating toast cards from `base`.
+///
+/// HeroGPUI's `ToastCardEl` paints toast cards with `colors.surface.background` rather
+/// than `colors.overlay.background`. Under translucent Windows backdrops (`GaussianBlur`,
+/// `Mica`, `MicaAlt`), `surface.background` carries panel translucency, letting underlying
+/// sharp text bleed through because GPUI has no in-app `backdrop-filter: blur()` shader.
+/// Promoting `surface.background` to the opaque (`1.0` alpha) `overlay.background` keeps
+/// toast cards solid across every backdrop and theme mode while leaving workspace panels
+/// translucent.
+#[must_use]
+pub fn toast_opaque_theme(base: &Theme) -> Theme {
+    let mut theme = base.clone();
+    let opaque_overlay = with_alpha(base.colors.overlay.background, 1.0);
+    theme.colors.overlay.background = opaque_overlay;
+    theme.colors.surface.background = opaque_overlay;
+    theme.colors.surface.foreground = base.colors.overlay.foreground;
+    theme.colors.background = with_alpha(base.colors.background, 1.0);
+    theme.colors.surface_secondary = with_alpha(base.colors.surface_secondary, 1.0);
+    theme.colors.surface_tertiary = with_alpha(base.colors.surface_tertiary, 1.0);
+    theme
+}
+
+/// Applies the active HeroGPUI Chrome [`Theme`], backdrop translucency, and Windows reduced-motion setting.
+pub fn apply_chrome_theme_and_motion(
+    mode: ThemeMode,
+    backdrop: WindowBackdropPreference,
+    cx: &mut App,
+) {
+    let theme = chrome_theme_with_backdrop(mode, backdrop);
     set_theme(theme, cx);
     set_reduce_motion(detect_reduced_motion(), cx);
 }
@@ -785,6 +814,70 @@ mod tests {
             assert_eq!(curve(1.0), 1.0);
             assert_eq!(curve(1.5), 1.0);
             assert!(curve(0.5) > 0.5);
+        }
+    }
+
+    #[test]
+    fn toast_opaque_theme_stays_opaque_across_all_backdrops_and_modes() {
+        let modes = [
+            ThemeMode::Light,
+            ThemeMode::Dark,
+            ThemeMode::HighContrastLight,
+            ThemeMode::HighContrastDark,
+        ];
+        let backdrops = [
+            WindowBackdropPreference::Opaque,
+            WindowBackdropPreference::GaussianBlur,
+            WindowBackdropPreference::Mica,
+            WindowBackdropPreference::MicaAlt,
+        ];
+
+        for mode in modes {
+            for backdrop in backdrops {
+                let chrome = chrome_theme_with_backdrop(mode, backdrop);
+                if backdrop == WindowBackdropPreference::Opaque {
+                    assert!(
+                        (chrome.colors.surface.background.a - 1.0).abs() < f32::EPSILON,
+                        "opaque backdrop should keep surface opaque for {mode:?}"
+                    );
+                } else {
+                    assert!(
+                        chrome.colors.surface.background.a < 1.0,
+                        "translucent backdrop {backdrop:?} should preserve panel translucency for {mode:?}"
+                    );
+                }
+                assert!(
+                    (chrome.colors.overlay.background.a - 1.0).abs() < f32::EPSILON,
+                    "overlay.background must stay opaque for {mode:?} / {backdrop:?}"
+                );
+
+                let toast = toast_opaque_theme(&chrome);
+                assert!(
+                    (toast.colors.surface.background.a - 1.0).abs() < f32::EPSILON,
+                    "toast surface.background must be opaque for {mode:?} / {backdrop:?}"
+                );
+                assert_eq!(
+                    toast.colors.surface.background,
+                    with_alpha(chrome.colors.overlay.background, 1.0),
+                    "toast surface.background should match opaque overlay.background for {mode:?} / {backdrop:?}"
+                );
+                assert!(
+                    (toast.colors.overlay.background.a - 1.0).abs() < f32::EPSILON,
+                    "toast overlay.background must be opaque for {mode:?} / {backdrop:?}"
+                );
+                assert!(
+                    (toast.colors.background.a - 1.0).abs() < f32::EPSILON,
+                    "toast background must be opaque for {mode:?} / {backdrop:?}"
+                );
+                assert!(
+                    (toast.colors.surface_secondary.a - 1.0).abs() < f32::EPSILON,
+                    "toast surface_secondary must be opaque for {mode:?} / {backdrop:?}"
+                );
+                assert!(
+                    (toast.colors.surface_tertiary.a - 1.0).abs() < f32::EPSILON,
+                    "toast surface_tertiary must be opaque for {mode:?} / {backdrop:?}"
+                );
+            }
         }
     }
 }
