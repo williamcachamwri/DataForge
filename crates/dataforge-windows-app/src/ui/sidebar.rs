@@ -141,9 +141,7 @@ pub fn render_sidebar(
         ConnectionWindowPhase::Connecting { .. } | ConnectionWindowPhase::Reconnecting { .. } => {
             render_schema_skeletons(cx)
         }
-        ConnectionWindowPhase::Disconnected => {
-            render_disconnected_card(&ws.controller.strings, cx)
-        }
+        ConnectionWindowPhase::Disconnected => render_disconnected_card(&ws.controller.strings, cx),
         ConnectionWindowPhase::Unavailable(view) => {
             render_unavailable_sidebar_card(&ws.controller.strings, &view.summary, cx)
         }
@@ -272,9 +270,7 @@ fn render_refresh_button(
             spawn_schema_refresh(ws, schema, cx);
         }));
 
-    Tooltip::new(refresh_tooltip)
-        .child(btn)
-        .into_any_element()
+    Tooltip::new(refresh_tooltip).child(btn).into_any_element()
 }
 
 fn render_database_and_schema_controls(
@@ -698,7 +694,11 @@ fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem
                 groups.push(
                     TreeItem::new(
                         format!("grp:cols:{key}"),
-                        format!("{} ({})", ws.controller.strings.columns_button, col_items.len()),
+                        format!(
+                            "{} ({})",
+                            ws.controller.strings.columns_button,
+                            col_items.len()
+                        ),
                     )
                     .icon(IconName::Columns2.path())
                     .children(col_items),
@@ -724,7 +724,11 @@ fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem
                     groups.push(
                         TreeItem::new(
                             format!("grp:idxs:{key}"),
-                            format!("{} ({})", ws.controller.strings.indexes_label, idx_items.len()),
+                            format!(
+                                "{} ({})",
+                                ws.controller.strings.indexes_label,
+                                idx_items.len()
+                            ),
                         )
                         .icon(IconName::ListOrdered.path())
                         .children(idx_items),
@@ -742,8 +746,8 @@ fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem
                     format!("loading:{key}"),
                     ws.controller.strings.expand_to_load_columns,
                 )
-                    .icon(IconName::LoaderCircle.path())
-                    .is_disabled(true),
+                .icon(IconName::LoaderCircle.path())
+                .is_disabled(true),
             ],
         };
         item = item.children(children);
@@ -974,7 +978,9 @@ fn build_object_menu_items(
         );
         items.push(MenuItem::Separator);
     }
-    items.push(MenuItem::new("refresh_schema", s.refresh_schema_short).icon(IconName::RefreshCw.path()));
+    items.push(
+        MenuItem::new("refresh_schema", s.refresh_schema_short).icon(IconName::RefreshCw.path()),
+    );
     items
 }
 
@@ -995,12 +1001,7 @@ fn execute_node_action(
                 }
                 Err(err) => {
                     let msg = ws.controller.strings.failed_to_open_table;
-                    ws.notify_toast(
-                        ToastSeverity::Error,
-                        msg,
-                        Some(err.to_string().into()),
-                        cx,
-                    );
+                    ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
                 }
             }
         }
@@ -1015,12 +1016,7 @@ fn execute_node_action(
                 }
                 Err(err) => {
                     let msg = ws.controller.strings.load_structure_failed_toast;
-                    ws.notify_toast(
-                        ToastSeverity::Error,
-                        msg,
-                        Some(err.to_string().into()),
-                        cx,
-                    );
+                    ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
                 }
             }
         }
@@ -1034,12 +1030,7 @@ fn execute_node_action(
             ws.controller.set_editor_sql(&sql);
             ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
             let ready_msg = ws.controller.strings.query_ready_toast;
-            ws.notify_toast(
-                ToastSeverity::Info,
-                ready_msg,
-                Some(qualified.into()),
-                cx,
-            );
+            ws.notify_toast(ToastSeverity::Info, ready_msg, Some(qualified.into()), cx);
             cx.notify();
         }
         "copy_qualified" => {
@@ -1048,7 +1039,12 @@ fn execute_node_action(
             cx.write_to_clipboard(ClipboardItem::new_string(qualified.clone()));
             ws.sidebar_ui.copied_object = Some((qualified.clone(), Instant::now()));
             let copied_msg = ws.controller.strings.copied;
-            ws.notify_toast(ToastSeverity::Success, copied_msg, Some(qualified.into()), cx);
+            ws.notify_toast(
+                ToastSeverity::Success,
+                copied_msg,
+                Some(qualified.into()),
+                cx,
+            );
             cx.notify();
         }
         "toggle_favorite" => {
@@ -1088,12 +1084,7 @@ fn spawn_schema_refresh(
     let Some(services) = ws.controller.services.clone() else {
         let title = ws.controller.strings.unavailable;
         let desc = ws.controller.strings.service_runtime_not_init;
-        ws.notify_toast(
-            ToastSeverity::Warning,
-            title,
-            Some(desc.into()),
-            cx,
-        );
+        ws.notify_toast(ToastSeverity::Warning, title, Some(desc.into()), cx);
         return;
     };
     let workspace_id = ws.controller.active_workspace;
@@ -1161,12 +1152,7 @@ fn spawn_schema_refresh(
                         }
                         Err(err) => {
                             let msg = ws.controller.strings.schema_refresh_failed_toast;
-                            ws.notify_toast(
-                                ToastSeverity::Error,
-                                msg,
-                                Some(err.into()),
-                                cx,
-                            );
+                            ws.notify_toast(ToastSeverity::Error, msg, Some(err.into()), cx);
                         }
                     }
                     cx.notify();
