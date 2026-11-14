@@ -5,13 +5,14 @@ use herogpui::components::{
     Orientation, Separator, Size, ToggleButton, ToggleVariant, Tooltip, TooltipPlacement, Variant,
 };
 use herogpui::gpui::{
-    AnyElement, App, ClickEvent, Context, InteractiveElement, IntoElement, ParentElement, Styled,
-    Window, div, px,
+    AnyElement, App, ClickEvent, Context, InteractiveElement, IntoElement, ParentElement,
+    SharedString, Styled, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
 
 use crate::accessibility::KeyCommand;
 use crate::app::{AppController, ScreenMode};
+use crate::i18n::Strings;
 use crate::views::rail::RailConnectionItem;
 use dataforge_state::connection_window::ConnectionWindowPhase;
 
@@ -61,7 +62,7 @@ pub fn render_rail(
         ))
         .child(render_rail_toggle(
             "rail-nav-connections",
-            "Connections Library (Ctrl+Shift+C)",
+            format!("{} (Ctrl+Shift+C)", ws.controller.strings.connections_library),
             IconName::Server,
             ws.controller.screen_mode == ScreenMode::ConnectionsLibrary,
             skip_anim,
@@ -119,7 +120,7 @@ fn render_workspace_nav_button(
         .size(Size::Md)
         .is_icon_only(true)
         .is_selected(selected)
-        .aria_label("SQL Workspace")
+        .aria_label(controller.strings.sql_workspace_aria)
         .on_press(cx.listener(|ws, _, _, cx| {
             ws.switch_screen(ScreenMode::Workspace, cx);
         }))
@@ -152,7 +153,7 @@ fn render_workspace_nav_button(
         btn.into_any_element()
     };
 
-    Tooltip::new("Workspace")
+    Tooltip::new(controller.strings.workspace)
         .id("rail-nav-workspace-tip")
         .placement(TooltipPlacement::Right)
         .delay(300)
@@ -177,6 +178,7 @@ fn render_rail_workspaces(
 
     for (idx, item) in controller.rail_items.iter().enumerate() {
         col = col.child(render_rail_workspace_item(
+            controller,
             idx,
             item,
             controller.screen_mode == ScreenMode::Workspace,
@@ -189,6 +191,7 @@ fn render_rail_workspaces(
 }
 
 fn render_rail_workspace_item(
+    controller: &AppController,
     idx: usize,
     item: &RailConnectionItem,
     in_workspace: bool,
@@ -198,13 +201,14 @@ fn render_rail_workspace_item(
     let colors = cx.colors().clone();
     let is_active = in_workspace && item.active;
     let status_text = if item.connected {
-        "Connected"
+        controller.strings.connected
     } else {
-        "Click to connect"
+        controller.strings.connect_cta
     };
     let tooltip_text = format!("{} · {status_text}", item.label);
     let conn_id = item.id.clone();
     let is_connected = item.connected;
+    let conn_failed_title = controller.strings.connection_failed;
     let icon_color = if is_active {
         colors.accent.color
     } else {
@@ -226,7 +230,7 @@ fn render_rail_workspace_item(
             {
                 super::toasts::push_retry_connection_toast(
                     cx.entity().downgrade(),
-                    "Connection failed",
+                    conn_failed_title,
                     err.to_string(),
                     cx,
                 );
@@ -265,6 +269,7 @@ fn render_rail_bottom_controls(
     skip_anim: bool,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &controller.strings;
     let dark = controller.uses_dark_titlebar();
     let sidebar_open =
         controller.screen_mode == ScreenMode::Workspace && controller.layout_config.sidebar_visible;
@@ -277,7 +282,7 @@ fn render_rail_bottom_controls(
         .gap(px(MICRO_GAP_PX))
         .child(render_rail_toggle(
             "rail-toggle-sidebar",
-            "Toggle Sidebar (Ctrl+B)",
+            s.toggle_sidebar_tooltip,
             IconName::PanelLeft,
             sidebar_open,
             skip_anim,
@@ -289,7 +294,7 @@ fn render_rail_bottom_controls(
         ))
         .child(render_rail_toggle(
             "rail-toggle-inspector",
-            "Toggle Row Inspector (Ctrl+I)",
+            format!("{} (Ctrl+I)", s.row_inspector_title),
             IconName::Columns2,
             controller.layout_config.inspector_visible,
             skip_anim,
@@ -300,7 +305,7 @@ fn render_rail_bottom_controls(
         ))
         .child(render_rail_toggle(
             "rail-toggle-ai",
-            "Toggle AI Assistant (Ctrl+Shift+A)",
+            format!("{} (Ctrl+Shift+A)", s.ai_assistant_title),
             IconName::Sparkles,
             controller.layout_config.ai_drawer_visible,
             skip_anim,
@@ -309,10 +314,10 @@ fn render_rail_bottom_controls(
                 ws.execute_key_command(KeyCommand::ToggleAiDrawer, window, cx);
             }),
         ))
-        .child(render_rail_theme_toggle(dark, skip_anim, cx))
+        .child(render_rail_theme_toggle(s, dark, skip_anim, cx))
         .child(render_rail_toggle(
             "rail-nav-settings",
-            "Settings (Ctrl+,)",
+            format!("{} (Ctrl+,)", s.settings),
             IconName::Settings,
             controller.screen_mode == ScreenMode::Settings,
             skip_anim,
@@ -330,15 +335,16 @@ fn render_rail_bottom_controls(
 }
 
 fn render_rail_theme_toggle(
+    s: &Strings,
     dark: bool,
     skip_anim: bool,
     cx: &Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     Tooltip::new(if dark {
-        "Switch to Light Theme (Ctrl+Shift+M)"
+        s.switch_light_theme_tooltip
     } else {
-        "Switch to Dark Theme (Ctrl+Shift+M)"
+        s.switch_dark_theme_tooltip
     })
     .id("rail-toggle-theme-tip")
     .placement(TooltipPlacement::Right)
@@ -350,7 +356,7 @@ fn render_rail_theme_toggle(
             .variant(Variant::Ghost)
             .size(Size::Md)
             .is_icon_only(true)
-            .aria_label("Toggle Theme")
+            .aria_label(s.toggle_theme_aria)
             .on_press(cx.listener(|ws, _, window, cx| {
                 ws.toggle_theme_mode(window, cx);
             }))
@@ -365,13 +371,14 @@ fn render_rail_theme_toggle(
 
 fn render_rail_toggle(
     id: &'static str,
-    tooltip: &'static str,
+    tooltip: impl Into<SharedString>,
     icon: IconName,
     selected: bool,
     skip_anim: bool,
     cx: &Context<DataForgeWorkspace>,
     on_press: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
+    let tooltip: SharedString = tooltip.into();
     let colors = cx.colors().clone();
     let fg = if selected {
         colors.accent.color
@@ -391,7 +398,7 @@ fn render_rail_toggle(
         ));
     }
 
-    Tooltip::new(tooltip)
+    Tooltip::new(tooltip.clone())
         .id(format!("{id}-tip"))
         .placement(TooltipPlacement::Right)
         .delay(300)
