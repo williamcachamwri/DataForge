@@ -153,6 +153,7 @@ DataForge/
 
 ## Community, Security & License
 
+- **Contributing**: See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture notes, build rules, UI/L10n guidelines, and pull request conventions.
 - **Code of Conduct**: See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 - **Security Policy**: See [SECURITY.md](SECURITY.md) for vulnerability reporting and local-first privacy guarantees.
 - **License**: DataForge is available under the [MIT License](LICENSE-MIT) (with upstream core attribution to [TableProApp/TablePro](https://github.com/TableProApp/TablePro), also under MIT) alongside [LICENSE](LICENSE).
