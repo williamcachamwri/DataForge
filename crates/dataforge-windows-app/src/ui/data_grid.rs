@@ -16,9 +16,9 @@ use dataforge_state::data_grid::{
     MIN_COLUMN_WIDTH, SortDirection as ModelSortDir,
 };
 use herogpui::components::{
-    Button, Checkbox, Chip, ChipLabel, ChipVariant, ContextMenu, Dropdown, DropdownPlacement, Icon,
-    IconName, IconSize, Input, InputState, MenuItem, Pagination, PickerItem, Popover,
-    PopoverPlacement, Scrollbar, Select,
+    Button, Chip, ChipLabel, ChipVariant, ContextMenu, Dropdown, DropdownPlacement, Icon, IconName,
+    IconSize, Input, InputState, MenuItem, Pagination, PickerItem, Popover, PopoverPlacement,
+    Scrollbar, Select,
 };
 use herogpui::core::{
     Color as HeroColor, Orientation as HeroOrientation, Size as HeroSize, Variant, with_alpha,
@@ -82,7 +82,7 @@ impl DataGridViewState {
             columns_popover_open: false,
             filters_popover_open: false,
             filter_col_idx: 0,
-            filter_op: FilterOp::Contains,
+            filter_op: FilterOp::Eq,
             filter_value_input,
             inline_input,
             inline_focus_requested: None,
@@ -462,21 +462,75 @@ fn build_column_visibility_list(
         } else {
             col.name
         };
+        let colors = cx.colors();
+        let accent = colors.accent.color;
+        let accent_fg = colors.accent.foreground;
+        let fg = colors.foreground;
+        let hover_bg = with_alpha(colors.foreground, 0.05);
+        let box_bg = if visible {
+            accent
+        } else {
+            colors.field.background
+        };
+        let box_border = if visible {
+            accent
+        } else {
+            theme::hairline_border_color(cx)
+        };
+        let box_hover_border = if visible {
+            accent
+        } else {
+            with_alpha(accent, 0.55)
+        };
+
         list = list.child(
-            Checkbox::new(("grid-col-vis", col_id.0 as usize))
-                .is_selected(visible)
-                .label(label_text)
-                .on_change(move |checked, _w, cx| {
-                    let show = *checked;
+            div()
+                .id(("grid-col-vis", col_id.0 as usize))
+                .w_full()
+                .h(px(28.0))
+                .px(px(6.0))
+                .rounded(px(6.0))
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .cursor_pointer()
+                .hover(move |s| s.bg(hover_bg))
+                .on_click(move |_, _, cx| {
                     entity_cb.update(cx, |ws, cx| {
-                        if show {
+                        if ws.data_grid_ui.hidden_columns.contains(&col_id) {
                             ws.data_grid_ui.hidden_columns.remove(&col_id);
                         } else {
                             ws.data_grid_ui.hidden_columns.insert(col_id);
                         }
                         cx.notify();
                     });
-                }),
+                })
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .size(px(15.0))
+                        .rounded(px(4.0))
+                        .border_1()
+                        .border_color(box_border)
+                        .bg(box_bg)
+                        .hover(move |s| s.border_color(box_hover_border))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .when(visible, |el| {
+                            el.child(Icon::new(IconName::Check).size(px(11.0)).color(accent_fg))
+                        }),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .flex_1()
+                        .truncate()
+                        .text_size(px(12.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(fg)
+                        .child(label_text),
+                ),
         );
     }
     list.into_any_element()
@@ -1439,26 +1493,43 @@ fn build_grid_cell_content(
         .child(display_text);
 
     if let Some(fk) = fk_match.cloned() {
+        let accent = cx.colors().accent.color;
+        let idle_bg = with_alpha(accent, 0.10);
+        let hover_bg = with_alpha(accent, 0.18);
+        let active_bg = with_alpha(accent, 0.26);
         div()
             .w_full()
+            .h_full()
             .flex()
             .items_center()
             .justify_between()
             .gap(px(4.0))
             .child(text_el)
             .child(
-                Button::new(("fk-jump", row_idx * 1000 + display_pos))
-                    .variant(Variant::Tertiary)
-                    .size(HeroSize::Sm)
-                    .is_icon_only(true)
+                div()
+                    .id(("fk-jump", row_idx * 1000 + display_pos))
+                    .flex_shrink_0()
+                    .w(px(18.0))
+                    .h(px(18.0))
+                    .rounded(px(4.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .bg(idle_bg)
+                    .hover(move |s| s.bg(hover_bg))
+                    .active(move |s| s.bg(active_bg))
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| {
+                        cx.stop_propagation();
+                    })
+                    .on_click(cx.listener(move |ws, _ev, _w, cx| {
+                        navigate_to_foreign_key(ws, &fk, &val_for_fk, cx);
+                    }))
                     .child(
                         Icon::new(IconName::ArrowUpRight)
-                            .size(IconSize::Xs)
-                            .color(cx.colors().accent.color),
-                    )
-                    .on_press(cx.listener(move |ws, _ev, _w, cx| {
-                        navigate_to_foreign_key(ws, &fk, &val_for_fk, cx);
-                    })),
+                            .size(px(11.0))
+                            .color(accent),
+                    ),
             )
             .into_any_element()
     } else {
