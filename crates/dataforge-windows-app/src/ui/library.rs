@@ -51,6 +51,7 @@ use super::theme::{
     hairline_border_color, is_reduced_motion, overlay_duration, panel_surface_bg,
 };
 use crate::app::ScreenMode;
+use crate::i18n::Strings;
 use crate::services::{build_connect_request, default_port_for_engine, driver_id_from_engine};
 use crate::views::library::{AuthMode, ConnectionFormDraft, TlsMode, engine_from_driver_id};
 
@@ -382,6 +383,7 @@ fn rescan_foreign_inventories(ws: &mut DataForgeWorkspace) {
 }
 
 fn render_library_rail_title_row(
+    s: &Strings,
     total_count: usize,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
@@ -411,7 +413,7 @@ fn render_library_rail_title_row(
                     div()
                         .text_sm()
                         .font_weight(FontWeight::SEMIBOLD)
-                        .child("Connections"),
+                        .child(s.connections_library),
                 )
                 .child(count_pill),
         )
@@ -419,7 +421,7 @@ fn render_library_rail_title_row(
             Button::new("library-new-btn")
                 .variant(Variant::Secondary)
                 .size(Size::Sm)
-                .label("New")
+                .label(s.new_label)
                 .child(Icon::new(IconName::Plus).size(IconSize::Sm))
                 .on_press(cx.listener(|ws, _, _, cx| {
                     ws.library_ui
@@ -434,6 +436,7 @@ fn render_library_rail(
     ws: &mut DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let total_count = ws.controller.library.storage().connections.len();
     let filter_key = if ws.library_ui.filter_favorites_only {
         LIST_FILTER_FAVORITES
@@ -443,8 +446,8 @@ fn render_library_rail(
     let filter_tabs = Tabs::new(
         "library-rail-filter-tabs",
         vec![
-            TabItem::new(LIST_FILTER_ALL, "All"),
-            TabItem::new(LIST_FILTER_FAVORITES, "Favorites"),
+            TabItem::new(LIST_FILTER_ALL, s.all),
+            TabItem::new(LIST_FILTER_FAVORITES, s.favorites),
         ],
         LIST_FILTER_ALL,
     )
@@ -457,7 +460,7 @@ fn render_library_rail(
     }));
 
     let search = SearchField::new(&ws.library_ui.search_input)
-        .placeholder("Filter connections...")
+        .placeholder(s.filter_connections_placeholder)
         .variant(FieldVariant::Secondary)
         .full_width()
         .on_change(cx.listener(|ws, val: &str, _, cx| {
@@ -483,7 +486,7 @@ fn render_library_rail(
                 .p(px(12.0))
                 .border_b(px(HAIRLINE_BORDER_PX))
                 .border_color(hairline_border_color(cx))
-                .child(render_library_rail_title_row(total_count, cx))
+                .child(render_library_rail_title_row(s, total_count, cx))
                 .child(search)
                 .child(filter_tabs),
         )
@@ -495,9 +498,9 @@ fn render_library_rail_body(
     ws: &mut DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
-    let storage = ws.controller.library.storage();
-    if storage.connections.is_empty() {
-        return render_empty_library_state(cx);
+    if ws.controller.library.storage().connections.is_empty() {
+        let s = &ws.controller.strings;
+        return render_empty_library_state(s, cx);
     }
 
     let (items, row_meta) = build_listbox_items(ws);
@@ -555,7 +558,7 @@ fn render_library_rail_body(
         .into_any_element()
 }
 
-fn render_empty_library_state(cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_empty_library_state(s: &Strings, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
     let card = Card::new()
         .variant(CardVariant::Secondary)
@@ -571,11 +574,9 @@ fn render_empty_library_state(cx: &mut Context<DataForgeWorkspace>) -> AnyElemen
                                 .size(IconSize::Md)
                                 .color(colors.muted),
                         )
-                        .child(CardTitle::new().child("No Saved Connections")),
+                        .child(CardTitle::new().child(s.empty_library_title)),
                 )
-                .child(CardDescription::new().child(
-                    "Configure a server connection, open a local SQLite or DuckDB file, or import existing profiles.",
-                )),
+                .child(CardDescription::new().child(s.empty_library_desc)),
         )
         .child(
             CardContent::new()
@@ -589,7 +590,7 @@ fn render_empty_library_state(cx: &mut Context<DataForgeWorkspace>) -> AnyElemen
                                 .variant(Variant::Primary)
                                 .size(Size::Sm)
                                 .full_width(true)
-                                .label("New Connection")
+                                .label(s.new_connection_btn)
                                 .child(Icon::new(IconName::Plus).size(IconSize::Sm))
                                 .on_press(cx.listener(|ws, _, _, cx| {
                                     ws.library_ui
@@ -602,10 +603,11 @@ fn render_empty_library_state(cx: &mut Context<DataForgeWorkspace>) -> AnyElemen
                                 .variant(Variant::Secondary)
                                 .size(Size::Sm)
                                 .full_width(true)
-                                .label("Open SQLite / DuckDB File...")
+                                .label(s.open_local_file_btn)
                                 .child(Icon::new(IconName::FolderOpen).size(IconSize::Sm))
-                                .on_press(cx.listener(|_ws, _, _, cx| {
-                                    trigger_open_local_file(cx);
+                                .on_press(cx.listener(|ws, _, _, cx| {
+                                    let prompt = ws.controller.strings.open_sqlite_duckdb_prompt;
+                                    trigger_open_local_file(prompt, cx);
                                 })),
                         )
                         .child(
@@ -613,7 +615,7 @@ fn render_empty_library_state(cx: &mut Context<DataForgeWorkspace>) -> AnyElemen
                                 .variant(Variant::Tertiary)
                                 .size(Size::Sm)
                                 .full_width(true)
-                                .label("Import From Other Clients")
+                                .label(s.import_other_clients_btn)
                                 .child(Icon::new(IconName::Download).size(IconSize::Sm))
                                 .on_press(cx.listener(|ws, _, _, cx| {
                                     ws.library_ui.active_tab = SharedString::from(TAB_IMPORT);
@@ -631,11 +633,12 @@ fn render_no_matching_connections(
     ws: &mut DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let has_query = !ws.controller.library.search_query.trim().is_empty();
     let msg = if ws.library_ui.filter_favorites_only && !has_query {
-        "No favorite connections yet. Star a saved connection to pin it here."
+        s.no_favorite_connections_desc
     } else {
-        "No connections match your current filter."
+        s.no_matching_connections_desc
     };
 
     div()
@@ -646,7 +649,7 @@ fn render_no_matching_connections(
                 .variant(CardVariant::Secondary)
                 .child(
                     CardHeader::new()
-                        .child(CardTitle::new().child("No Matching Connections"))
+                        .child(CardTitle::new().child(s.no_matching_connections_title))
                         .child(CardDescription::new().child(msg)),
                 )
                 .child(
@@ -654,7 +657,7 @@ fn render_no_matching_connections(
                         Button::new("clear-library-filter")
                             .variant(Variant::Secondary)
                             .size(Size::Sm)
-                            .label("Show All Connections")
+                            .label(s.show_all_connections_btn)
                             .on_press(cx.listener(|ws, _, _, cx| {
                                 ws.library_ui.filter_favorites_only = false;
                                 set_input_text(&ws.library_ui.search_input, "", cx);
@@ -675,6 +678,7 @@ fn build_listbox_items(
     let outline = ws.controller.library.outline();
     let conns = &ws.controller.library.storage().connections;
     let saved = &ws.library_ui.saved_records;
+    let s = &ws.controller.strings;
 
     for row in outline {
         match &row.row_id {
@@ -696,15 +700,15 @@ fn build_listbox_items(
                     && items.is_empty()
                     && !ws.library_ui.filter_favorites_only
                 {
-                    items.push(ListBoxItem::section("Favorites"));
+                    items.push(ListBoxItem::section(s.favorites));
                 }
                 if matches!(section, LibrarySection::Ungrouped)
                     && items
                         .iter()
                         .any(|item| matches!(item, ListBoxItem::Section(_)))
-                    && !has_ungrouped_header(&items)
+                    && !has_ungrouped_header(&items, s.other_connections_section)
                 {
-                    items.push(ListBoxItem::section("Other Connections"));
+                    items.push(ListBoxItem::section(s.other_connections_section));
                 }
 
                 let row_key = SharedString::from(encode_row_key(section, &id.0));
@@ -742,9 +746,9 @@ fn has_group_children(header: &LibraryOutlineRow, outline: &[LibraryOutlineRow])
     })
 }
 
-fn has_ungrouped_header(items: &[ListBoxItem]) -> bool {
+fn has_ungrouped_header(items: &[ListBoxItem], other_header: &str) -> bool {
     items.iter().any(
-        |item| matches!(item, ListBoxItem::Section(title) if title.as_ref() == "Other Connections"),
+        |item| matches!(item, ListBoxItem::Section(title) if title.as_ref() == other_header),
     )
 }
 
@@ -924,6 +928,7 @@ fn render_detail_pane(
 }
 
 fn render_detail_header_actions(
+    s: &Strings,
     conn_id: &str,
     is_favorite: bool,
     delete_armed: bool,
@@ -945,7 +950,11 @@ fn render_detail_header_actions(
                     Variant::Tertiary
                 })
                 .size(Size::Sm)
-                .label(if is_favorite { "Favorited" } else { "Favorite" })
+                .label(if is_favorite {
+                    s.favorited_label
+                } else {
+                    s.favorite_label
+                })
                 .child(
                     Icon::new(IconName::Star)
                         .size(IconSize::Sm)
@@ -968,9 +977,9 @@ fn render_detail_header_actions(
                 })
                 .size(Size::Sm)
                 .label(if delete_armed {
-                    "Confirm Delete"
+                    s.confirm_delete_label
                 } else {
-                    "Delete"
+                    s.delete
                 })
                 .child(Icon::new(IconName::Trash2).size(IconSize::Sm))
                 .on_press(cx.listener(move |ws, _, _, cx| {
@@ -985,6 +994,7 @@ fn render_detail_header(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let engine = draft.engine;
     let selected_id = ws.library_ui.selected_connection_id.clone();
@@ -998,7 +1008,8 @@ fn render_detail_header(
     });
 
     let title = if draft.name.trim().is_empty() {
-        format!("New {} Connection", engine.display_name())
+        s.new_engine_connection_tpl
+            .replace("{engine}", engine.display_name())
     } else {
         draft.name.clone()
     };
@@ -1006,8 +1017,8 @@ fn render_detail_header(
     let tabs = Tabs::new(
         "library-detail-tabs",
         vec![
-            TabItem::new(TAB_CONFIGURE, "Configure"),
-            TabItem::new(TAB_IMPORT, "Foreign Importers"),
+            TabItem::new(TAB_CONFIGURE, s.tab_configure),
+            TabItem::new(TAB_IMPORT, s.tab_foreign_importers),
         ],
         TAB_CONFIGURE,
     )
@@ -1047,6 +1058,7 @@ fn render_detail_header(
     if let Some(conn_id) = selected_id {
         let delete_armed = ws.library_ui.delete_armed_for.as_deref() == Some(conn_id.as_str());
         left_group = left_group.child(render_detail_header_actions(
+            s,
             &conn_id,
             is_favorite,
             delete_armed,
@@ -1077,7 +1089,7 @@ fn render_configure_tab(
     let mut root = div().flex().flex_col().gap(px(16.0));
     if let Some(err) = ws.controller.connection_form.last_error.clone() {
         root = root.child(
-            Alert::new("Connection Error")
+            Alert::new(ws.controller.strings.connection_error_title)
                 .status(Color::Danger)
                 .description(err),
         );
@@ -1104,14 +1116,13 @@ fn render_url_parser_card(
     ws: &mut DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     Card::new()
         .variant(CardVariant::Secondary)
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("Quick Connection URL"))
-                .child(CardDescription::new().child(
-                    "Paste a URI (postgres://, mysql://, sqlite://, mongodb+srv://, redis://) to populate the form.",
-                )),
+                .child(CardTitle::new().child(s.quick_url_title))
+                .child(CardDescription::new().child(s.quick_url_desc)),
         )
         .child(
             CardContent::new().child(
@@ -1140,7 +1151,7 @@ fn render_url_parser_card(
                     .child(
                         Button::new("library-parse-url-btn")
                             .variant(Variant::Secondary)
-                            .label("Parse URL")
+                            .label(s.parse_url_btn)
                             .child(Icon::new(IconName::Link2).size(IconSize::Sm))
                             .on_press(cx.listener(|ws, _, _, cx| {
                                 let url = ws.library_ui.url_input.read(cx).value().to_owned();
@@ -1156,6 +1167,7 @@ fn render_identity_card(
     ws: &mut DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let is_file_engine = matches!(draft.engine, EngineKind::Sqlite | EngineKind::Duckdb);
     let endpoint_block = if is_file_engine {
@@ -1168,10 +1180,8 @@ fn render_identity_card(
         .variant(CardVariant::Default)
         .child(
             CardHeader::new()
-                .child(CardTitle::new().child("General & Endpoint"))
-                .child(CardDescription::new().child(
-                    "Choose a database engine, target endpoint, and authentication credentials.",
-                )),
+                .child(CardTitle::new().child(s.general_endpoint_title))
+                .child(CardDescription::new().child(s.general_endpoint_desc)),
         )
         .child(
             CardContent::new().child(
@@ -1182,8 +1192,8 @@ fn render_identity_card(
                     .child(
                         Input::new(&ws.library_ui.name_input)
                             .variant(FieldVariant::Secondary)
-                            .label("Connection Name")
-                            .placeholder("Production Primary")
+                            .label(s.connection_name_label)
+                            .placeholder(s.connection_name_placeholder)
                             .full_width()
                             .on_change(cx.listener(|ws, val: &str, _, cx| {
                                 ws.controller.connection_form.name = val.to_owned();
@@ -1215,6 +1225,7 @@ fn render_engine_select(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
     let current_engine = ws.controller.connection_form.engine;
     let items: Vec<PickerItem> = EngineKind::ALL
         .iter()
@@ -1228,7 +1239,7 @@ fn render_engine_select(
     let icon_color = colors.foreground;
 
     Select::new("library-engine-select", items)
-        .label("Database Engine")
+        .label(s.database_engine_label)
         .variant(FieldVariant::Secondary)
         .full_width(true)
         .value(Some(SharedString::from(selected_idx.to_string())))
@@ -1264,11 +1275,12 @@ fn render_color_select(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
-    let mut items = vec![PickerItem::new("0", "No Tag Color")];
+    let s = ws.controller.strings.clone();
+    let mut items = vec![PickerItem::new("0", s.no_tag_color)];
     for (idx, color) in ConnectionColor::ALL.iter().enumerate() {
         items.push(PickerItem::new(
             (idx + 1).to_string(),
-            color_display_name(*color),
+            color_display_name(*color, &s),
         ));
     }
     let selected_idx = ws
@@ -1278,7 +1290,7 @@ fn render_color_select(
         .map_or(0, |idx| idx + 1);
 
     Select::new("library-color-select", items)
-        .label("Color Tag")
+        .label(s.color_tag_label)
         .variant(FieldVariant::Secondary)
         .full_width(true)
         .value(Some(SharedString::from(selected_idx.to_string())))
@@ -1295,7 +1307,7 @@ fn render_color_select(
             let chosen = idx
                 .checked_sub(1)
                 .and_then(|pos| ConnectionColor::ALL.get(pos).copied());
-            let label = chosen.map_or("No Tag Color", color_display_name);
+            let label = chosen.map_or(s.no_tag_color, |c| color_display_name(c, &s));
             div()
                 .flex()
                 .items_center()
@@ -1323,6 +1335,7 @@ fn render_file_endpoint_fields(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     div()
         .flex()
         .flex_col()
@@ -1336,7 +1349,7 @@ fn render_file_endpoint_fields(
                     div().flex_1().min_w_0().child(
                         Input::new(&ws.library_ui.database_input)
                             .variant(FieldVariant::Secondary)
-                            .label("Database File Path")
+                            .label(s.database_file_path_label)
                             .placeholder("C:\\data\\analytics.sqlite")
                             .full_width()
                             .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1348,10 +1361,10 @@ fn render_file_endpoint_fields(
                 .child(
                     Button::new("library-browse-db-file")
                         .variant(Variant::Secondary)
-                        .label("Browse...")
+                        .label(s.browse_btn)
                         .child(Icon::new(IconName::FolderOpen).size(IconSize::Sm))
-                        .on_press(cx.listener(|_ws, _, _, cx| {
-                            trigger_browse_path(BrowseTarget::DatabaseFile, cx);
+                        .on_press(cx.listener(|ws, _, _, cx| {
+                            trigger_browse_path(ws, BrowseTarget::DatabaseFile, cx);
                         })),
                 ),
         )
@@ -1362,6 +1375,7 @@ fn render_host_port_row(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     div()
         .flex()
         .items_start()
@@ -1370,7 +1384,7 @@ fn render_host_port_row(
             div().flex_1().min_w_0().child(
                 Input::new(&ws.library_ui.host_input)
                     .variant(FieldVariant::Secondary)
-                    .label("Host")
+                    .label(s.host_label)
                     .placeholder("localhost")
                     .full_width()
                     .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1384,7 +1398,7 @@ fn render_host_port_row(
                 Input::new(&ws.library_ui.port_input)
                     .input_type(InputType::Number)
                     .variant(FieldVariant::Secondary)
-                    .label("Port")
+                    .label(s.port_label)
                     .placeholder("5432")
                     .full_width()
                     .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1402,19 +1416,19 @@ fn render_credentials_row(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let mut password_input = Input::new(&ws.library_ui.password_input)
         .input_type(InputType::Password)
         .variant(FieldVariant::Secondary)
-        .label("Password")
+        .label(s.password_label)
         .placeholder(if ws.library_ui.has_stored_db_password {
-            "•••••••• (stored)"
+            s.password_stored_placeholder
         } else {
-            "Optional password"
+            s.password_optional_placeholder
         })
         .full_width();
     if ws.library_ui.has_stored_db_password {
-        password_input = password_input
-            .description("Stored in Windows Credential Manager (leave blank to keep)");
+        password_input = password_input.description(s.stored_credential_desc);
     }
 
     div()
@@ -1425,7 +1439,7 @@ fn render_credentials_row(
             div().flex_1().min_w_0().child(
                 Input::new(&ws.library_ui.username_input)
                     .variant(FieldVariant::Secondary)
-                    .label("Username")
+                    .label(s.username_label)
                     .placeholder("postgres")
                     .full_width()
                     .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1442,20 +1456,19 @@ fn render_network_endpoint_fields(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let is_sspi = draft.auth_mode == AuthMode::SspiIntegrated;
     let db_label = match draft.engine {
-        EngineKind::Cassandra | EngineKind::Scylladb => "Keyspace",
-        EngineKind::Redis => "Database Index",
-        _ => "Database",
+        EngineKind::Cassandra | EngineKind::Scylladb => s.keyspace_label,
+        EngineKind::Redis => s.database_index_label,
+        _ => s.database_label,
     };
 
     let auth_or_creds = if is_sspi {
-        Alert::new("Windows Integrated Authentication (SSPI / Kerberos)")
+        Alert::new(s.sspi_alert_title)
             .status(Color::Default)
-            .description(
-                "Uses your active Windows domain / Kerberos ticket instead of a database password.",
-            )
+            .description(s.sspi_alert_desc)
             .into_any_element()
     } else {
         render_credentials_row(ws, cx)
@@ -1499,10 +1512,11 @@ fn render_auth_mode_select(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let modes = [
-        (AuthMode::Password, "Username & Password"),
-        (AuthMode::SspiIntegrated, "Windows Integrated (SSPI)"),
-        (AuthMode::Certificate, "TLS Client Certificate"),
+        (AuthMode::Password, s.auth_mode_password),
+        (AuthMode::SspiIntegrated, s.auth_mode_sspi),
+        (AuthMode::Certificate, s.auth_mode_cert),
     ];
     let items: Vec<PickerItem> = modes
         .iter()
@@ -1515,7 +1529,7 @@ fn render_auth_mode_select(
         .unwrap_or(0);
 
     Select::new("library-auth-mode-select", items)
-        .label("Authentication")
+        .label(s.authentication_label)
         .variant(FieldVariant::Secondary)
         .full_width(true)
         .value(Some(SharedString::from(current.to_string())))
@@ -1533,6 +1547,7 @@ fn render_auth_mode_select(
 }
 
 fn render_safety_card(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+    let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let is_network = !matches!(draft.engine, EngineKind::Sqlite | EngineKind::Duckdb);
     let tls_on = draft.tls_mode != TlsMode::Disable;
@@ -1546,8 +1561,8 @@ fn render_safety_card(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
             Switch::new("library-read-only-switch")
                 .size(Size::Sm)
                 .is_selected(ws.library_ui.read_only)
-                .label("Read-Only")
-                .description("Block all mutating statements")
+                .label(s.read_only_label)
+                .description(s.read_only_desc)
                 .on_change(cx.listener(|ws, on: &bool, _, cx| {
                     ws.library_ui.read_only = *on;
                     cx.notify();
@@ -1557,8 +1572,8 @@ fn render_safety_card(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
             Switch::new("library-safe-mode-switch")
                 .size(Size::Sm)
                 .is_selected(ws.controller.safe_mode_enabled)
-                .label("Safe Mode")
-                .description("Confirm UPDATE / DELETE / DROP")
+                .label(s.safe_mode)
+                .description(s.safe_mode_short_desc)
                 .on_change(cx.listener(|ws, on: &bool, _, cx| {
                     ws.controller.safe_mode_enabled = *on;
                     cx.notify();
@@ -1571,8 +1586,8 @@ fn render_safety_card(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
                 Switch::new("library-tls-quick-switch")
                     .size(Size::Sm)
                     .is_selected(tls_on)
-                    .label("TLS / SSL")
-                    .description("Encrypt server transport")
+                    .label(s.tls_ssl_label)
+                    .description(s.tls_ssl_desc)
                     .on_change(cx.listener(|ws, on: &bool, _, cx| {
                         let next = if *on {
                             TlsMode::Require
@@ -1593,8 +1608,8 @@ fn render_safety_card(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
                 Switch::new("library-ssh-quick-switch")
                     .size(Size::Sm)
                     .is_selected(draft.ssh_enabled)
-                    .label("SSH Tunnel")
-                    .description("Forward over bastion host")
+                    .label(s.ssh_tunnel_label)
+                    .description(s.ssh_tunnel_desc)
                     .on_change(cx.listener(|ws, on: &bool, _, cx| {
                         ws.controller.connection_form.ssh_enabled = *on;
                         ws.library_ui.last_synced_draft.ssh_enabled = *on;
@@ -1622,20 +1637,15 @@ fn render_advanced_disclosures(
         ws.controller.connection_form.engine,
         EngineKind::Sqlite | EngineKind::Duckdb
     );
+    let tls_title = ws.controller.strings.tls_section_title;
+    let ssh_title = ws.controller.strings.ssh_tunnel_label;
+    let options_title = ws.controller.strings.options_section_title;
     let mut sections: Vec<(&'static str, &'static str, AnyElement)> = Vec::new();
     if is_network {
-        sections.push((
-            "tls",
-            "TLS / SSL & Client Certificates",
-            render_tls_panel(ws, cx),
-        ));
-        sections.push(("ssh", "SSH Tunnel", render_ssh_panel(ws, cx)));
+        sections.push(("tls", tls_title, render_tls_panel(ws, cx)));
+        sections.push(("ssh", ssh_title, render_ssh_panel(ws, cx)));
     }
-    sections.push((
-        "options",
-        "Tags, Timeouts & Extra Parameters",
-        render_options_panel(ws, cx),
-    ));
+    sections.push(("options", options_title, render_options_panel(ws, cx)));
 
     let total = sections.len();
     let mut stack = div().w_full().flex().flex_col();
@@ -1739,12 +1749,13 @@ fn render_accordion_section(
 }
 
 fn render_tls_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+    let s = &ws.controller.strings;
     let modes = [
-        (TlsMode::Disable, "Disable (Cleartext)"),
-        (TlsMode::Prefer, "Prefer TLS if supported"),
-        (TlsMode::Require, "Require TLS"),
-        (TlsMode::VerifyCa, "Verify CA Certificate"),
-        (TlsMode::VerifyFull, "Verify Full Hostname & CA"),
+        (TlsMode::Disable, s.tls_mode_disable),
+        (TlsMode::Prefer, s.tls_mode_prefer),
+        (TlsMode::Require, s.tls_mode_require),
+        (TlsMode::VerifyCa, s.tls_mode_verify_ca),
+        (TlsMode::VerifyFull, s.tls_mode_verify_full),
     ];
     let items: Vec<PickerItem> = modes
         .iter()
@@ -1757,7 +1768,7 @@ fn render_tls_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
         .unwrap_or(1);
 
     let tls_mode_select = Select::new("library-tls-mode-select", items)
-        .label("TLS Verification Mode")
+        .label(s.tls_verification_mode_label)
         .variant(FieldVariant::Secondary)
         .full_width(true)
         .value(Some(SharedString::from(current.to_string())))
@@ -1780,10 +1791,11 @@ fn render_tls_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
         .child(tls_mode_select)
         .child(path_browse_row(
             &ws.library_ui.tls_ca_input,
-            "CA Certificate Path",
+            s.ca_cert_path_label,
             "C:\\certs\\root-ca.pem",
             "library-browse-ca",
             BrowseTarget::TlsCaFile,
+            s.browse_btn,
             cx,
         ))
         .child(
@@ -1793,25 +1805,27 @@ fn render_tls_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
                 .gap(px(10.0))
                 .child(div().flex_1().min_w_0().child(path_browse_row(
                     &ws.library_ui.tls_cert_input,
-                    "Client Certificate",
+                    s.client_cert_label,
                     "C:\\certs\\client.crt",
                     "library-browse-cert",
                     BrowseTarget::TlsClientCert,
+                    s.browse_btn,
                     cx,
                 )))
                 .child(div().flex_1().min_w_0().child(path_browse_row(
                     &ws.library_ui.tls_key_input,
-                    "Client Private Key",
+                    s.client_key_label,
                     "C:\\certs\\client.key",
                     "library-browse-key",
                     BrowseTarget::TlsClientKey,
+                    s.browse_btn,
                     cx,
                 ))),
         )
         .child(
             Input::new(&ws.library_ui.tls_server_name_input)
                 .variant(FieldVariant::Secondary)
-                .label("TLS Server Name (SNI Override)")
+                .label(s.tls_sni_label)
                 .placeholder("db.internal.example.com")
                 .full_width(),
         )
@@ -1822,6 +1836,7 @@ fn render_ssh_bastion_fields(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     div()
         .flex()
         .flex_col()
@@ -1835,7 +1850,7 @@ fn render_ssh_bastion_fields(
                     div().flex_1().min_w_0().child(
                         Input::new(&ws.library_ui.ssh_host_input)
                             .variant(FieldVariant::Secondary)
-                            .label("SSH Bastion Host")
+                            .label(s.ssh_bastion_host_label)
                             .placeholder("bastion.example.com")
                             .full_width()
                             .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1849,7 +1864,7 @@ fn render_ssh_bastion_fields(
                         Input::new(&ws.library_ui.ssh_port_input)
                             .input_type(InputType::Number)
                             .variant(FieldVariant::Secondary)
-                            .label("SSH Port")
+                            .label(s.ssh_port_label)
                             .placeholder("22")
                             .full_width()
                             .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1864,7 +1879,7 @@ fn render_ssh_bastion_fields(
         .child(
             Input::new(&ws.library_ui.ssh_user_input)
                 .variant(FieldVariant::Secondary)
-                .label("SSH Username")
+                .label(s.ssh_username_label)
                 .placeholder("ubuntu")
                 .full_width()
                 .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1876,20 +1891,20 @@ fn render_ssh_bastion_fields(
 }
 
 fn render_ssh_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+    let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let mut pass_input = Input::new(&ws.library_ui.ssh_passphrase_input)
         .input_type(InputType::Password)
         .variant(FieldVariant::Secondary)
-        .label("Private Key Passphrase")
+        .label(s.ssh_key_passphrase_label)
         .placeholder(if ws.library_ui.has_stored_ssh_passphrase {
-            "•••••••• (stored)"
+            s.password_stored_placeholder
         } else {
-            "Optional key passphrase"
+            s.ssh_passphrase_optional_placeholder
         })
         .full_width();
     if ws.library_ui.has_stored_ssh_passphrase {
-        pass_input =
-            pass_input.description("Stored in Windows Credential Manager (leave blank to keep)");
+        pass_input = pass_input.description(s.stored_credential_desc);
     }
 
     div()
@@ -1900,7 +1915,7 @@ fn render_ssh_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
         .child(
             Checkbox::new("library-ssh-enabled-check")
                 .is_selected(draft.ssh_enabled)
-                .label("Enable SSH tunnel for this connection")
+                .label(s.enable_ssh_tunnel_check)
                 .on_change(cx.listener(|ws, on: &bool, _, cx| {
                     ws.controller.connection_form.ssh_enabled = *on;
                     ws.library_ui.last_synced_draft.ssh_enabled = *on;
@@ -1917,7 +1932,7 @@ fn render_ssh_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
                     div().flex_1().min_w_0().child(
                         Input::new(&ws.library_ui.ssh_key_input)
                             .variant(FieldVariant::Secondary)
-                            .label("SSH Private Key Path")
+                            .label(s.ssh_private_key_path_label)
                             .placeholder("C:\\Users\\you\\.ssh\\id_ed25519")
                             .full_width()
                             .on_change(cx.listener(|ws, val: &str, _, _| {
@@ -1929,9 +1944,9 @@ fn render_ssh_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
                 .child(
                     Button::new("library-browse-ssh-key")
                         .variant(Variant::Secondary)
-                        .label("Browse...")
-                        .on_press(cx.listener(|_ws, _, _, cx| {
-                            trigger_browse_path(BrowseTarget::SshKeyFile, cx);
+                        .label(s.browse_btn)
+                        .on_press(cx.listener(|ws, _, _, cx| {
+                            trigger_browse_path(ws, BrowseTarget::SshKeyFile, cx);
                         })),
                 ),
         )
@@ -1943,6 +1958,7 @@ fn render_options_panel(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     div()
         .flex()
         .flex_col()
@@ -1957,8 +1973,8 @@ fn render_options_panel(
                     div().flex_1().min_w_0().child(
                         Input::new(&ws.library_ui.tags_input)
                             .variant(FieldVariant::Secondary)
-                            .label("Tags (comma separated)")
-                            .placeholder("production, analytics")
+                            .label(s.tags_comma_label)
+                            .placeholder(s.tags_placeholder)
                             .full_width(),
                     ),
                 )
@@ -1967,8 +1983,8 @@ fn render_options_panel(
                         Input::new(&ws.library_ui.timeout_secs_input)
                             .input_type(InputType::Number)
                             .variant(FieldVariant::Secondary)
-                            .label("Query Timeout (sec)")
-                            .placeholder("Default")
+                            .label(s.query_timeout_sec_label)
+                            .placeholder(s.default_placeholder)
                             .full_width(),
                     ),
                 ),
@@ -1982,7 +1998,7 @@ fn render_options_panel(
                     div().flex_1().min_w_0().child(
                         Input::new(&ws.library_ui.auth_database_input)
                             .variant(FieldVariant::Secondary)
-                            .label("Auth Database (MongoDB)")
+                            .label(s.auth_db_mongo_label)
                             .placeholder("admin")
                             .full_width(),
                     ),
@@ -1991,7 +2007,7 @@ fn render_options_panel(
                     div().flex_1().min_w_0().child(
                         Input::new(&ws.library_ui.replica_set_input)
                             .variant(FieldVariant::Secondary)
-                            .label("Replica Set (MongoDB)")
+                            .label(s.replica_set_mongo_label)
                             .placeholder("rs0")
                             .full_width(),
                     ),
@@ -2006,7 +2022,7 @@ fn render_options_panel(
                 .child(
                     Checkbox::new("library-dns-seed-check")
                         .is_selected(ws.library_ui.dns_seed_list)
-                        .label("DNS Seed List (mongodb+srv)")
+                        .label(s.dns_seed_list_label)
                         .on_change(cx.listener(|ws, on: &bool, _, cx| {
                             ws.library_ui.dns_seed_list = *on;
                             cx.notify();
@@ -2015,7 +2031,7 @@ fn render_options_panel(
                 .child(
                     Checkbox::new("library-channel-binding-check")
                         .is_selected(ws.library_ui.channel_binding)
-                        .label("Require SCRAM Channel Binding")
+                        .label(s.scram_channel_binding_label)
                         .on_change(cx.listener(|ws, on: &bool, _, cx| {
                             ws.library_ui.channel_binding = *on;
                             cx.notify();
@@ -2029,6 +2045,7 @@ fn render_test_alert(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> Option<AnyElement> {
+    let s = &ws.controller.strings;
     if ws.library_ui.test_in_flight {
         let indicator = if is_reduced_motion(cx) {
             Icon::new(IconName::LoaderCircle)
@@ -2040,15 +2057,16 @@ fn render_test_alert(
                 .color(Color::Accent)
                 .into_any_element()
         };
+        let target = target_summary(&ws.controller.connection_form);
         return Some(
-            Alert::new("Testing Connection...")
+            Alert::new(s.testing_connection_title)
                 .status(Color::Accent)
                 .indicator(indicator)
-                .description(format!(
-                    "Establishing handshake with {} ({})...",
-                    ws.controller.connection_form.engine.display_name(),
-                    target_summary(&ws.controller.connection_form),
-                ))
+                .description(
+                    s.testing_handshake_tpl
+                        .replace("{engine}", ws.controller.connection_form.engine.display_name())
+                        .replace("{target}", &target),
+                )
                 .into_any_element(),
         );
     }
@@ -2056,16 +2074,18 @@ fn render_test_alert(
     let outcome = ws.library_ui.test_outcome.as_ref()?;
     let alert = match outcome {
         Ok(res) => {
-            let schema_word = plural_word(res.schema_count, "schema", "schemas");
-            let desc = format!(
-                "{} · {} ms latency · {} {schema_word} discovered",
-                res.server_label, res.latency_ms, res.schema_count
-            );
-            Alert::new("Connection Succeeded")
+            let schema_word = plural_word(res.schema_count, s.schema_singular, s.schema_plural);
+            let desc = s
+                .test_success_tpl
+                .replace("{server}", &res.server_label)
+                .replace("{ms}", &res.latency_ms.to_string())
+                .replace("{count}", &res.schema_count.to_string())
+                .replace("{schema_word}", schema_word);
+            Alert::new(s.connection_succeeded_title)
                 .status(Color::Success)
                 .description(desc)
         }
-        Err(err) => Alert::new("Connection Test Failed")
+        Err(err) => Alert::new(s.connection_test_failed_title)
             .status(Color::Danger)
             .description(err.clone()),
     };
@@ -2074,14 +2094,15 @@ fn render_test_alert(
 }
 
 fn render_action_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+    let s = &ws.controller.strings;
     let testing = ws.library_ui.test_in_flight;
     let test_btn = Button::new("library-test-btn")
         .variant(Variant::Secondary)
         .is_pending(testing)
         .label(if testing {
-            "Testing..."
+            s.testing_btn
         } else {
-            "Test Connection"
+            s.test_connection_btn
         })
         .on_press(cx.listener(|ws, _, _, cx| {
             trigger_test_connection(ws, cx);
@@ -2094,7 +2115,7 @@ fn render_action_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         .child(
             Button::new("library-reset-btn")
                 .variant(Variant::Tertiary)
-                .label("Reset")
+                .label(s.reset_btn)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     ws.library_ui
                         .reset_to_new(&mut ws.controller.connection_form, cx);
@@ -2104,7 +2125,7 @@ fn render_action_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         .child(
             Button::new("library-save-btn")
                 .variant(Variant::Secondary)
-                .label("Save")
+                .label(s.save)
                 .child(Icon::new(IconName::Check).size(IconSize::Sm))
                 .on_press(cx.listener(|ws, _, _, cx| {
                     save_current_connection(ws, cx);
@@ -2113,7 +2134,7 @@ fn render_action_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         .child(
             Button::new("library-connect-btn")
                 .variant(Variant::Primary)
-                .label("Connect")
+                .label(s.connect_btn)
                 .child(Icon::new(IconName::Play).size(IconSize::Sm))
                 .on_press(cx.listener(|ws, _, _, cx| {
                     trigger_connect_current(ws, cx);
@@ -2140,6 +2161,7 @@ fn render_foreign_importers_tab(
     ws: &mut DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let mut root = div()
         .flex()
         .flex_col()
@@ -2149,10 +2171,8 @@ fn render_foreign_importers_tab(
                 .variant(CardVariant::Secondary)
                 .child(
                     CardHeader::new()
-                        .child(CardTitle::new().child("Import From Existing Database Clients"))
-                        .child(CardDescription::new().child(
-                            "Scans local application profiles on this PC without modifying your existing clients. Duplicate endpoints are skipped automatically.",
-                        )),
+                        .child(CardTitle::new().child(s.importer_header_title))
+                        .child(CardDescription::new().child(s.importer_header_desc)),
                 )
                 .child(
                     CardContent::new().child(
@@ -2164,7 +2184,7 @@ fn render_foreign_importers_tab(
                                 Button::new("library-rescan-importers")
                                     .variant(Variant::Secondary)
                                     .size(Size::Sm)
-                                    .label("Rescan Locations")
+                                    .label(s.rescan_locations_btn)
                                     .child(Icon::new(IconName::RefreshCw).size(IconSize::Sm))
                                     .on_press(cx.listener(|ws, _, _, cx| {
                                         rescan_foreign_inventories(ws);
@@ -2175,7 +2195,7 @@ fn render_foreign_importers_tab(
                                 Button::new("library-back-configure")
                                     .variant(Variant::Tertiary)
                                     .size(Size::Sm)
-                                    .label("Back to Form")
+                                    .label(s.back_to_form_btn)
                                     .on_press(cx.listener(|ws, _, _, cx| {
                                         ws.library_ui.active_tab = SharedString::from(TAB_CONFIGURE);
                                         cx.notify();
@@ -2188,16 +2208,30 @@ fn render_foreign_importers_tab(
     if let Some(report) = &ws.library_ui.last_import_report {
         let alert = match report {
             Ok(rep) => {
-                let conn_word = plural_word(rep.imported_count, "connection", "connections");
-                let dup_word = plural_word(rep.skipped_duplicates, "duplicate", "duplicates");
-                Alert::new(format!("Imported from {}", rep.source_app.display_name()))
-                    .status(Color::Success)
-                    .description(format!(
-                        "{} {conn_word} added ({} {dup_word} skipped).",
-                        rep.imported_count, rep.skipped_duplicates
-                    ))
+                let conn_word = plural_word(
+                    rep.imported_count,
+                    s.connection_singular,
+                    s.connection_plural,
+                );
+                let dup_word = plural_word(
+                    rep.skipped_duplicates,
+                    s.duplicate_singular,
+                    s.duplicate_plural,
+                );
+                Alert::new(
+                    s.imported_from_tpl
+                        .replace("{app}", rep.source_app.display_name()),
+                )
+                .status(Color::Success)
+                .description(
+                    s.import_summary_tpl
+                        .replace("{added}", &rep.imported_count.to_string())
+                        .replace("{conn_word}", conn_word)
+                        .replace("{skipped}", &rep.skipped_duplicates.to_string())
+                        .replace("{dup_word}", dup_word),
+                )
             }
-            Err(err) => Alert::new("Import Failed")
+            Err(err) => Alert::new(s.import_failed_title)
                 .status(Color::Danger)
                 .description(err.clone()),
         };
@@ -2205,7 +2239,7 @@ fn render_foreign_importers_tab(
     }
 
     for &(app, inv) in &ws.library_ui.inventories {
-        root = root.child(render_importer_card(app, inv, cx));
+        root = root.child(render_importer_card(app, inv, s, cx));
     }
 
     root.into_any_element()
@@ -2214,32 +2248,37 @@ fn render_foreign_importers_tab(
 fn importer_card_copy(
     app: ForeignApp,
     inv: &Inventory,
+    s: &Strings,
 ) -> (String, &'static str, &'static str, bool, bool) {
     let windows_supported = app.runs_on(ForeignPlatform::Windows);
     let needs_file_picker = app.picked_file_extensions().is_some();
     let count_summary = if !windows_supported {
-        "macOS-only client store (no local Windows profile)".to_owned()
+        s.importer_macos_only.to_owned()
     } else if needs_file_picker {
-        "Export a .ncx file from Navicat to import saved connections.".to_owned()
+        s.importer_navicat_hint.to_owned()
     } else if inv.connections == 0 && inv.saved_queries == 0 {
-        "No connections detected in default app directory.".to_owned()
+        s.importer_none_detected.to_owned()
     } else {
         format!(
             "{} {} · {} {}",
             inv.connections,
-            plural_word(inv.connections, "connection", "connections"),
+            plural_word(inv.connections, s.connection_singular, s.connection_plural),
             inv.saved_queries,
-            plural_word(inv.saved_queries, "saved query", "saved queries"),
+            plural_word(
+                inv.saved_queries,
+                s.saved_query_singular,
+                s.saved_query_plural
+            ),
         )
     };
     let pwd_note = match app.password_source() {
-        PasswordSource::Keychain => "Keychain passwords",
-        PasswordSource::AppFiles => "App-managed files",
+        PasswordSource::Keychain => s.importer_pwd_keychain,
+        PasswordSource::AppFiles => s.importer_pwd_app_files,
     };
     let btn_label = if needs_file_picker {
-        "Choose .ncx Export..."
+        s.importer_choose_ncx_btn
     } else {
-        "Import"
+        s.import_btn
     };
     let can_import =
         windows_supported && (needs_file_picker || inv.connections > 0 || inv.saved_queries > 0);
@@ -2255,10 +2294,11 @@ fn importer_card_copy(
 fn render_importer_card(
     app: ForeignApp,
     inv: Inventory,
+    s: &Strings,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let (count_summary, pwd_note, btn_label, windows_supported, can_import) =
-        importer_card_copy(app, &inv);
+        importer_card_copy(app, &inv, s);
     let btn_id = format!("import-app-{}", app.id());
 
     let card = Card::new().variant(CardVariant::Default).child(
@@ -2338,6 +2378,7 @@ fn path_browse_row(
     placeholder: &str,
     button_id: &'static str,
     target: BrowseTarget,
+    browse_label: &'static str,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     div()
@@ -2356,9 +2397,9 @@ fn path_browse_row(
         .child(
             Button::new(button_id)
                 .variant(Variant::Secondary)
-                .label("Browse...")
-                .on_press(cx.listener(move |_ws, _, _, cx| {
-                    trigger_browse_path(target, cx);
+                .label(browse_label)
+                .on_press(cx.listener(move |ws, _, _, cx| {
+                    trigger_browse_path(ws, target, cx);
                 })),
         )
         .into_any_element()
@@ -2370,9 +2411,10 @@ fn select_saved_connection(
     cx: &mut Context<DataForgeWorkspace>,
 ) {
     if let Err(err) = ws.controller.hydrate_connection_form_from_library(conn_id) {
+        let title = ws.controller.strings.failed_to_load_connection;
         ws.notify_toast(
             ToastSeverity::Error,
-            "Failed to load connection",
+            title,
             Some(err.to_string().into()),
             cx,
         );
@@ -2477,14 +2519,10 @@ fn trigger_parse_url(
     raw_url: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
+    let s = ws.controller.strings.clone();
     let trimmed = raw_url.trim();
     if trimmed.is_empty() {
-        ws.notify_toast(
-            ToastSeverity::Warning,
-            "Enter a connection URL first",
-            None,
-            cx,
-        );
+        ws.notify_toast(ToastSeverity::Warning, s.enter_url_first, None, cx);
         return;
     }
 
@@ -2493,7 +2531,7 @@ fn trigger_parse_url(
             if let Err(err) = ws.controller.parse_and_apply_connection_url(trimmed) {
                 ws.notify_toast(
                     ToastSeverity::Error,
-                    "Failed to parse URL",
+                    s.failed_to_parse_url,
                     Some(err.to_string().into()),
                     cx,
                 );
@@ -2542,12 +2580,12 @@ fn trigger_parse_url(
             let note = if parsed.unread.is_empty() {
                 None
             } else {
-                Some(SharedString::from(format!(
-                    "Ignored unrecognized parameters: {}",
-                    parsed.unread.join(", ")
-                )))
+                Some(SharedString::from(
+                    s.ignored_url_params_tpl
+                        .replace("{params}", &parsed.unread.join(", ")),
+                ))
             };
-            ws.notify_toast(ToastSeverity::Success, "Connection URL applied", note, cx);
+            ws.notify_toast(ToastSeverity::Success, s.connection_url_applied, note, cx);
             cx.notify();
         }
         Err(err) => {
@@ -2555,7 +2593,7 @@ fn trigger_parse_url(
             ws.library_ui.last_synced_draft.last_error = Some(err.to_string());
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Invalid connection URL",
+                s.invalid_connection_url,
                 Some(err.to_string().into()),
                 cx,
             );
@@ -2589,12 +2627,8 @@ fn save_current_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
     ws.library_ui.delete_armed_for = None;
 
     let Some(saved) = build_saved_connection_record(ws, &conn_id, is_favorite, cx) else {
-        ws.notify_toast(
-            ToastSeverity::Success,
-            "Connection updated in library",
-            None,
-            cx,
-        );
+        let title = ws.controller.strings.connection_updated_toast;
+        ws.notify_toast(ToastSeverity::Success, title, None, cx);
         cx.notify();
         return;
     };
@@ -2621,7 +2655,13 @@ fn build_saved_connection_record(
         draft.name.trim().to_owned()
     };
 
-    let tls = build_tls_config(&ws.library_ui, draft, cx).ok()?;
+    let tls = build_tls_config(
+        &ws.library_ui,
+        draft,
+        ws.controller.strings.tls_cert_and_key_required,
+        cx,
+    )
+    .ok()?;
     let ssh_passphrase_typed = !ws
         .library_ui
         .ssh_passphrase_input
@@ -2702,6 +2742,7 @@ fn apply_saved_secrets_outcome(
     outcome: Result<(), String>,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
+    let s = ws.controller.strings.clone();
     match outcome {
         Ok(()) => {
             if ws.library_ui.selected_connection_id.as_deref() == Some(conn_id_str) {
@@ -2720,18 +2761,13 @@ fn apply_saved_secrets_outcome(
                     set_input_text(&ws.library_ui.ssh_passphrase_input, "", cx);
                 }
             }
-            ws.notify_toast(
-                ToastSeverity::Success,
-                "Connection & credentials saved",
-                None,
-                cx,
-            );
+            ws.notify_toast(ToastSeverity::Success, s.connection_and_creds_saved, None, cx);
             cx.notify();
         }
         Err(err) => {
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Saved profile, credential store failed",
+                s.saved_profile_cred_failed,
                 Some(err.into()),
                 cx,
             );
@@ -2745,13 +2781,14 @@ fn persist_saved_connection_and_secrets(
     is_favorite: bool,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
+    let s = ws.controller.strings.clone();
     let Some(services) = ws.controller.services.clone() else {
         return;
     };
     if let Err(err) = services.connection_store.upsert_blocking(saved.clone()) {
         ws.notify_toast(
             ToastSeverity::Error,
-            "Failed to persist connection",
+            s.failed_to_persist_connection,
             Some(err.to_string().into()),
             cx,
         );
@@ -2772,7 +2809,7 @@ fn persist_saved_connection_and_secrets(
         .to_owned();
 
     if db_pwd.is_empty() && ssh_pass.is_empty() {
-        ws.notify_toast(ToastSeverity::Success, "Connection saved", None, cx);
+        ws.notify_toast(ToastSeverity::Success, s.connection_saved_toast, None, cx);
         return;
     }
 
@@ -2853,6 +2890,7 @@ fn handle_delete_press(
         return;
     }
 
+    let s = ws.controller.strings.clone();
     ws.library_ui.delete_armed_for = None;
     let mut fresh = ws.controller.library.storage().clone();
     fresh
@@ -2868,7 +2906,7 @@ fn handle_delete_press(
         if let Err(err) = services.connection_store.remove_blocking(uuid) {
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Failed to delete connection",
+                s.failed_to_delete_connection,
                 Some(err.to_string().into()),
                 cx,
             );
@@ -2882,13 +2920,14 @@ fn handle_delete_press(
 
     ws.library_ui
         .reset_to_new(&mut ws.controller.connection_form, cx);
-    ws.notify_toast(ToastSeverity::Success, "Connection removed", None, cx);
+    ws.notify_toast(ToastSeverity::Success, s.connection_removed_toast, None, cx);
     cx.notify();
 }
 
 fn trigger_test_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    let s = &ws.controller.strings;
     let Some(services) = ws.controller.services.clone() else {
-        ws.library_ui.test_outcome = Some(Err("Service runtime is not initialized.".to_owned()));
+        ws.library_ui.test_outcome = Some(Err(s.service_runtime_not_init.to_owned()));
         cx.notify();
         return;
     };
@@ -2906,7 +2945,8 @@ fn trigger_test_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
         .as_deref()
         .and_then(|id| Uuid::parse_str(id).ok());
     let draft = ws.controller.connection_form.clone();
-    let tls_override = build_tls_config(&ws.library_ui, &draft, cx);
+    let tls_override =
+        build_tls_config(&ws.library_ui, &draft, s.tls_cert_and_key_required, cx);
     let network_options = build_network_options(&ws.library_ui, cx);
     let read_only = ws.library_ui.read_only;
 
@@ -3095,11 +3135,12 @@ fn start_connect_and_switch(
             ws.switch_screen(ScreenMode::Workspace, cx);
         }
         Err(err) => {
+            let err_title = ws.controller.strings.unable_to_start_connection;
             ws.controller.connection_form.last_error = Some(err.to_string());
             ws.library_ui.last_synced_draft.last_error = Some(err.to_string());
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Unable to start connection",
+                err_title,
                 Some(err.to_string().into()),
                 cx,
             );
@@ -3118,10 +3159,11 @@ fn connect_saved_connection_blocking(
             ws.switch_screen(ScreenMode::Workspace, cx);
         }
         Err(err) => {
+            let err_title = ws.controller.strings.connection_failed;
             ws.controller.connection_form.last_error = Some(err.to_string());
             ws.notify_toast(
                 ToastSeverity::Error,
-                "Connection failed",
+                err_title,
                 Some(err.to_string().into()),
                 cx,
             );
@@ -3130,12 +3172,12 @@ fn connect_saved_connection_blocking(
     }
 }
 
-fn trigger_open_local_file(cx: &mut Context<DataForgeWorkspace>) {
+fn trigger_open_local_file(prompt: &'static str, cx: &mut Context<DataForgeWorkspace>) {
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
         directories: false,
         multiple: false,
-        prompt: Some("Open SQLite or DuckDB Database".into()),
+        prompt: Some(prompt.into()),
     });
 
     cx.spawn(
@@ -3154,9 +3196,10 @@ fn trigger_open_local_file(cx: &mut Context<DataForgeWorkspace>) {
                         ws.switch_screen(ScreenMode::Workspace, cx);
                     }
                     Err(err) => {
+                        let err_title = ws.controller.strings.failed_to_open_db_file;
                         ws.notify_toast(
                             ToastSeverity::Error,
-                            "Failed to open database file",
+                            err_title,
                             Some(err.to_string().into()),
                             cx,
                         );
@@ -3177,13 +3220,18 @@ enum BrowseTarget {
     SshKeyFile,
 }
 
-fn trigger_browse_path(target: BrowseTarget, cx: &mut Context<DataForgeWorkspace>) {
+fn trigger_browse_path(
+    ws: &DataForgeWorkspace,
+    target: BrowseTarget,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let s = &ws.controller.strings;
     let prompt = match target {
-        BrowseTarget::DatabaseFile => "Select Database File",
-        BrowseTarget::TlsCaFile => "Select TLS CA Certificate",
-        BrowseTarget::TlsClientCert => "Select TLS Client Certificate",
-        BrowseTarget::TlsClientKey => "Select TLS Client Private Key",
-        BrowseTarget::SshKeyFile => "Select SSH Private Key",
+        BrowseTarget::DatabaseFile => s.browse_db_file_prompt,
+        BrowseTarget::TlsCaFile => s.browse_tls_ca_prompt,
+        BrowseTarget::TlsClientCert => s.browse_tls_cert_prompt,
+        BrowseTarget::TlsClientKey => s.browse_tls_key_prompt,
+        BrowseTarget::SshKeyFile => s.browse_ssh_key_prompt,
     };
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
@@ -3240,11 +3288,16 @@ fn trigger_foreign_import(
         return;
     }
 
+    let prompt = ws
+        .controller
+        .strings
+        .select_app_export_file_tpl
+        .replace("{app}", app.display_name());
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
         directories: false,
         multiple: false,
-        prompt: Some(format!("Select {} Export File", app.display_name()).into()),
+        prompt: Some(prompt.into()),
     });
     cx.spawn(
         async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
@@ -3268,6 +3321,7 @@ fn run_foreign_import(
     picked_file: Option<PathBuf>,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
+    let s = ws.controller.strings.clone();
     let existing_ids: HashSet<LibraryConnectionId> = ws
         .controller
         .library
@@ -3281,22 +3335,29 @@ fn run_foreign_import(
         Ok(report) => {
             persist_newly_imported_connections(ws, &existing_ids);
             ws.library_ui.last_import_report = Some(Ok(report.clone()));
+            let title = s
+                .imported_app_toast_tpl
+                .replace("{app}", app.display_name());
+            let desc = s
+                .imported_counts_toast_tpl
+                .replace("{added}", &report.imported_count.to_string())
+                .replace("{skipped}", &report.skipped_duplicates.to_string());
             ws.notify_toast(
                 ToastSeverity::Success,
-                format!("Imported {}", app.display_name()),
-                Some(SharedString::from(format!(
-                    "{} added, {} skipped",
-                    report.imported_count, report.skipped_duplicates
-                ))),
+                title,
+                Some(SharedString::from(desc)),
                 cx,
             );
             rescan_foreign_inventories(ws);
         }
         Err(err) => {
             ws.library_ui.last_import_report = Some(Err(err.to_string()));
+            let title = s
+                .app_import_failed_toast_tpl
+                .replace("{app}", app.display_name());
             ws.notify_toast(
                 ToastSeverity::Error,
-                format!("{} import failed", app.display_name()),
+                title,
                 Some(err.to_string().into()),
                 cx,
             );
@@ -3374,6 +3435,7 @@ async fn resolve_secret_or_stored(
 fn build_tls_config(
     ui: &LibraryScreenState,
     draft: &ConnectionFormDraft,
+    tls_cert_key_err: &str,
     cx: &App,
 ) -> Result<TlsConfig, String> {
     let mut cfg = match draft.tls_mode {
@@ -3405,9 +3467,7 @@ fn build_tls_config(
             key: PathBuf::from(key),
         }),
         _ => {
-            return Err(
-                "Both TLS client certificate and private key paths are required.".to_owned(),
-            );
+            return Err(tls_cert_key_err.to_owned());
         }
     };
     Ok(cfg)
@@ -3457,17 +3517,17 @@ const fn plural_word<'a>(count: usize, singular: &'a str, plural: &'a str) -> &'
     if count == 1 { singular } else { plural }
 }
 
-const fn color_display_name(color: ConnectionColor) -> &'static str {
+fn color_display_name(color: ConnectionColor, s: &Strings) -> &'static str {
     match color {
-        ConnectionColor::Blue => "Blue",
-        ConnectionColor::Teal => "Teal",
-        ConnectionColor::Green => "Green",
-        ConnectionColor::Yellow => "Yellow",
-        ConnectionColor::Orange => "Orange",
-        ConnectionColor::Red => "Red",
-        ConnectionColor::Pink => "Pink",
-        ConnectionColor::Purple => "Purple",
-        ConnectionColor::Slate => "Slate",
+        ConnectionColor::Blue => s.color_blue,
+        ConnectionColor::Teal => s.color_teal,
+        ConnectionColor::Green => s.color_green,
+        ConnectionColor::Yellow => s.color_yellow,
+        ConnectionColor::Orange => s.color_orange,
+        ConnectionColor::Red => s.color_red,
+        ConnectionColor::Pink => s.color_pink,
+        ConnectionColor::Purple => s.color_purple,
+        ConnectionColor::Slate => s.color_slate,
     }
 }
 
