@@ -235,7 +235,8 @@ impl SettingsScreenState {
             async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
                 let Ok(rx) = this.update(cx, |ws, cx| {
                     let rx = ws.controller.updater.subscribe();
-                    if ws.controller.trigger_auto_update_check() {
+                    let drained = ws.controller.updater.drain_events();
+                    if ws.controller.trigger_auto_update_check() || drained {
                         cx.notify();
                     }
                     rx
