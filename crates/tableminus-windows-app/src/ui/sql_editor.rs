@@ -1,4 +1,4 @@
-//! Interactive custom GPUI SQL editor surface backed by `dataforge-state::editor`
+//! Interactive custom GPUI SQL editor surface backed by `tableminus-state::editor`
 //! (`Rope`, `UndoHistory`, `IncrementalLineHighlighter`, `VimState`, `AutocompleteState`),
 //! [`crate::ui::syntax_bridge`], schema-aware autocomplete, query history / saved queries,
 //! non-blocking streaming SQL execution, and vertical split pairing with the results pane.
@@ -7,14 +7,14 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 use std::time::Instant;
 
-use dataforge_gfx::editor_renderer::{CursorMode, EditorCursor, EditorSelection};
-use dataforge_services::{FindReplaceOptions, find_matches};
-use dataforge_state::editor::{
+use tableminus_gfx::editor_renderer::{CursorMode, EditorCursor, EditorSelection};
+use tableminus_services::{FindReplaceOptions, find_matches};
+use tableminus_state::editor::{
     AutocompleteContext, AutocompleteState, CursorPosition, IncrementalLineHighlighter, Rope,
     SchemaCompletionItem, SchemaCompletionKind, UndoHistory, VimAction, VimMode, VimMotion,
     VimOperator, VimState,
 };
-use dataforge_state::tabs::{TabId, TabKind};
+use tableminus_state::tabs::{TabId, TabKind};
 use herogpui::Focusable;
 use herogpui::components::{
     Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input, InputState, ListBox,
@@ -44,7 +44,7 @@ use tokio_util::sync::CancellationToken;
 use super::shell_state::ToastSeverity;
 use super::syntax_bridge::{build_line_text_runs, highlight_sql_line};
 use super::theme::{self, ContentThemePalette, editor_gpui_font};
-use super::{DataForgeWorkspace, actions, results_pane};
+use super::{TableMinusWorkspace, actions, results_pane};
 
 const TOP_PAD_PX: f32 = 10.0;
 const BOTTOM_PAD_PX: f32 = 18.0;
@@ -170,9 +170,9 @@ pub struct SqlEditorViewState {
 }
 
 impl SqlEditorViewState {
-    /// Initializes SQL editor rendering and input state owned by [`DataForgeWorkspace`].
+    /// Initializes SQL editor rendering and input state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let weak_ws = cx.weak_entity();
         let doc = cx.new(|cx| SqlEditorDocEntity::new(weak_ws, cx));
         let drawer_search_input = cx.new(|cx| InputState::new(cx));
@@ -242,7 +242,7 @@ pub struct SqlEditorDocEntity {
     last_bounds: Bounds<Pixels>,
     dragging: bool,
     palette: ContentThemePalette,
-    weak_workspace: Option<WeakEntity<DataForgeWorkspace>>,
+    weak_workspace: Option<WeakEntity<TableMinusWorkspace>>,
     tab_buffers: BTreeMap<TabId, TabDocSnapshot>,
     active_tab_id: Option<TabId>,
     last_controller_sql: String,
@@ -255,7 +255,7 @@ pub struct SqlEditorDocEntity {
 }
 
 impl SqlEditorDocEntity {
-    fn new(weak_workspace: WeakEntity<DataForgeWorkspace>, cx: &mut Context<Self>) -> Self {
+    fn new(weak_workspace: WeakEntity<TableMinusWorkspace>, cx: &mut Context<Self>) -> Self {
         let rope = Rope::new();
         let line_starts = compute_line_starts(&rope);
         let default_strings = crate::i18n::Strings::for_locale(crate::i18n::Locale::EnUs);
@@ -280,7 +280,7 @@ impl SqlEditorDocEntity {
             last_bounds: Bounds::default(),
             dragging: false,
             palette: ContentThemePalette::from_definition(
-                &dataforge_state::theme::ThemeDefinition::builtin_dark(),
+                &tableminus_state::theme::ThemeDefinition::builtin_dark(),
             ),
             weak_workspace: Some(weak_workspace),
             tab_buffers: BTreeMap::new(),
@@ -1864,9 +1864,9 @@ fn paint_editor_gutter_layer(
 /// and vertical split pairing with [`results_pane::render_results_pane_embedded`].
 #[must_use]
 pub fn render_sql_editor(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     sync_doc_with_workspace(ws, cx);
     let editor_pane = render_editor_panel_body(ws, cx);
@@ -1889,8 +1889,8 @@ pub fn render_sql_editor(
 }
 
 fn render_editor_panel_body(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let doc_entity = ws.sql_editor_ui.doc.clone();
     let doc = doc_entity.read(cx);
@@ -1960,7 +1960,7 @@ fn render_editor_panel_body(
 
 fn attach_editor_actions(
     root: gpui::Stateful<gpui::Div>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> gpui::Stateful<gpui::Div> {
     root.on_action(cx.listener(|ws, _: &actions::RunQuery, _w, cx| {
         trigger_run_query(ws, false, cx);
@@ -2001,7 +2001,7 @@ fn build_interactive_editor_canvas(
     focus_handle: &FocusHandle,
     palette: &ContentThemePalette,
     ac_open: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let key_doc = doc_entity.clone();
     let md_doc = doc_entity.clone();
@@ -2048,7 +2048,7 @@ fn build_interactive_editor_canvas(
     reason = "Editor toolbar reflects complete live doc/Vim/query state"
 )]
 fn render_editor_toolbar(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     is_running: bool,
     has_selection: bool,
     primary_pos: (usize, usize),
@@ -2057,7 +2057,7 @@ fn render_editor_toolbar(
     vim_enabled: bool,
     vim_mode: VimMode,
     vim_cmd_buf: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let left = render_toolbar_left_actions(
         ws,
@@ -2088,13 +2088,13 @@ fn render_editor_toolbar(
 }
 
 fn render_toolbar_left_actions(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     is_running: bool,
     has_selection: bool,
     vim_enabled: bool,
     vim_mode: VimMode,
     vim_cmd_buf: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let save_popover = render_save_query_popover(ws, cx);
     let s = &ws.controller.strings;
@@ -2141,7 +2141,7 @@ fn render_toolbar_run_button(
     is_running: bool,
     has_selection: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     if is_running {
         Button::new("sql-cancel-btn")
@@ -2172,7 +2172,7 @@ fn render_toolbar_run_button(
 fn render_toolbar_find_button(
     is_open: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let btn = Button::new("sql-find-btn")
         .variant(if is_open {
@@ -2199,7 +2199,7 @@ fn render_toolbar_find_button(
 
 fn render_toolbar_format_button(
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     Button::new("sql-format-btn")
         .variant(Variant::Ghost)
@@ -2215,7 +2215,7 @@ fn render_toolbar_format_button(
 fn render_toolbar_explain_button(
     analyze: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let (id, label) = if analyze {
         ("sql-explain-analyze-btn", s.explain_analyze)
@@ -2234,8 +2234,8 @@ fn render_toolbar_explain_button(
 }
 
 fn render_toolbar_drawer_button(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let drawer_count = ws.controller.saved_queries.len() + ws.controller.query_history.len();
     let drawer_label = if drawer_count > 0 {
@@ -2262,7 +2262,7 @@ fn render_toolbar_drawer_button(
 fn render_toolbar_vim_button(
     vim_enabled: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let vim_label = if vim_enabled {
         s.vim_on_label
@@ -2291,8 +2291,8 @@ fn render_toolbar_vim_button(
 }
 
 fn render_find_replace_bar(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     if !ws.sql_editor_ui.find_replace_open {
         return None;
@@ -2338,11 +2338,11 @@ fn render_find_replace_bar(
 }
 
 fn render_find_input_group(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     find_input: &Entity<InputState>,
     count_label: &str,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let has_matches = ws.sql_editor_ui.match_count > 0;
     let case_on = ws.sql_editor_ui.case_sensitive;
@@ -2424,7 +2424,7 @@ fn render_find_input_group(
 fn render_replace_input_group(
     replace_input: &Entity<InputState>,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .flex()
@@ -2472,11 +2472,11 @@ fn render_replace_input_group(
 }
 
 fn open_find_replace_with_text(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
     doc_text: &str,
     selected: Option<String>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.sql_editor_ui.find_replace_open = true;
     if let Some(sel) = selected
@@ -2494,7 +2494,7 @@ fn open_find_replace_with_text(
     cx.notify();
 }
 
-fn refresh_find_matches_state(ws: &mut DataForgeWorkspace, doc_text: &str, cx: &App) {
+fn refresh_find_matches_state(ws: &mut TableMinusWorkspace, doc_text: &str, cx: &App) {
     let query = ws.sql_editor_ui.find_input.read(cx).value().to_string();
     let matches = if query.is_empty() {
         Vec::new()
@@ -2518,9 +2518,9 @@ fn refresh_find_matches_state(ws: &mut DataForgeWorkspace, doc_text: &str, cx: &
 }
 
 fn step_find_match(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     forward: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let doc_text = ws.sql_editor_ui.current_text(cx);
     refresh_find_matches_state(ws, &doc_text, cx);
@@ -2543,10 +2543,10 @@ fn step_find_match(
 }
 
 fn select_byte_range_in_doc(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     doc_text: &str,
     range: Range<usize>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let start_chars = doc_text[..range.start.min(doc_text.len())].chars().count();
     let end_chars = start_chars
@@ -2564,9 +2564,9 @@ fn select_byte_range_in_doc(
 }
 
 fn apply_find_replace(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     replace_all: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let find = ws.sql_editor_ui.find_input.read(cx).value().to_string();
     if find.is_empty() {
@@ -2599,7 +2599,7 @@ fn apply_find_replace(
     cx.notify();
 }
 
-fn trigger_format_sql(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn trigger_format_sql(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let current = ws.sql_editor_ui.current_text(cx);
     ws.controller.set_editor_sql(&current);
     ws.controller.format_editor_sql();
@@ -2610,9 +2610,9 @@ fn trigger_format_sql(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWor
 }
 
 fn trigger_explain_query(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     analyze: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let sql = {
         let doc = ws.sql_editor_ui.doc.read(cx);
@@ -2656,7 +2656,7 @@ fn trigger_explain_query(
     }
 }
 
-fn sync_doc_sql_from_controller(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn sync_doc_sql_from_controller(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let updated = ws.controller.editor_sql_text();
     ws.sql_editor_ui.doc.update(cx, |doc, cx| {
         let prev_head = doc.primary_cursor().head;
@@ -2674,7 +2674,7 @@ fn sync_doc_sql_from_controller(ws: &mut DataForgeWorkspace, cx: &mut Context<Da
 }
 
 fn render_toolbar_right_status(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     primary_pos: (usize, usize),
     cursor_count: usize,
     grammar: SqlGrammar,
@@ -2716,8 +2716,8 @@ fn render_toolbar_right_status(
 }
 
 fn render_save_query_popover(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let trigger = Button::new("sql-save-trigger-btn")
@@ -2784,9 +2784,9 @@ fn render_save_query_popover(
 }
 
 fn commit_save_query(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     raw_name: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let trimmed = raw_name.trim();
     if trimmed.is_empty() {
@@ -2811,8 +2811,8 @@ fn commit_save_query(
 }
 
 fn render_editor_drawer(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let filter_input = ws.sql_editor_ui.drawer_search_input.clone();
     let needle = filter_input.read(cx).value().trim().to_ascii_lowercase();
@@ -2881,9 +2881,9 @@ fn render_editor_drawer(
 }
 
 fn render_saved_queries_list(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     needle: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let filtered: Vec<(String, String, Option<String>)> = ws
         .controller
@@ -2949,9 +2949,9 @@ fn render_saved_queries_list(
 }
 
 fn render_query_history_list(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     needle: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let filtered: Vec<(String, String, u64, bool)> = ws
         .controller
@@ -3217,7 +3217,7 @@ fn render_autocomplete_row(
         .into_any_element()
 }
 
-fn sync_doc_with_workspace(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn sync_doc_with_workspace(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let active_tab = ws.controller.tabs.active_tab();
     let initial_tab_sql = active_tab.and_then(|id| {
         ws.controller
@@ -3331,10 +3331,10 @@ fn sync_doc_tab_buffer(
 }
 
 fn load_sql_into_active_editor(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     sql: &str,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let sql_owned = sql.to_owned();
     ws.controller.set_editor_sql(&sql_owned);
@@ -3355,8 +3355,8 @@ fn load_sql_into_active_editor(
 }
 
 pub(crate) fn cancel_active_query(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if let Some(token) = ws.results_ui.active_cancel.take() {
         token.cancel();
@@ -3376,9 +3376,9 @@ enum QueryStreamMsg {
 }
 
 pub(crate) fn trigger_run_query(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     selected_only: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let sql = {
         let doc = ws.sql_editor_ui.doc.read(cx);
@@ -3453,7 +3453,7 @@ pub(crate) fn trigger_run_query(
 
 fn spawn_query_stream_worker(
     services: std::sync::Arc<crate::services::ServiceHub>,
-    workspace_id: dataforge_state::connection_window::WorkspaceId,
+    workspace_id: tableminus_state::connection_window::WorkspaceId,
     sql_run: String,
     cancel: CancellationToken,
     ui_tx: async_channel::Sender<QueryStreamMsg>,
@@ -3490,7 +3490,7 @@ fn spawn_query_stream_worker(
 }
 
 fn finalize_stream_query(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     tab_id: TabId,
     sql: &str,
     res: Result<RunSummary, String>,
@@ -3790,7 +3790,7 @@ fn from_ctrl_vim_mode(mode: crate::controller_types::VimMode) -> VimMode {
     }
 }
 
-fn compute_catalog_fingerprint(ws: &DataForgeWorkspace, grammar: SqlGrammar) -> u64 {
+fn compute_catalog_fingerprint(ws: &TableMinusWorkspace, grammar: SqlGrammar) -> u64 {
     let s = ws.controller.cached_schemas.len() as u64;
     let o = ws.controller.cached_objects.len() as u64;
     let c = ws.controller.structure_columns.len() as u64;
@@ -3908,7 +3908,7 @@ fn detect_sql_autocomplete_context(
     }
 }
 
-fn build_schema_catalog(ws: &DataForgeWorkspace) -> Vec<SchemaCompletionItem> {
+fn build_schema_catalog(ws: &TableMinusWorkspace) -> Vec<SchemaCompletionItem> {
     let strings = &ws.controller.strings;
     let mut items = Vec::new();
     for (label, detail, insert_text) in sql_snippets_catalog(strings) {
