@@ -13,7 +13,7 @@ use dataforge_state::tabs::{TabConnectionId, TabId, TabKind};
 use tablepro_core::meta::{ObjectKind, TableRef};
 
 use super::DataForgeWorkspace;
-use super::shell_state::{ToastSeverity, WorkspaceSubView};
+use super::shell_state::{ResultPaneSubView, ToastSeverity, WorkspaceSubView, WorkspaceToolView};
 
 /// Persistent state for the workspace command palette (`Ctrl+K`).
 #[derive(Debug, Default)]
@@ -112,7 +112,60 @@ fn append_action_items(controller: &AppController, s: &Strings, items: &mut Vec<
     let pending = edits.modified_cells.len() + edits.inserted_rows.len() + edits.deleted_rows.len();
 
     append_query_action_items(s, is_connected, has_tabs, has_export, pending, items);
+    append_workbench_tool_items(s, is_connected, items);
     append_view_action_items(s, items);
+}
+
+fn append_workbench_tool_items(s: &Strings, is_connected: bool, items: &mut Vec<CommandItem>) {
+    items.extend([
+        CommandItem::new("act:format-sql", s.editor_format_sql)
+            .group(s.cmd_group_actions)
+            .icon(IconName::Code)
+            .keywords(["format", "sql", "pretty", "indent"]),
+        CommandItem::new("act:visual-explain", s.explain_visual_tab)
+            .group(s.cmd_group_actions)
+            .icon(IconName::Activity)
+            .keywords(["explain", "plan", "visual", "analyze", "cost"])
+            .is_disabled(!is_connected),
+        CommandItem::new("act:result-charts", s.charts_tab)
+            .group(s.cmd_group_view)
+            .icon(IconName::ChartBar)
+            .keywords(["chart", "charts", "bar", "line", "donut", "plot"]),
+        CommandItem::new("act:er-diagram", s.er_diagram)
+            .group(s.cmd_group_navigation)
+            .icon(IconName::Share2)
+            .keywords(["er", "diagram", "schema", "relations", "foreign key"]),
+        CommandItem::new("act:schema-designer", s.schema_designer)
+            .group(s.cmd_group_actions)
+            .icon(IconName::Layers)
+            .keywords(["schema", "designer", "ddl", "create", "alter"]),
+        CommandItem::new(
+            "act:import-wizard",
+            format!("{} & {}", s.import_wizard, s.import_sql_script),
+        )
+        .group(s.cmd_group_actions)
+        .icon(IconName::Upload)
+        .keywords(["import", "csv", "json", "sql", "script"]),
+        CommandItem::new("act:metadata-search", s.metadata_search)
+            .group(s.cmd_group_navigation)
+            .icon(IconName::Search)
+            .keywords(["metadata", "search", "tables", "columns", "find"]),
+        CommandItem::new("act:query-builder", s.query_builder)
+            .group(s.cmd_group_actions)
+            .icon(IconName::SlidersHorizontal)
+            .keywords(["visual", "query", "builder", "select", "join"]),
+        CommandItem::new("act:compare", s.compare_title)
+            .group(s.cmd_group_actions)
+            .icon(IconName::ArrowLeftRight)
+            .keywords(["compare", "diff", "schema", "data", "sync"]),
+        CommandItem::new(
+            "act:admin",
+            format!("{} & {}", s.admin_title, s.admin_scheduled_tasks),
+        )
+        .group(s.cmd_group_navigation)
+        .icon(IconName::ShieldCheck)
+        .keywords(["admin", "server", "sessions", "users", "scheduled", "tasks"]),
+    ]);
 }
 
 fn append_query_action_items(
@@ -359,6 +412,7 @@ fn execute_palette_item(
         {
             let table = TableRef::new(obj.schema, obj.name);
             ws.controller.screen_mode = ScreenMode::Workspace;
+            ws.workspace_pane.close_tool();
             ws.workspace_pane.sub_view = WorkspaceSubView::DataGrid;
             ws.controller.status_bar.view_mode = TableViewMode::Data;
             if let Err(err) = ws.controller.open_table_tab_blocking(table) {
@@ -448,13 +502,85 @@ fn execute_named_action(
         "toggle-theme" => ws.toggle_theme_mode(window, cx),
         "connections" => ws.switch_screen(ScreenMode::ConnectionsLibrary, cx),
         "settings" => ws.switch_screen(ScreenMode::Settings, cx),
+        other => execute_workbench_action(ws, other, window, cx),
+    }
+}
+
+fn execute_workbench_action(
+    ws: &mut DataForgeWorkspace,
+    action: &str,
+    window: &mut Window,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    match action {
+        "er-diagram" => open_workbench_tool(ws, WorkspaceToolView::ErDiagram),
+        "schema-designer" => open_workbench_tool(ws, WorkspaceToolView::SchemaDesigner),
+        "import-wizard" => open_workbench_tool(ws, WorkspaceToolView::ImportWizard),
+        "query-builder" => open_workbench_tool(ws, WorkspaceToolView::QueryBuilder),
+        "compare" => open_workbench_tool(ws, WorkspaceToolView::Compare),
+        "admin" => open_workbench_tool(ws, WorkspaceToolView::Admin),
+        "metadata-search" => ws.metadata_search_ui.open_modal(window, cx),
+        "format-sql" => {
+            let live_sql = ws.sql_editor_ui.current_text(cx);
+            if !live_sql.is_empty() {
+                ws.controller.set_editor_sql(&live_sql);
+            }
+            ws.controller.format_editor_sql();
+            ws.controller.screen_mode = ScreenMode::Workspace;
+            ws.workspace_pane.close_tool();
+            ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
+        }
+        "visual-explain" => run_visual_explain_from_palette(ws, cx),
+        "result-charts" => {
+            ws.controller.screen_mode = ScreenMode::Workspace;
+            ws.workspace_pane.close_tool();
+            ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
+            if let Some(tab_id) = ws.controller.tabs.active_tab() {
+                ws.ensure_tab_result(tab_id).sub_view = ResultPaneSubView::Charts;
+            }
+        }
         _ => {}
+    }
+}
+
+fn open_workbench_tool(ws: &mut DataForgeWorkspace, tool: WorkspaceToolView) {
+    ws.controller.screen_mode = ScreenMode::Workspace;
+    ws.workspace_pane.open_tool(tool);
+}
+
+fn run_visual_explain_from_palette(
+    ws: &mut DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let live_sql = ws.sql_editor_ui.current_text(cx);
+    if !live_sql.trim().is_empty() {
+        ws.controller.set_editor_sql(&live_sql);
+    }
+    let sql = ws.controller.editor_sql_text();
+    match ws.controller.run_visual_explain_blocking(&sql, false) {
+        Ok(_) => {
+            ws.controller.screen_mode = ScreenMode::Workspace;
+            ws.workspace_pane.close_tool();
+            ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
+            if let Some(tab_id) = ws.controller.tabs.active_tab() {
+                ws.ensure_tab_result(tab_id).sub_view = ResultPaneSubView::Explain;
+            }
+        }
+        Err(err) => {
+            ws.notify_toast(
+                ToastSeverity::Error,
+                ws.controller.strings.explain_plan,
+                Some(err.to_string().into()),
+                cx,
+            );
+        }
     }
 }
 
 fn select_tab_by_id(ws: &mut DataForgeWorkspace, id: TabId) {
     ws.controller.tabs.select(id);
     ws.controller.screen_mode = ScreenMode::Workspace;
+    ws.workspace_pane.close_tool();
     if let Some(tab) = ws
         .controller
         .tabs
@@ -484,6 +610,7 @@ fn select_tab_by_id(ws: &mut DataForgeWorkspace, id: TabId) {
 
 fn open_sql_in_new_tab(ws: &mut DataForgeWorkspace, title: &str, sql: &str) {
     ws.controller.screen_mode = ScreenMode::Workspace;
+    ws.workspace_pane.close_tool();
     ws.controller
         .tabs
         .open_query_tab(TabConnectionId("default".to_owned()), Some(title));
