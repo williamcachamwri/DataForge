@@ -44,6 +44,10 @@ DataForge 是一款用 Rust 编写的 Windows 原生 SQL 与数据库工作台�
 
 ![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
+### 交互式 ER 关系图、外键连线与 SVG 导出
+
+![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+
 ---
 
 ## 支持的数据库
