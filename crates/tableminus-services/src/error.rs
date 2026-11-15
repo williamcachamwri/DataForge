@@ -1,8 +1,8 @@
-//! Unified error types for `dataforge-services`.
+//! Unified error types for `tableminus-services`.
 
 use thiserror::Error;
 
-/// Top-level error returned by DataForge service operations.
+/// Top-level error returned by TableMinus service operations.
 #[derive(Debug, Error)]
 pub enum ServiceError {
     #[error("runtime error: {0}")]
