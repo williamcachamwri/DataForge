@@ -1,8 +1,8 @@
-//! Error types for the `dataforge-gfx` rendering crate.
+//! Error types for the `tableminus-gfx` rendering crate.
 
 use thiserror::Error;
 
-/// Result alias for `dataforge-gfx` operations.
+/// Result alias for `tableminus-gfx` operations.
 pub type Result<T> = std::result::Result<T, GfxError>;
 
 /// Errors returned by Direct2D, DirectWrite, SVG path parsing, and layout operations.
