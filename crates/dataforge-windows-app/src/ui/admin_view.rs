@@ -1,5 +1,10 @@
-//! Server Administration, active session monitor, and Scheduled Tasks view.
+//! Server Administration, Live Server Monitor, and Scheduled Tasks view.
 
+use std::time::Duration;
+
+use dataforge_services::server_monitor::{
+    self, LiveSessionRow, ServerLockRow, ServerMonitorSnapshot,
+};
 use dataforge_services::{
     DatabaseEngine, active_sessions_query, kill_session_sql, users_roles_query,
 };
@@ -11,8 +16,9 @@ use herogpui::components::{
 };
 use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant};
 use herogpui::gpui::{
-    AnyElement, App, AppContext as _, Context, Entity, FontWeight, InteractiveElement, IntoElement,
-    ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
+    AnyElement, App, AppContext as _, AsyncApp, Context, Entity, FontWeight, InteractiveElement,
+    IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, Task, WeakEntity,
+    Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
 
@@ -20,16 +26,25 @@ use super::DataForgeWorkspace;
 use super::results_pane::format_core_value;
 use super::shell_state::{push_error_toast, push_success_toast};
 use super::theme::{
-    COMPACT_GAP_PX, CONTROL_RADIUS_PX, PANEL_RADIUS_PX, editor_gpui_font, hairline_border_color,
-    muted_surface_bg, panel_surface_bg, row_zebra_bg,
+    COMPACT_GAP_PX, CONTROL_RADIUS_PX, PANEL_RADIUS_PX, editor_gpui_font, elevated_overlay_bg,
+    hairline_border_color, muted_surface_bg, panel_surface_bg, row_zebra_bg, value_gpui_font,
 };
 
 const SECTION_USERS: usize = 0;
 const SECTION_SESSIONS: usize = 1;
-const SECTION_TASKS: usize = 2;
+const SECTION_MONITOR_SESSIONS: usize = 2;
+const SECTION_MONITOR_LOCKS: usize = 3;
+const SECTION_TASKS: usize = 4;
+const MONITOR_AUTO_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
-/// Persistent UI state for the Server Admin & Scheduled Tasks view.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingKillSession {
+    id: String,
+    user: String,
+    query: String,
+}
+
+/// Persistent UI state for the Server Admin, Live Server Monitor, and Scheduled Tasks view.
 pub struct AdminViewState {
     pub active_section: usize,
     users_cols: Vec<String>,
@@ -42,6 +57,19 @@ pub struct AdminViewState {
     sessions_notice: Option<String>,
     sessions_error: Option<String>,
     sessions_loaded_ws: Option<WorkspaceId>,
+    monitor_snapshot: Option<ServerMonitorSnapshot>,
+    monitor_notice: Option<String>,
+    monitor_error: Option<String>,
+    monitor_loaded_ws: Option<WorkspaceId>,
+    monitor_loading: bool,
+    monitor_auto_refresh: bool,
+    monitor_auto_refresh_gen: u64,
+    monitor_auto_refresh_task: Option<Task<()>>,
+    monitor_fetch_gen: u64,
+    monitor_fetch_task: Option<Task<()>>,
+    monitor_confirm_kill: Option<PendingKillSession>,
+    monitor_killing: bool,
+    monitor_kill_task: Option<Task<()>>,
     new_task_open: bool,
     task_name_input: Entity<InputState>,
     task_sql_input: Entity<InputState>,
@@ -50,6 +78,22 @@ pub struct AdminViewState {
     task_connection_id: Option<String>,
     task_form_error: Option<String>,
     expanded_history_task_id: Option<String>,
+}
+
+impl std::fmt::Debug for AdminViewState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdminViewState")
+            .field("active_section", &self.active_section)
+            .field("users_loaded_ws", &self.users_loaded_ws)
+            .field("sessions_loaded_ws", &self.sessions_loaded_ws)
+            .field("monitor_loaded_ws", &self.monitor_loaded_ws)
+            .field("monitor_loading", &self.monitor_loading)
+            .field("monitor_auto_refresh", &self.monitor_auto_refresh)
+            .field("monitor_confirm_kill", &self.monitor_confirm_kill)
+            .field("monitor_killing", &self.monitor_killing)
+            .field("new_task_open", &self.new_task_open)
+            .finish_non_exhaustive()
+    }
 }
 
 impl AdminViewState {
@@ -75,6 +119,19 @@ impl AdminViewState {
             sessions_notice: None,
             sessions_error: None,
             sessions_loaded_ws: None,
+            monitor_snapshot: None,
+            monitor_notice: None,
+            monitor_error: None,
+            monitor_loaded_ws: None,
+            monitor_loading: false,
+            monitor_auto_refresh: false,
+            monitor_auto_refresh_gen: 0,
+            monitor_auto_refresh_task: None,
+            monitor_fetch_gen: 0,
+            monitor_fetch_task: None,
+            monitor_confirm_kill: None,
+            monitor_killing: false,
+            monitor_kill_task: None,
             new_task_open: false,
             task_name_input,
             task_sql_input,
@@ -100,11 +157,13 @@ pub fn render_admin_view(
             .phase(ws.controller.active_workspace),
         Some(ConnectionWindowPhase::Connected)
     );
-    ensure_section_loaded(ws, is_connected);
+    ensure_section_loaded(ws, is_connected, cx);
 
     let body = match ws.admin_ui.active_section {
         SECTION_USERS => render_users_section(ws, is_connected, cx),
         SECTION_SESSIONS => render_sessions_section(ws, is_connected, cx),
+        SECTION_MONITOR_SESSIONS => render_monitor_sessions_section(ws, is_connected, cx),
+        SECTION_MONITOR_LOCKS => render_monitor_locks_section(ws, is_connected, cx),
         _ => render_tasks_section(ws, cx),
     };
 
@@ -121,7 +180,11 @@ pub fn render_admin_view(
         .into_any_element()
 }
 
-fn ensure_section_loaded(ws: &mut DataForgeWorkspace, is_connected: bool) {
+fn ensure_section_loaded(
+    ws: &mut DataForgeWorkspace,
+    is_connected: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
     if !is_connected {
         return;
     }
@@ -132,6 +195,13 @@ fn ensure_section_loaded(ws: &mut DataForgeWorkspace, is_connected: bool) {
         }
         SECTION_SESSIONS if ws.admin_ui.sessions_loaded_ws != Some(active_ws) => {
             refresh_active_sessions(ws);
+        }
+        SECTION_MONITOR_SESSIONS | SECTION_MONITOR_LOCKS
+            if ws.admin_ui.monitor_loaded_ws != Some(active_ws) =>
+        {
+            ws.admin_ui.monitor_snapshot = None;
+            ws.admin_ui.monitor_confirm_kill = None;
+            refresh_monitor_snapshot(ws, cx);
         }
         _ => {}
     }
@@ -200,9 +270,37 @@ fn render_admin_header(
 
 fn render_admin_tabs(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
+    let live_session_count = ws
+        .admin_ui
+        .monitor_snapshot
+        .as_ref()
+        .map_or(0, |snap| snap.sessions.len());
+    let lock_count = ws
+        .admin_ui
+        .monitor_snapshot
+        .as_ref()
+        .map_or(0, |snap| snap.locks.len());
+    let monitor_loaded = ws.admin_ui.monitor_snapshot.is_some();
+
     let items = vec![
         TabItem::new("users", s.admin_users_roles),
         TabItem::new("sessions", s.admin_active_sessions),
+        TabItem::new(
+            "monitor-sessions",
+            if monitor_loaded {
+                format!("{} ({live_session_count})", s.monitor_live_sessions)
+            } else {
+                s.monitor_live_sessions.to_owned()
+            },
+        ),
+        TabItem::new(
+            "monitor-locks",
+            if monitor_loaded {
+                format!("{} ({lock_count})", s.monitor_locks_tab)
+            } else {
+                s.monitor_locks_tab.to_owned()
+            },
+        ),
         TabItem::new(
             "tasks",
             format!(
@@ -214,6 +312,8 @@ fn render_admin_tabs(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
     ];
     let selected = match ws.admin_ui.active_section {
         SECTION_SESSIONS => "sessions",
+        SECTION_MONITOR_SESSIONS => "monitor-sessions",
+        SECTION_MONITOR_LOCKS => "monitor-locks",
         SECTION_TASKS => "tasks",
         _ => "users",
     };
@@ -225,6 +325,8 @@ fn render_admin_tabs(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         .on_selection_change(cx.listener(|ws, key: &SharedString, _w, cx| {
             ws.admin_ui.active_section = match key.as_ref() {
                 "sessions" => SECTION_SESSIONS,
+                "monitor-sessions" => SECTION_MONITOR_SESSIONS,
+                "monitor-locks" => SECTION_MONITOR_LOCKS,
                 "tasks" => SECTION_TASKS,
                 _ => SECTION_USERS,
             };
@@ -1231,6 +1333,957 @@ fn run_task_now_with_toast(
     cx.notify();
 }
 
+fn render_monitor_sessions_section(
+    ws: &DataForgeWorkspace,
+    is_connected: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    if !is_connected {
+        return render_centered_note(s.no_active_connection, s.no_active_connection_desc, cx);
+    }
+
+    let sessions = ws
+        .admin_ui
+        .monitor_snapshot
+        .as_ref()
+        .map_or(&[][..], |snap| snap.sessions.as_slice());
+    let toolbar = render_monitor_toolbar(
+        ws,
+        s.monitor_live_sessions,
+        sessions.len(),
+        is_connected,
+        cx,
+    );
+
+    let mut root = render_monitor_section_shell(ws, toolbar, true, cx);
+    if ws.admin_ui.monitor_notice.is_some() && sessions.is_empty() {
+        return root.into_any_element();
+    }
+    if sessions.is_empty() {
+        return root
+            .child(render_monitor_empty_state(
+                IconName::Activity,
+                s.monitor_no_sessions,
+                cx,
+            ))
+            .into_any_element();
+    }
+
+    let engine = ws.controller.active_database_engine();
+    let mut table = div()
+        .id("admin-monitor-sessions-scroll")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .overflow_x_scroll()
+        .rounded(px(PANEL_RADIUS_PX))
+        .border_1()
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .flex_col()
+        .child(render_live_sessions_header(ws, cx));
+
+    for (row_idx, session) in sessions.iter().enumerate() {
+        table = table.child(render_live_session_row(row_idx, session, engine, ws, cx));
+    }
+
+    root = root.child(table);
+    root.into_any_element()
+}
+
+fn render_monitor_locks_section(
+    ws: &DataForgeWorkspace,
+    is_connected: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    if !is_connected {
+        return render_centered_note(s.no_active_connection, s.no_active_connection_desc, cx);
+    }
+
+    let locks = ws
+        .admin_ui
+        .monitor_snapshot
+        .as_ref()
+        .map_or(&[][..], |snap| snap.locks.as_slice());
+    let toolbar = render_monitor_toolbar(ws, s.monitor_locks_tab, locks.len(), is_connected, cx);
+
+    let mut root = render_monitor_section_shell(ws, toolbar, false, cx);
+    if ws.admin_ui.monitor_notice.is_some() && locks.is_empty() {
+        return root.into_any_element();
+    }
+    if locks.is_empty() {
+        return root
+            .child(render_monitor_empty_state(
+                IconName::Lock,
+                s.monitor_no_locks,
+                cx,
+            ))
+            .into_any_element();
+    }
+
+    let mut table = div()
+        .id("admin-monitor-locks-scroll")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .overflow_x_scroll()
+        .rounded(px(PANEL_RADIUS_PX))
+        .border_1()
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .flex_col()
+        .child(render_locks_header(ws, cx));
+
+    for (row_idx, lock) in locks.iter().enumerate() {
+        table = table.child(render_server_lock_row(row_idx, lock, ws, cx));
+    }
+
+    root = root.child(table);
+    root.into_any_element()
+}
+
+fn render_monitor_section_shell(
+    ws: &DataForgeWorkspace,
+    toolbar: AnyElement,
+    show_kill_confirm: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> herogpui::gpui::Div {
+    let s = &ws.controller.strings;
+    let mut root = div()
+        .flex_1()
+        .min_h_0()
+        .flex()
+        .flex_col()
+        .p(px(14.0))
+        .gap(px(10.0))
+        .child(toolbar);
+
+    if let Some(msg) = ws.admin_ui.monitor_notice.as_deref() {
+        root = root.child(
+            Alert::new(s.admin_title)
+                .status(HeroColor::Default)
+                .description(msg.to_owned()),
+        );
+    }
+    if let Some(err) = ws.admin_ui.monitor_error.as_deref() {
+        root = root.child(
+            Alert::new(s.query_error_title)
+                .status(HeroColor::Danger)
+                .description(err.to_owned()),
+        );
+    }
+    if show_kill_confirm && let Some(sheet) = render_monitor_confirm_kill_guard(ws, cx) {
+        root = root.child(sheet);
+    }
+    root
+}
+
+fn render_monitor_toolbar(
+    ws: &DataForgeWorkspace,
+    title: &'static str,
+    row_count: usize,
+    is_connected: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let colors = cx.colors().clone();
+    let loading = ws.admin_ui.monitor_loading;
+    let auto_on = ws.admin_ui.monitor_auto_refresh;
+
+    let mut left = div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            div()
+                .truncate()
+                .text_size(px(12.5))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(colors.foreground)
+                .child(title),
+        )
+        .child(
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .color(HeroColor::Default)
+                .size(HeroSize::Sm)
+                .child(ChipLabel::new().child(format!("{row_count}"))),
+        );
+
+    if loading {
+        left = left.child(
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .color(HeroColor::Accent)
+                .size(HeroSize::Sm)
+                .child(ChipLabel::new().child(s.running)),
+        );
+    }
+
+    let right = div()
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .gap(px(12.0))
+        .child(
+            Switch::new("monitor-auto-refresh")
+                .size(HeroSize::Sm)
+                .is_selected(auto_on)
+                .is_disabled(!is_connected)
+                .label(s.monitor_auto_refresh)
+                .on_change(cx.listener(|ws, &enabled: &bool, _w, cx| {
+                    toggle_monitor_auto_refresh(ws, enabled, cx);
+                })),
+        )
+        .child(
+            Button::new("monitor-refresh-btn")
+                .variant(Variant::Secondary)
+                .size(HeroSize::Sm)
+                .is_disabled(!is_connected || loading)
+                .on_press(cx.listener(|ws, _, _w, cx| {
+                    refresh_monitor_snapshot(ws, cx);
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(5.0))
+                        .child(Icon::new(IconName::RefreshCw).size(IconSize::Xs))
+                        .child(s.refresh_label),
+                ),
+        );
+
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .flex_wrap()
+        .gap(px(8.0))
+        .child(left)
+        .child(right)
+        .into_any_element()
+}
+
+fn render_monitor_confirm_kill_guard(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> Option<AnyElement> {
+    let pending = ws.admin_ui.monitor_confirm_kill.as_ref()?;
+    let s = &ws.controller.strings;
+    let colors = cx.colors().clone();
+    let mono = value_gpui_font(&ws.controller.settings);
+    let killing = ws.admin_ui.monitor_killing;
+
+    let user_text = if pending.user.is_empty() {
+        "—"
+    } else {
+        pending.user.as_str()
+    };
+    let query_text = if pending.query.is_empty() {
+        "—"
+    } else {
+        pending.query.as_str()
+    };
+    let detail = format!(
+        "{}: {} · {}: {} · {}",
+        s.monitor_pid_col, pending.id, s.monitor_user_col, user_text, query_text
+    );
+
+    Some(
+        div()
+            .w_full()
+            .p(px(12.0))
+            .rounded(px(PANEL_RADIUS_PX))
+            .bg(elevated_overlay_bg(cx))
+            .border_1()
+            .border_color(colors.danger.color.opacity(0.45))
+            .flex()
+            .items_center()
+            .justify_between()
+            .flex_wrap()
+            .gap(px(10.0))
+            .child(
+                div()
+                    .min_w_0()
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .gap(px(10.0))
+                    .child(
+                        Icon::new(IconName::TriangleAlert)
+                            .size(IconSize::Sm)
+                            .color(colors.danger.color),
+                    )
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex_1()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.0))
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_size(px(12.5))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(colors.foreground)
+                                    .child(s.monitor_confirm_kill),
+                            )
+                            .child(
+                                div()
+                                    .truncate()
+                                    .font(mono)
+                                    .text_size(px(11.5))
+                                    .text_color(colors.muted)
+                                    .child(detail),
+                            ),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.0))
+                    .child(
+                        Button::new("monitor-confirm-kill-cancel")
+                            .variant(Variant::Ghost)
+                            .size(HeroSize::Sm)
+                            .is_disabled(killing)
+                            .on_press(cx.listener(|ws, _, _w, cx| {
+                                ws.admin_ui.monitor_confirm_kill = None;
+                                cx.notify();
+                            }))
+                            .child(s.cancel_label),
+                    )
+                    .child(
+                        Button::new("monitor-confirm-kill-exec")
+                            .variant(Variant::Danger)
+                            .size(HeroSize::Sm)
+                            .is_disabled(killing)
+                            .on_press(cx.listener(|ws, _, _w, cx| {
+                                execute_confirm_kill_session(ws, cx);
+                            }))
+                            .child(s.monitor_kill_session),
+                    ),
+            )
+            .into_any_element(),
+    )
+}
+
+fn render_live_sessions_header(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+    let s = &ws.controller.strings;
+    div()
+        .w_full()
+        .px(px(10.0))
+        .py(px(7.0))
+        .bg(muted_surface_bg(cx))
+        .border_b_1()
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            header_cell(s.monitor_pid_col, cx)
+                .w(px(96.0))
+                .flex_shrink_0(),
+        )
+        .child(
+            header_cell(s.monitor_user_col, cx)
+                .w(px(110.0))
+                .flex_shrink_0(),
+        )
+        .child(
+            header_cell(s.monitor_state_col, cx)
+                .w(px(120.0))
+                .flex_shrink_0(),
+        )
+        .child(
+            header_cell(s.monitor_duration_col, cx)
+                .w(px(88.0))
+                .flex_shrink_0(),
+        )
+        .child(
+            header_cell(s.monitor_query_col, cx)
+                .flex_1()
+                .min_w(px(180.0)),
+        )
+        .child(
+            header_cell(s.monitor_kill_session, cx)
+                .w(px(124.0))
+                .flex_shrink_0(),
+        )
+        .into_any_element()
+}
+
+fn render_live_session_row(
+    row_idx: usize,
+    session: &LiveSessionRow,
+    engine: DatabaseEngine,
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let colors = cx.colors().clone();
+    let mono_font = value_gpui_font(&ws.controller.settings);
+    let sql_font = editor_gpui_font(&ws.controller.settings);
+    let can_kill = !ws.admin_ui.monitor_killing
+        && server_monitor::validate_session_id(engine, &session.id).is_ok();
+    let is_armed = ws
+        .admin_ui
+        .monitor_confirm_kill
+        .as_ref()
+        .is_some_and(|pending| pending.id == session.id);
+
+    let pending_payload = PendingKillSession {
+        id: session.id.clone(),
+        user: session.user.clone(),
+        query: session.query.clone(),
+    };
+    let state_text = dash_if_empty(&session.state);
+    let state_color = session_state_chip_color(&session.state);
+    let user_text = dash_if_empty(&session.user);
+    let query_text = dash_if_empty(&session.query);
+
+    let mut row = div()
+        .w_full()
+        .px(px(10.0))
+        .py(px(6.0))
+        .border_b_1()
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .items_center()
+        .gap(px(8.0));
+    if is_armed {
+        row = row.bg(colors.danger.color.opacity(0.08));
+    } else if let Some(zebra) = row_zebra_bg(row_idx, cx) {
+        row = row.bg(zebra);
+    }
+
+    row.child(
+        div()
+            .w(px(96.0))
+            .flex_shrink_0()
+            .truncate()
+            .font(mono_font.clone())
+            .text_size(px(12.0))
+            .text_color(colors.foreground)
+            .child(session.id.clone()),
+    )
+    .child(
+        div()
+            .w(px(110.0))
+            .flex_shrink_0()
+            .truncate()
+            .text_size(px(12.0))
+            .text_color(colors.foreground)
+            .child(user_text),
+    )
+    .child(
+        div().w(px(120.0)).flex_shrink_0().min_w_0().child(
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .color(state_color)
+                .size(HeroSize::Sm)
+                .child(ChipLabel::new().child(state_text)),
+        ),
+    )
+    .child(
+        div()
+            .w(px(88.0))
+            .flex_shrink_0()
+            .truncate()
+            .font(mono_font)
+            .text_size(px(12.0))
+            .text_color(colors.muted)
+            .child(format_monitor_duration(session.duration_ms)),
+    )
+    .child(
+        div()
+            .flex_1()
+            .min_w(px(180.0))
+            .truncate()
+            .font(sql_font)
+            .text_size(px(11.5))
+            .text_color(colors.foreground)
+            .child(query_text),
+    )
+    .child(
+        div().w(px(124.0)).flex_shrink_0().child(
+            Button::new(SharedString::from(format!("monitor-kill-{row_idx}")))
+                .variant(if is_armed {
+                    Variant::Danger
+                } else {
+                    Variant::DangerSoft
+                })
+                .size(HeroSize::Sm)
+                .is_disabled(!can_kill)
+                .on_press(cx.listener(move |ws, _, _w, cx| {
+                    ws.admin_ui.monitor_confirm_kill = Some(pending_payload.clone());
+                    cx.notify();
+                }))
+                .child(s.monitor_kill_session),
+        ),
+    )
+    .into_any_element()
+}
+
+fn render_locks_header(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+    let s = &ws.controller.strings;
+    div()
+        .w_full()
+        .px(px(10.0))
+        .py(px(7.0))
+        .bg(muted_surface_bg(cx))
+        .border_b_1()
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            header_cell(s.monitor_pid_col, cx)
+                .w(px(100.0))
+                .flex_shrink_0(),
+        )
+        .child(
+            header_cell(s.monitor_relation_col, cx)
+                .flex_1()
+                .min_w(px(200.0)),
+        )
+        .child(
+            header_cell(s.monitor_granted_col, cx)
+                .w(px(140.0))
+                .flex_shrink_0(),
+        )
+        .child(
+            header_cell(s.monitor_blocked_by_col, cx)
+                .w(px(130.0))
+                .flex_shrink_0(),
+        )
+        .into_any_element()
+}
+
+fn dash_if_empty(value: &str) -> String {
+    if value.is_empty() {
+        "—".to_owned()
+    } else {
+        value.to_owned()
+    }
+}
+
+fn render_lock_granted_chip(lock: &ServerLockRow, s: &crate::i18n::Strings) -> Chip {
+    if lock.granted {
+        Chip::new()
+            .variant(ChipVariant::Soft)
+            .color(HeroColor::Success)
+            .size(HeroSize::Sm)
+            .child(
+                ChipLabel::new().child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .child(Icon::new(IconName::Check).size(IconSize::Xs))
+                        .child(s.nullable_yes),
+                ),
+            )
+    } else {
+        Chip::new()
+            .variant(ChipVariant::Soft)
+            .color(HeroColor::Warning)
+            .size(HeroSize::Sm)
+            .child(
+                ChipLabel::new().child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .child(Icon::new(IconName::Lock).size(IconSize::Xs))
+                        .child(dash_if_empty(&lock.mode)),
+                ),
+            )
+    }
+}
+
+fn render_lock_blocked_cell(
+    blocked_by: Option<&str>,
+    mono_font: herogpui::gpui::Font,
+    muted: herogpui::gpui::Hsla,
+) -> AnyElement {
+    match blocked_by.filter(|b| !b.is_empty()) {
+        Some(blocker) => div()
+            .w(px(130.0))
+            .flex_shrink_0()
+            .child(
+                Chip::new()
+                    .variant(ChipVariant::Soft)
+                    .color(HeroColor::Danger)
+                    .size(HeroSize::Sm)
+                    .child(ChipLabel::new().child(blocker.to_owned())),
+            )
+            .into_any_element(),
+        None => div()
+            .w(px(130.0))
+            .flex_shrink_0()
+            .font(mono_font)
+            .text_size(px(12.0))
+            .text_color(muted)
+            .child("—")
+            .into_any_element(),
+    }
+}
+
+fn render_server_lock_row(
+    row_idx: usize,
+    lock: &ServerLockRow,
+    ws: &DataForgeWorkspace,
+    cx: &App,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let colors = cx.colors();
+    let mono_font = value_gpui_font(&ws.controller.settings);
+
+    let relation_text = dash_if_empty(&lock.relation);
+    let meta_parts: Vec<&str> = [lock.lock_type.as_str(), lock.mode.as_str()]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect();
+    let meta_text = meta_parts.join(" · ");
+    let granted_chip = render_lock_granted_chip(lock, s);
+    let blocked_el =
+        render_lock_blocked_cell(lock.blocked_by.as_deref(), mono_font.clone(), colors.muted);
+
+    let mut row = div()
+        .w_full()
+        .px(px(10.0))
+        .py(px(6.0))
+        .border_b_1()
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .items_center()
+        .gap(px(8.0));
+    if let Some(zebra) = row_zebra_bg(row_idx, cx) {
+        row = row.bg(zebra);
+    }
+
+    let mut rel_cell = div()
+        .flex_1()
+        .min_w(px(200.0))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            div()
+                .min_w_0()
+                .truncate()
+                .text_size(px(12.0))
+                .text_color(colors.foreground)
+                .child(relation_text),
+        );
+    if !meta_text.is_empty() {
+        rel_cell = rel_cell.child(
+            div()
+                .flex_shrink_0()
+                .font(mono_font.clone())
+                .text_size(px(11.0))
+                .text_color(colors.muted)
+                .child(meta_text),
+        );
+    }
+
+    row.child(
+        div()
+            .w(px(100.0))
+            .flex_shrink_0()
+            .truncate()
+            .font(mono_font)
+            .text_size(px(12.0))
+            .text_color(colors.foreground)
+            .child(lock.pid.clone()),
+    )
+    .child(rel_cell)
+    .child(div().w(px(140.0)).flex_shrink_0().child(granted_chip))
+    .child(blocked_el)
+    .into_any_element()
+}
+
+fn header_cell(label: &'static str, cx: &App) -> herogpui::gpui::Div {
+    div()
+        .truncate()
+        .text_size(px(11.5))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(cx.colors().foreground)
+        .child(label)
+}
+
+fn render_monitor_empty_state(icon: IconName, message: &'static str, cx: &App) -> AnyElement {
+    let colors = cx.colors();
+    div()
+        .flex_1()
+        .min_h_0()
+        .rounded(px(PANEL_RADIUS_PX))
+        .border_1()
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(8.0))
+        .p(px(24.0))
+        .child(Icon::new(icon).size(IconSize::Md).color(colors.muted))
+        .child(
+            div()
+                .text_size(px(12.5))
+                .text_color(colors.muted)
+                .child(message),
+        )
+        .into_any_element()
+}
+
+fn refresh_monitor_snapshot(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    let active_ws = ws.controller.active_workspace;
+    ws.admin_ui.monitor_loaded_ws = Some(active_ws);
+    ws.admin_ui.monitor_error = None;
+    ws.admin_ui.monitor_notice = None;
+    ws.admin_ui.monitor_fetch_gen = ws.admin_ui.monitor_fetch_gen.wrapping_add(1);
+    ws.admin_ui.monitor_fetch_task = None;
+    let engine = ws.controller.active_database_engine();
+
+    if server_monitor::sessions_query(engine).is_none() {
+        ws.admin_ui.monitor_loading = false;
+        ws.admin_ui.monitor_snapshot = Some(ServerMonitorSnapshot {
+            engine,
+            sessions: Vec::new(),
+            locks: Vec::new(),
+            summary: server_monitor::format_snapshot_summary(engine, &[], &[]),
+        });
+        ws.admin_ui.monitor_notice = Some(embedded_engine_admin_message(
+            engine,
+            &ws.controller.strings,
+        ));
+        return;
+    }
+
+    let Some(services) = ws.controller.services.clone() else {
+        ws.admin_ui.monitor_loading = false;
+        ws.admin_ui.monitor_error = Some(ws.controller.strings.no_db_service_active.to_owned());
+        return;
+    };
+
+    let generation = ws.admin_ui.monitor_fetch_gen;
+    let no_session_err = ws.controller.strings.no_active_session_err.to_owned();
+    ws.admin_ui.monitor_loading = true;
+
+    ws.admin_ui.monitor_fetch_task = Some(cx.spawn(
+        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let sessions = services.sessions.clone();
+            drop(services.runtime.spawn(async move {
+                let session = {
+                    let guard = sessions.read().await;
+                    guard.session(active_ws)
+                };
+                let result = match session {
+                    Some(session) => {
+                        server_monitor::fetch_server_monitor_snapshot(&session, engine)
+                            .await
+                            .map_err(|err| err.to_string())
+                    }
+                    None => Err(no_session_err),
+                };
+                let _ = tx.send(result);
+            }));
+
+            if let Ok(result) = rx.await {
+                let _ = this.update(cx, |ws, cx| {
+                    if ws.admin_ui.monitor_fetch_gen != generation
+                        || ws.controller.active_workspace != active_ws
+                    {
+                        return;
+                    }
+                    ws.admin_ui.monitor_loading = false;
+                    match result {
+                        Ok(snapshot) => {
+                            ws.admin_ui.monitor_snapshot = Some(snapshot);
+                            ws.admin_ui.monitor_error = None;
+                        }
+                        Err(err) => {
+                            ws.admin_ui.monitor_error = Some(err);
+                        }
+                    }
+                    cx.notify();
+                });
+            }
+        },
+    ));
+}
+
+fn toggle_monitor_auto_refresh(
+    ws: &mut DataForgeWorkspace,
+    enabled: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    ws.admin_ui.monitor_auto_refresh = enabled;
+    ws.admin_ui.monitor_auto_refresh_gen = ws.admin_ui.monitor_auto_refresh_gen.wrapping_add(1);
+    if !enabled {
+        ws.admin_ui.monitor_auto_refresh_task = None;
+        cx.notify();
+        return;
+    }
+
+    let generation = ws.admin_ui.monitor_auto_refresh_gen;
+    if !ws.admin_ui.monitor_loading {
+        refresh_monitor_snapshot(ws, cx);
+    }
+
+    ws.admin_ui.monitor_auto_refresh_task = Some(cx.spawn(
+        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            loop {
+                cx.background_executor()
+                    .timer(MONITOR_AUTO_REFRESH_INTERVAL)
+                    .await;
+                let keep_going = this
+                    .update(cx, |ws, cx| {
+                        if !ws.admin_ui.monitor_auto_refresh
+                            || ws.admin_ui.monitor_auto_refresh_gen != generation
+                        {
+                            return false;
+                        }
+                        let on_monitor_tab = matches!(
+                            ws.admin_ui.active_section,
+                            SECTION_MONITOR_SESSIONS | SECTION_MONITOR_LOCKS
+                        );
+                        let admin_open =
+                            ws.workspace_pane.active_tool == Some(super::WorkspaceToolView::Admin);
+                        let connected = matches!(
+                            ws.controller
+                                .connections
+                                .phase(ws.controller.active_workspace),
+                            Some(ConnectionWindowPhase::Connected)
+                        );
+                        if admin_open
+                            && on_monitor_tab
+                            && connected
+                            && !ws.admin_ui.monitor_loading
+                            && !ws.admin_ui.monitor_killing
+                            && ws.admin_ui.monitor_confirm_kill.is_none()
+                        {
+                            refresh_monitor_snapshot(ws, cx);
+                            cx.notify();
+                        }
+                        true
+                    })
+                    .unwrap_or(false);
+                if !keep_going {
+                    break;
+                }
+            }
+        },
+    ));
+    cx.notify();
+}
+
+fn execute_confirm_kill_session(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    if ws.admin_ui.monitor_killing {
+        return;
+    }
+    let Some(pending) = ws.admin_ui.monitor_confirm_kill.clone() else {
+        return;
+    };
+    let toast_title = ws.controller.strings.monitor_kill_session;
+    let Some(services) = ws.controller.services.clone() else {
+        push_error_toast(
+            toast_title,
+            Some(ws.controller.strings.no_db_service_active.into()),
+            cx,
+        );
+        return;
+    };
+
+    let active_ws = ws.controller.active_workspace;
+    let engine = ws.controller.active_database_engine();
+    let session_prefix = ws.controller.strings.admin_session_prefix;
+    let no_session_err = ws.controller.strings.no_active_session_err.to_owned();
+    ws.admin_ui.monitor_killing = true;
+    cx.notify();
+
+    ws.admin_ui.monitor_kill_task = Some(cx.spawn(
+        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let pid_for_task = pending.id.clone();
+            let sessions = services.sessions.clone();
+            drop(services.runtime.spawn(async move {
+                let session = {
+                    let guard = sessions.read().await;
+                    guard.session(active_ws)
+                };
+                let result = match session {
+                    Some(session) => {
+                        server_monitor::terminate_server_session(&session, engine, &pid_for_task)
+                            .await
+                            .map_err(|err| err.to_string())
+                    }
+                    None => Err(no_session_err),
+                };
+                let _ = tx.send(result);
+            }));
+
+            if let Ok(result) = rx.await {
+                let _ = this.update(cx, |ws, cx| {
+                    ws.admin_ui.monitor_killing = false;
+                    match result {
+                        Ok(()) => {
+                            ws.admin_ui.monitor_confirm_kill = None;
+                            let detail = format!("{session_prefix} {}", pending.id);
+                            push_success_toast(toast_title, Some(detail.into()), cx);
+                            refresh_monitor_snapshot(ws, cx);
+                        }
+                        Err(err) => {
+                            push_error_toast(toast_title, Some(err.into()), cx);
+                        }
+                    }
+                    cx.notify();
+                });
+            }
+        },
+    ));
+}
+
+fn format_monitor_duration(duration_ms: Option<u64>) -> String {
+    let Some(ms) = duration_ms else {
+        return "—".to_owned();
+    };
+    if ms < 1_000 {
+        return format!("{ms} ms");
+    }
+    if ms < 60_000 {
+        let secs = ms / 1_000;
+        let tenths = (ms % 1_000) / 100;
+        return format!("{secs}.{tenths} s");
+    }
+    let total_secs = ms / 1_000;
+    let mins = total_secs / 60;
+    let secs = total_secs % 60;
+    format!("{mins}m {secs:02}s")
+}
+
+fn session_state_chip_color(state: &str) -> HeroColor {
+    let lower = state.trim().to_ascii_lowercase();
+    if lower.is_empty() || lower == "idle" || lower == "sleep" || lower == "sleeping" {
+        HeroColor::Default
+    } else if lower.contains("wait") || lower.contains("lock") || lower.contains("block") {
+        HeroColor::Warning
+    } else if lower.contains("cancel") || lower.contains("kill") || lower.contains("fail") {
+        HeroColor::Danger
+    } else {
+        HeroColor::Accent
+    }
+}
+
 fn parse_task_inputs(name: &str, sql_or_target: &str, interval_raw: &str) -> Result<u32, ()> {
     if name.is_empty() || sql_or_target.is_empty() {
         return Err(());
@@ -1291,5 +2344,26 @@ mod tests {
     fn unix_timestamp_formats_as_utc_calendar_date() {
         assert_eq!(format_unix_utc(0), "1970-01-01 00:00:00 UTC");
         assert_eq!(format_unix_utc(1_763_180_100), "2025-11-15 04:15:00 UTC");
+    }
+
+    #[test]
+    fn monitor_duration_formats_compact_ranges() {
+        assert_eq!(format_monitor_duration(None), "—");
+        assert_eq!(format_monitor_duration(Some(0)), "0 ms");
+        assert_eq!(format_monitor_duration(Some(845)), "845 ms");
+        assert_eq!(format_monitor_duration(Some(1_450)), "1.4 s");
+        assert_eq!(format_monitor_duration(Some(125_000)), "2m 05s");
+    }
+
+    #[test]
+    fn monitor_state_maps_to_semantic_chip_colors() {
+        assert_eq!(session_state_chip_color("active"), HeroColor::Accent);
+        assert_eq!(session_state_chip_color("idle"), HeroColor::Default);
+        assert_eq!(
+            session_state_chip_color("idle in transaction"),
+            HeroColor::Accent
+        );
+        assert_eq!(session_state_chip_color("LockWait"), HeroColor::Warning);
+        assert_eq!(session_state_chip_color("cancelled"), HeroColor::Danger);
     }
 }
