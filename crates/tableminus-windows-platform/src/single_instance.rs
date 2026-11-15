@@ -18,11 +18,11 @@ use windows::core::PCWSTR;
 
 use crate::error::{PlatformError, last_win32_error, to_wide_null};
 
-/// Default Win32 named mutex used to coordinate a single DataForge GUI instance.
-pub const DEFAULT_MUTEX_NAME: &str = r"Local\DataForge-SingleInstance-Mutex";
+/// Default Win32 named mutex used to coordinate a single TableMinus GUI instance.
+pub const DEFAULT_MUTEX_NAME: &str = r"Local\TableMinus-SingleInstance-Mutex";
 
 /// Default Win32 named pipe used to forward files and connection URLs to the primary instance.
-pub const DEFAULT_PIPE_NAME: &str = r"\\.\pipe\DataForge-SingleInstance-IPC";
+pub const DEFAULT_PIPE_NAME: &str = r"\\.\pipe\TableMinus-SingleInstance-IPC";
 
 const PIPE_BUFFER_BYTES: u32 = 4096;
 
@@ -87,14 +87,14 @@ impl SingleInstanceLock {
     }
 }
 
-/// Payload forwarded from a secondary launch to the primary DataForge instance.
+/// Payload forwarded from a secondary launch to the primary TableMinus instance.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ForwardPayload {
     /// File paths (`.sqlite`, `.duckdb`, etc.) or connection URLs to open.
     pub targets: Vec<String>,
 }
 
-/// Returns `true` if `arg` looks like a database file or connection URL DataForge can open.
+/// Returns `true` if `arg` looks like a database file or connection URL TableMinus can open.
 pub fn is_forwardable_target(arg: &str) -> bool {
     let lower = arg.trim().to_ascii_lowercase();
     let has_db_ext = lower.ends_with(".sqlite")
@@ -115,7 +115,7 @@ pub fn is_forwardable_target(arg: &str) -> bool {
         "mssql://",
         "sqlserver://",
         "cassandra://",
-        "dataforge://",
+        "tableminus://",
         "tablepro://",
     ]
     .iter()
