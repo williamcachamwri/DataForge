@@ -9,9 +9,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tableminus_gfx::grid_renderer::{CellKind, RowState};
-use tableminus_state::connection_window::WorkspaceId;
-use tableminus_state::data_grid::RowID;
 use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
     Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input, InputState, Scrollbar,
@@ -26,6 +23,9 @@ use herogpui::gpui::{
     WeakEntity, Window, div, img, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_gfx::grid_renderer::{CellKind, RowState};
+use tableminus_state::connection_window::WorkspaceId;
+use tableminus_state::data_grid::RowID;
 use tablepro_core::browse::RowReference;
 use tablepro_core::column::{ColumnDefault, ColumnInfo, ColumnType, ReadForm, ResultColumn};
 use tablepro_core::ddl::OutboundForeignKey;
