@@ -1,4 +1,4 @@
-//! GPU-native Win32 + Direct2D + DirectWrite rendering library for DataForge.
+//! GPU-native Win32 + Direct2D + DirectWrite rendering library for TableMinus.
 
 pub mod context;
 pub mod editor_renderer;
