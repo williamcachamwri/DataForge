@@ -4,6 +4,7 @@
 pub mod admin_tasks;
 pub mod ai_bridge;
 pub mod data_import;
+pub mod data_transfer;
 pub mod ddl_builder;
 pub mod diagnostics;
 pub mod error;
@@ -11,8 +12,10 @@ pub mod explain_parser;
 pub mod export;
 pub mod import_bridge;
 pub mod mcp_host;
+pub mod mock_generator;
 pub mod runtime;
 pub mod schema_compare;
+pub mod server_monitor;
 pub mod session_bridge;
 pub mod sql_format;
 
