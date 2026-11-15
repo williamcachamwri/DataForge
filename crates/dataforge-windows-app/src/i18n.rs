@@ -953,6 +953,149 @@ pub struct Strings {
     pub updates_release_notes_label: &'static str,
     pub updates_toast_available_title: &'static str,
     pub updates_toast_apply_failed: &'static str,
+
+    // Update Modal
+    pub update_modal_title: &'static str,
+    pub update_available_subtitle: &'static str,
+    pub update_current_version: &'static str,
+    pub update_new_version: &'static str,
+    pub update_release_notes: &'static str,
+    pub update_download_install: &'static str,
+    pub update_downloading_progress: &'static str,
+    pub update_ready_title: &'static str,
+    pub update_ready_desc: &'static str,
+    pub update_apply_restart: &'static str,
+    pub update_later: &'static str,
+    pub update_retry: &'static str,
+
+    // Workspace Session Persistence
+    pub settings_restore_session: &'static str,
+    pub settings_restore_session_desc: &'static str,
+    pub session_restoring_connection: &'static str,
+
+    // Visual Schema & DDL Designer
+    pub schema_designer: &'static str,
+    pub schema_create_table: &'static str,
+    pub schema_alter_table: &'static str,
+    pub schema_add_column: &'static str,
+    pub schema_drop_column: &'static str,
+    pub schema_rename_column: &'static str,
+    pub schema_column_name: &'static str,
+    pub schema_column_type: &'static str,
+    pub schema_nullable: &'static str,
+    pub schema_primary_key: &'static str,
+    pub schema_default_value: &'static str,
+    pub schema_add_index: &'static str,
+    pub schema_add_fk: &'static str,
+    pub schema_fk_ref_table: &'static str,
+    pub schema_fk_ref_column: &'static str,
+    pub schema_preview_sql: &'static str,
+    pub schema_execute_ddl: &'static str,
+    pub schema_truncate_table: &'static str,
+    pub schema_drop_table: &'static str,
+
+    // Data Import & SQL Script Runner
+    pub import_wizard: &'static str,
+    pub import_select_file: &'static str,
+    pub import_format_label: &'static str,
+    pub import_target_table: &'static str,
+    pub import_create_new_table: &'static str,
+    pub import_preview_rows: &'static str,
+    pub import_column_mapping: &'static str,
+    pub import_run_import: &'static str,
+    pub import_sql_script: &'static str,
+    pub import_statements_count: &'static str,
+    pub import_success_summary: &'static str,
+
+    // Grid & Editor UX
+    pub grid_agg_count: &'static str,
+    pub grid_agg_sum: &'static str,
+    pub grid_agg_avg: &'static str,
+    pub grid_agg_min: &'static str,
+    pub grid_agg_max: &'static str,
+    pub grid_copy_rows: &'static str,
+    pub grid_paste_rows: &'static str,
+    pub grid_pin_column: &'static str,
+    pub editor_find: &'static str,
+    pub editor_replace: &'static str,
+    pub editor_replace_all: &'static str,
+    pub editor_format_sql: &'static str,
+
+    // Metadata Search & Environments
+    pub metadata_search: &'static str,
+    pub metadata_search_placeholder: &'static str,
+    pub metadata_type_all: &'static str,
+    pub env_label: &'static str,
+    pub env_local: &'static str,
+    pub env_development: &'static str,
+    pub env_staging: &'static str,
+    pub env_production: &'static str,
+
+    // ER Diagram
+    pub er_diagram: &'static str,
+    pub er_zoom_in: &'static str,
+    pub er_zoom_out: &'static str,
+    pub er_zoom_reset: &'static str,
+    pub er_auto_layout: &'static str,
+    pub er_export_svg: &'static str,
+    pub er_filter_schema: &'static str,
+    pub er_fk_relations: &'static str,
+    pub er_no_tables: &'static str,
+
+    // Visual EXPLAIN
+    pub explain_plan: &'static str,
+    pub explain_analyze: &'static str,
+    pub explain_visual_tab: &'static str,
+    pub explain_seq_scan_warn: &'static str,
+    pub explain_est_rows: &'static str,
+    pub explain_cost: &'static str,
+    pub explain_actual_time: &'static str,
+
+    // Data Charts
+    pub charts_tab: &'static str,
+    pub charts_bar: &'static str,
+    pub charts_line: &'static str,
+    pub charts_donut: &'static str,
+    pub charts_x_axis: &'static str,
+    pub charts_y_axis: &'static str,
+    pub charts_agg: &'static str,
+    pub charts_no_numeric: &'static str,
+
+    // Visual Query Builder
+    pub query_builder: &'static str,
+    pub qb_add_table: &'static str,
+    pub qb_columns: &'static str,
+    pub qb_joins: &'static str,
+    pub qb_where: &'static str,
+    pub qb_group_by: &'static str,
+    pub qb_order_by: &'static str,
+    pub qb_limit: &'static str,
+    pub qb_run_query: &'static str,
+    pub qb_open_in_editor: &'static str,
+
+    // Schema & Data Compare
+    pub compare_title: &'static str,
+    pub compare_schema: &'static str,
+    pub compare_data: &'static str,
+    pub compare_source: &'static str,
+    pub compare_target: &'static str,
+    pub compare_run: &'static str,
+    pub compare_generate_sync: &'static str,
+    pub compare_execute_sync: &'static str,
+    pub compare_differences: &'static str,
+    pub compare_identical: &'static str,
+
+    // Server Admin & Scheduled Tasks
+    pub admin_title: &'static str,
+    pub admin_users_roles: &'static str,
+    pub admin_active_sessions: &'static str,
+    pub admin_kill_session: &'static str,
+    pub admin_scheduled_tasks: &'static str,
+    pub admin_new_task: &'static str,
+    pub admin_task_name: &'static str,
+    pub admin_task_interval_min: &'static str,
+    pub admin_run_now: &'static str,
+    pub admin_task_history: &'static str,
 }
 
 impl Strings {
@@ -1789,6 +1932,149 @@ const EN_US: Strings = Strings {
     updates_release_notes_label: "Release Notes",
     updates_toast_available_title: "Update Available",
     updates_toast_apply_failed: "Failed to apply update",
+
+    // Update Modal
+    update_modal_title: "Software Update",
+    update_available_subtitle: "A new version of DataForge is ready to download and install.",
+    update_current_version: "Current Version",
+    update_new_version: "New Version",
+    update_release_notes: "What's New",
+    update_download_install: "Download & Update",
+    update_downloading_progress: "Downloading update package...",
+    update_ready_title: "Ready to Install",
+    update_ready_desc: "The update has been verified. DataForge will apply the new version cleanly and restart.",
+    update_apply_restart: "Apply & Restart",
+    update_later: "Later",
+    update_retry: "Retry",
+
+    // Workspace Session Persistence
+    settings_restore_session: "Restore workspace session on launch",
+    settings_restore_session_desc: "Automatically reconnect to your last active database and reopen workspace tabs.",
+    session_restoring_connection: "Restoring previous connection...",
+
+    // Visual Schema & DDL Designer
+    schema_designer: "Schema Designer",
+    schema_create_table: "Create Table",
+    schema_alter_table: "Alter Table",
+    schema_add_column: "Add Column",
+    schema_drop_column: "Drop Column",
+    schema_rename_column: "Rename Column",
+    schema_column_name: "Column Name",
+    schema_column_type: "Data Type",
+    schema_nullable: "Nullable",
+    schema_primary_key: "Primary Key",
+    schema_default_value: "Default Value",
+    schema_add_index: "Add Index",
+    schema_add_fk: "Add Foreign Key",
+    schema_fk_ref_table: "Referenced Table",
+    schema_fk_ref_column: "Referenced Column",
+    schema_preview_sql: "Preview SQL",
+    schema_execute_ddl: "Execute DDL",
+    schema_truncate_table: "Truncate Table",
+    schema_drop_table: "Drop Table",
+
+    // Data Import & SQL Script Runner
+    import_wizard: "Import Wizard",
+    import_select_file: "Select File",
+    import_format_label: "Format",
+    import_target_table: "Target Table",
+    import_create_new_table: "Create New Table",
+    import_preview_rows: "Preview Rows",
+    import_column_mapping: "Column Mapping",
+    import_run_import: "Run Import",
+    import_sql_script: "Run SQL Script",
+    import_statements_count: "Statements",
+    import_success_summary: "Import completed successfully",
+
+    // Grid & Editor UX
+    grid_agg_count: "Count",
+    grid_agg_sum: "Sum",
+    grid_agg_avg: "Average",
+    grid_agg_min: "Min",
+    grid_agg_max: "Max",
+    grid_copy_rows: "Copy Rows",
+    grid_paste_rows: "Paste Rows",
+    grid_pin_column: "Pin Column",
+    editor_find: "Find",
+    editor_replace: "Replace",
+    editor_replace_all: "Replace All",
+    editor_format_sql: "Format SQL",
+
+    // Metadata Search & Environments
+    metadata_search: "Metadata Search",
+    metadata_search_placeholder: "Search tables, views, columns...",
+    metadata_type_all: "All Types",
+    env_label: "Environment",
+    env_local: "Local",
+    env_development: "Development",
+    env_staging: "Staging",
+    env_production: "Production",
+
+    // ER Diagram
+    er_diagram: "ER Diagram",
+    er_zoom_in: "Zoom In",
+    er_zoom_out: "Zoom Out",
+    er_zoom_reset: "Reset Zoom",
+    er_auto_layout: "Auto Layout",
+    er_export_svg: "Export SVG",
+    er_filter_schema: "Filter Schema",
+    er_fk_relations: "Foreign Key Relations",
+    er_no_tables: "No tables available for ER diagram",
+
+    // Visual EXPLAIN
+    explain_plan: "Explain Plan",
+    explain_analyze: "Explain Analyze",
+    explain_visual_tab: "Visual Plan",
+    explain_seq_scan_warn: "Sequential Scan Warning",
+    explain_est_rows: "Est. Rows",
+    explain_cost: "Cost",
+    explain_actual_time: "Actual Time",
+
+    // Data Charts
+    charts_tab: "Charts",
+    charts_bar: "Bar",
+    charts_line: "Line",
+    charts_donut: "Donut",
+    charts_x_axis: "X Axis",
+    charts_y_axis: "Y Axis",
+    charts_agg: "Aggregation",
+    charts_no_numeric: "No numeric columns available to plot",
+
+    // Visual Query Builder
+    query_builder: "Query Builder",
+    qb_add_table: "Add Table",
+    qb_columns: "Columns",
+    qb_joins: "Joins",
+    qb_where: "Where",
+    qb_group_by: "Group By",
+    qb_order_by: "Order By",
+    qb_limit: "Limit",
+    qb_run_query: "Run Query",
+    qb_open_in_editor: "Open in SQL Editor",
+
+    // Schema & Data Compare
+    compare_title: "Schema & Data Compare",
+    compare_schema: "Schema Compare",
+    compare_data: "Data Compare",
+    compare_source: "Source",
+    compare_target: "Target",
+    compare_run: "Compare",
+    compare_generate_sync: "Generate Sync Script",
+    compare_execute_sync: "Execute Sync",
+    compare_differences: "Differences",
+    compare_identical: "Source and target are identical",
+
+    // Server Admin & Scheduled Tasks
+    admin_title: "Server Admin",
+    admin_users_roles: "Users & Roles",
+    admin_active_sessions: "Active Sessions",
+    admin_kill_session: "Terminate Session",
+    admin_scheduled_tasks: "Scheduled Tasks",
+    admin_new_task: "New Task",
+    admin_task_name: "Task Name",
+    admin_task_interval_min: "Interval (min)",
+    admin_run_now: "Run Now",
+    admin_task_history: "Task History",
 };
 
 const VI_VN: Strings = Strings {
@@ -2610,6 +2896,149 @@ const VI_VN: Strings = Strings {
     updates_release_notes_label: "Ghi chú phát hành",
     updates_toast_available_title: "Có bản cập nhật mới",
     updates_toast_apply_failed: "Không thể áp dụng bản cập nhật",
+
+    // Update Modal
+    update_modal_title: "Cập nhật phần mềm",
+    update_available_subtitle: "Đã có phiên bản DataForge mới sẵn sàng tải về và cài đặt.",
+    update_current_version: "Phiên bản hiện tại",
+    update_new_version: "Phiên bản mới",
+    update_release_notes: "Có gì mới",
+    update_download_install: "Tải về & Cập nhật",
+    update_downloading_progress: "Đang tải gói cập nhật...",
+    update_ready_title: "Sẵn sàng cài đặt",
+    update_ready_desc: "Bản cập nhật đã được xác minh. DataForge sẽ áp dụng phiên bản mới và khởi động lại.",
+    update_apply_restart: "Áp dụng & Khởi động lại",
+    update_later: "Để sau",
+    update_retry: "Thử lại",
+
+    // Workspace Session Persistence
+    settings_restore_session: "Khôi phục phiên làm việc khi khởi động",
+    settings_restore_session_desc: "Tự động kết nối lại cơ sở dữ liệu gần nhất và mở lại các thẻ làm việc.",
+    session_restoring_connection: "Đang khôi phục kết nối trước đó...",
+
+    // Visual Schema & DDL Designer
+    schema_designer: "Trình thiết kế lược đồ",
+    schema_create_table: "Tạo bảng",
+    schema_alter_table: "Sửa cấu trúc bảng",
+    schema_add_column: "Thêm cột",
+    schema_drop_column: "Xóa cột",
+    schema_rename_column: "Đổi tên cột",
+    schema_column_name: "Tên cột",
+    schema_column_type: "Kiểu dữ liệu",
+    schema_nullable: "Cho phép NULL",
+    schema_primary_key: "Khóa chính",
+    schema_default_value: "Giá trị mặc định",
+    schema_add_index: "Thêm chỉ mục",
+    schema_add_fk: "Thêm khóa ngoại",
+    schema_fk_ref_table: "Bảng tham chiếu",
+    schema_fk_ref_column: "Cột tham chiếu",
+    schema_preview_sql: "Xem trước SQL",
+    schema_execute_ddl: "Thực thi DDL",
+    schema_truncate_table: "Làm rỗng bảng",
+    schema_drop_table: "Xóa bảng",
+
+    // Data Import & SQL Script Runner
+    import_wizard: "Trình nhập dữ liệu",
+    import_select_file: "Chọn tệp",
+    import_format_label: "Định dạng",
+    import_target_table: "Bảng đích",
+    import_create_new_table: "Tạo bảng mới",
+    import_preview_rows: "Xem trước các dòng",
+    import_column_mapping: "Ánh xạ cột",
+    import_run_import: "Chạy nhập dữ liệu",
+    import_sql_script: "Chạy tập lệnh SQL",
+    import_statements_count: "Số câu lệnh",
+    import_success_summary: "Nhập dữ liệu thành công",
+
+    // Grid & Editor UX
+    grid_agg_count: "Đếm",
+    grid_agg_sum: "Tổng",
+    grid_agg_avg: "Trung bình",
+    grid_agg_min: "Nhỏ nhất",
+    grid_agg_max: "Lớn nhất",
+    grid_copy_rows: "Sao chép dòng",
+    grid_paste_rows: "Dán dòng",
+    grid_pin_column: "Ghim cột",
+    editor_find: "Tìm kiếm",
+    editor_replace: "Thay thế",
+    editor_replace_all: "Thay thế tất cả",
+    editor_format_sql: "Định dạng SQL",
+
+    // Metadata Search & Environments
+    metadata_search: "Tìm kiếm siêu dữ liệu",
+    metadata_search_placeholder: "Tìm bảng, khung nhìn, cột...",
+    metadata_type_all: "Tất cả loại",
+    env_label: "Môi trường",
+    env_local: "Cục bộ",
+    env_development: "Phát triển",
+    env_staging: "Thử nghiệm",
+    env_production: "Sản xuất",
+
+    // ER Diagram
+    er_diagram: "Sơ đồ ER",
+    er_zoom_in: "Phóng to",
+    er_zoom_out: "Thu nhỏ",
+    er_zoom_reset: "Đặt lại thu phóng",
+    er_auto_layout: "Tự động bố trí",
+    er_export_svg: "Xuất SVG",
+    er_filter_schema: "Lọc lược đồ",
+    er_fk_relations: "Quan hệ khóa ngoại",
+    er_no_tables: "Không có bảng nào cho sơ đồ ER",
+
+    // Visual EXPLAIN
+    explain_plan: "Kế hoạch thực thi",
+    explain_analyze: "Phân tích thực thi",
+    explain_visual_tab: "Sơ đồ kế hoạch",
+    explain_seq_scan_warn: "Cảnh báo quét tuần tự",
+    explain_est_rows: "Số dòng ước tính",
+    explain_cost: "Chi phí",
+    explain_actual_time: "Thời gian thực tế",
+
+    // Data Charts
+    charts_tab: "Biểu đồ",
+    charts_bar: "Cột",
+    charts_line: "Đường",
+    charts_donut: "Vành khuyên",
+    charts_x_axis: "Trục X",
+    charts_y_axis: "Trục Y",
+    charts_agg: "Tổng hợp",
+    charts_no_numeric: "Không có cột số nào để vẽ biểu đồ",
+
+    // Visual Query Builder
+    query_builder: "Trình tạo truy vấn",
+    qb_add_table: "Thêm bảng",
+    qb_columns: "Cột",
+    qb_joins: "Liên kết bảng",
+    qb_where: "Điều kiện lọc",
+    qb_group_by: "Nhóm theo",
+    qb_order_by: "Sắp xếp theo",
+    qb_limit: "Giới hạn",
+    qb_run_query: "Chạy truy vấn",
+    qb_open_in_editor: "Mở trong trình soạn SQL",
+
+    // Schema & Data Compare
+    compare_title: "So sánh lược đồ & dữ liệu",
+    compare_schema: "So sánh lược đồ",
+    compare_data: "So sánh dữ liệu",
+    compare_source: "Nguồn",
+    compare_target: "Đích",
+    compare_run: "So sánh",
+    compare_generate_sync: "Tạo lệnh đồng bộ",
+    compare_execute_sync: "Thực thi đồng bộ",
+    compare_differences: "Khác biệt",
+    compare_identical: "Nguồn và đích giống hệt nhau",
+
+    // Server Admin & Scheduled Tasks
+    admin_title: "Quản trị máy chủ",
+    admin_users_roles: "Người dùng & Vai trò",
+    admin_active_sessions: "Phiên đang hoạt động",
+    admin_kill_session: "Ngắt phiên",
+    admin_scheduled_tasks: "Tác vụ định kỳ",
+    admin_new_task: "Tác vụ mới",
+    admin_task_name: "Tên tác vụ",
+    admin_task_interval_min: "Chu kỳ (phút)",
+    admin_run_now: "Chạy ngay",
+    admin_task_history: "Lịch sử tác vụ",
 };
 
 const ZH_CN: Strings = Strings {
@@ -3431,6 +3860,149 @@ const ZH_CN: Strings = Strings {
     updates_release_notes_label: "发行说明",
     updates_toast_available_title: "发现可用更新",
     updates_toast_apply_failed: "应用更新失败",
+
+    // Update Modal
+    update_modal_title: "软件更新",
+    update_available_subtitle: "DataForge 新版本已准备好下载并安装。",
+    update_current_version: "当前版本",
+    update_new_version: "新版本",
+    update_release_notes: "更新内容",
+    update_download_install: "下载并更新",
+    update_downloading_progress: "正在下载更新包...",
+    update_ready_title: "准备安装",
+    update_ready_desc: "更新包已校验完成。DataForge 将安全应用新版本并重启。",
+    update_apply_restart: "应用并重启",
+    update_later: "稍后",
+    update_retry: "重试",
+
+    // Workspace Session Persistence
+    settings_restore_session: "启动时恢复工作区会话",
+    settings_restore_session_desc: "自动重新连接上次使用的数据库并恢复工作区标签页。",
+    session_restoring_connection: "正在恢复上次连接...",
+
+    // Visual Schema & DDL Designer
+    schema_designer: "结构设计器",
+    schema_create_table: "新建表",
+    schema_alter_table: "修改表",
+    schema_add_column: "添加列",
+    schema_drop_column: "删除列",
+    schema_rename_column: "重命名列",
+    schema_column_name: "列名",
+    schema_column_type: "数据类型",
+    schema_nullable: "允许为空",
+    schema_primary_key: "主键",
+    schema_default_value: "默认值",
+    schema_add_index: "添加索引",
+    schema_add_fk: "添加外键",
+    schema_fk_ref_table: "引用表",
+    schema_fk_ref_column: "引用列",
+    schema_preview_sql: "预览 SQL",
+    schema_execute_ddl: "执行 DDL",
+    schema_truncate_table: "清空表",
+    schema_drop_table: "删除表",
+
+    // Data Import & SQL Script Runner
+    import_wizard: "导入向导",
+    import_select_file: "选择文件",
+    import_format_label: "格式",
+    import_target_table: "目标表",
+    import_create_new_table: "创建新表",
+    import_preview_rows: "预览数据行",
+    import_column_mapping: "列映射",
+    import_run_import: "开始导入",
+    import_sql_script: "运行 SQL 脚本",
+    import_statements_count: "语句数",
+    import_success_summary: "导入成功完成",
+
+    // Grid & Editor UX
+    grid_agg_count: "计数",
+    grid_agg_sum: "求和",
+    grid_agg_avg: "平均值",
+    grid_agg_min: "最小值",
+    grid_agg_max: "最大值",
+    grid_copy_rows: "复制行",
+    grid_paste_rows: "粘贴行",
+    grid_pin_column: "固定列",
+    editor_find: "查找",
+    editor_replace: "替换",
+    editor_replace_all: "全部替换",
+    editor_format_sql: "格式化 SQL",
+
+    // Metadata Search & Environments
+    metadata_search: "元数据搜索",
+    metadata_search_placeholder: "搜索表、视图、列...",
+    metadata_type_all: "全部类型",
+    env_label: "环境",
+    env_local: "本地",
+    env_development: "开发",
+    env_staging: "预发布",
+    env_production: "生产",
+
+    // ER Diagram
+    er_diagram: "ER 关系图",
+    er_zoom_in: "放大",
+    er_zoom_out: "缩小",
+    er_zoom_reset: "重置缩放",
+    er_auto_layout: "自动布局",
+    er_export_svg: "导出 SVG",
+    er_filter_schema: "筛选模式",
+    er_fk_relations: "外键关系",
+    er_no_tables: "暂无可用于 ER 关系图的表",
+
+    // Visual EXPLAIN
+    explain_plan: "执行计划",
+    explain_analyze: "执行分析",
+    explain_visual_tab: "可视化计划",
+    explain_seq_scan_warn: "全表顺序扫描警告",
+    explain_est_rows: "预估行数",
+    explain_cost: "开销",
+    explain_actual_time: "实际耗时",
+
+    // Data Charts
+    charts_tab: "图表",
+    charts_bar: "柱状图",
+    charts_line: "折线图",
+    charts_donut: "环形图",
+    charts_x_axis: "X 轴",
+    charts_y_axis: "Y 轴",
+    charts_agg: "聚合方式",
+    charts_no_numeric: "没有可用于绘图的数值列",
+
+    // Visual Query Builder
+    query_builder: "可视化查询构建器",
+    qb_add_table: "添加表",
+    qb_columns: "字段",
+    qb_joins: "连接",
+    qb_where: "筛选条件",
+    qb_group_by: "分组",
+    qb_order_by: "排序",
+    qb_limit: "限制行数",
+    qb_run_query: "运行查询",
+    qb_open_in_editor: "在 SQL 编辑器中打开",
+
+    // Schema & Data Compare
+    compare_title: "结构与数据对比",
+    compare_schema: "结构对比",
+    compare_data: "数据对比",
+    compare_source: "源数据库",
+    compare_target: "目标数据库",
+    compare_run: "开始对比",
+    compare_generate_sync: "生成同步脚本",
+    compare_execute_sync: "执行同步",
+    compare_differences: "差异项",
+    compare_identical: "源与目标完全一致",
+
+    // Server Admin & Scheduled Tasks
+    admin_title: "服务器管理",
+    admin_users_roles: "用户与角色",
+    admin_active_sessions: "活动会话",
+    admin_kill_session: "终止会话",
+    admin_scheduled_tasks: "定时任务",
+    admin_new_task: "新建任务",
+    admin_task_name: "任务名称",
+    admin_task_interval_min: "间隔（分钟）",
+    admin_run_now: "立即运行",
+    admin_task_history: "执行历史",
 };
 
 const JA_JP: Strings = Strings {
@@ -4252,6 +4824,149 @@ const JA_JP: Strings = Strings {
     updates_release_notes_label: "リリースノート",
     updates_toast_available_title: "アップデートが利用可能",
     updates_toast_apply_failed: "アップデートの適用に失敗しました",
+
+    // Update Modal
+    update_modal_title: "ソフトウェアアップデート",
+    update_available_subtitle: "新しいバージョンの DataForge をダウンロードしてインストールできます。",
+    update_current_version: "現在のバージョン",
+    update_new_version: "新しいバージョン",
+    update_release_notes: "更新内容",
+    update_download_install: "ダウンロードして更新",
+    update_downloading_progress: "アップデートパッケージをダウンロード中...",
+    update_ready_title: "インストールの準備完了",
+    update_ready_desc: "アップデートが検証されました。DataForge は新しいバージョンを適用して再起動します。",
+    update_apply_restart: "適用して再起動",
+    update_later: "後で",
+    update_retry: "再試行",
+
+    // Workspace Session Persistence
+    settings_restore_session: "起動時にワークスペースセッションを復元",
+    settings_restore_session_desc: "前回接続していたデータベースへ自動的に再接続し、タブを復元します。",
+    session_restoring_connection: "前回の接続を復元中...",
+
+    // Visual Schema & DDL Designer
+    schema_designer: "スキーマデザイナー",
+    schema_create_table: "テーブルを作成",
+    schema_alter_table: "テーブルを変更",
+    schema_add_column: "列を追加",
+    schema_drop_column: "列を削除",
+    schema_rename_column: "列名を変更",
+    schema_column_name: "列名",
+    schema_column_type: "データ型",
+    schema_nullable: "NULL 許可",
+    schema_primary_key: "主キー",
+    schema_default_value: "デフォルト値",
+    schema_add_index: "インデックスを追加",
+    schema_add_fk: "外部キーを追加",
+    schema_fk_ref_table: "参照先テーブル",
+    schema_fk_ref_column: "参照先列",
+    schema_preview_sql: "SQL をプレビュー",
+    schema_execute_ddl: "DDL を実行",
+    schema_truncate_table: "テーブルを切り捨て",
+    schema_drop_table: "テーブルを削除",
+
+    // Data Import & SQL Script Runner
+    import_wizard: "インポートウィザード",
+    import_select_file: "ファイルを選択",
+    import_format_label: "形式",
+    import_target_table: "対象テーブル",
+    import_create_new_table: "新しいテーブルを作成",
+    import_preview_rows: "行をプレビュー",
+    import_column_mapping: "列マッピング",
+    import_run_import: "インポートを実行",
+    import_sql_script: "SQL スクリプトを実行",
+    import_statements_count: "ステートメント数",
+    import_success_summary: "インポートが正常に完了しました",
+
+    // Grid & Editor UX
+    grid_agg_count: "件数",
+    grid_agg_sum: "合計",
+    grid_agg_avg: "平均",
+    grid_agg_min: "最小",
+    grid_agg_max: "最大",
+    grid_copy_rows: "行をコピー",
+    grid_paste_rows: "行を貼り付け",
+    grid_pin_column: "列を固定",
+    editor_find: "検索",
+    editor_replace: "置換",
+    editor_replace_all: "すべて置換",
+    editor_format_sql: "SQL を整形",
+
+    // Metadata Search & Environments
+    metadata_search: "メタデータ検索",
+    metadata_search_placeholder: "テーブル、ビュー、列を検索...",
+    metadata_type_all: "すべての種類",
+    env_label: "環境",
+    env_local: "ローカル",
+    env_development: "開発",
+    env_staging: "ステージング",
+    env_production: "本番",
+
+    // ER Diagram
+    er_diagram: "ER 図",
+    er_zoom_in: "拡大",
+    er_zoom_out: "縮小",
+    er_zoom_reset: "ズームをリセット",
+    er_auto_layout: "自動レイアウト",
+    er_export_svg: "SVG をエクスポート",
+    er_filter_schema: "スキーマで絞り込み",
+    er_fk_relations: "外部キーリレーション",
+    er_no_tables: "ER 図に表示できるテーブルがありません",
+
+    // Visual EXPLAIN
+    explain_plan: "実行計画",
+    explain_analyze: "実行計画の分析",
+    explain_visual_tab: "ビジュアルプラン",
+    explain_seq_scan_warn: "シーケンシャルスキャンの警告",
+    explain_est_rows: "推定行数",
+    explain_cost: "コスト",
+    explain_actual_time: "実測時間",
+
+    // Data Charts
+    charts_tab: "チャート",
+    charts_bar: "棒グラフ",
+    charts_line: "折れ線グラフ",
+    charts_donut: "ドーナツグラフ",
+    charts_x_axis: "X 軸",
+    charts_y_axis: "Y 軸",
+    charts_agg: "集計方法",
+    charts_no_numeric: "プロット可能な数値列がありません",
+
+    // Visual Query Builder
+    query_builder: "クエリビルダー",
+    qb_add_table: "テーブルを追加",
+    qb_columns: "列",
+    qb_joins: "結合",
+    qb_where: "抽出条件",
+    qb_group_by: "グループ化",
+    qb_order_by: "並べ替え",
+    qb_limit: "取得上限",
+    qb_run_query: "クエリを実行",
+    qb_open_in_editor: "SQL エディタで開く",
+
+    // Schema & Data Compare
+    compare_title: "スキーマ・データ比較",
+    compare_schema: "スキーマ比較",
+    compare_data: "データ比較",
+    compare_source: "比較元",
+    compare_target: "比較先",
+    compare_run: "比較を実行",
+    compare_generate_sync: "同期スクリプトを生成",
+    compare_execute_sync: "同期を実行",
+    compare_differences: "差分",
+    compare_identical: "比較元と比較先は一致しています",
+
+    // Server Admin & Scheduled Tasks
+    admin_title: "サーバー管理",
+    admin_users_roles: "ユーザーとロール",
+    admin_active_sessions: "アクティブなセッション",
+    admin_kill_session: "セッションを終了",
+    admin_scheduled_tasks: "スケジュールタスク",
+    admin_new_task: "新規タスク",
+    admin_task_name: "タスク名",
+    admin_task_interval_min: "実行間隔（分）",
+    admin_run_now: "今すぐ実行",
+    admin_task_history: "タスク履歴",
 };
 
 const ES_ES: Strings = Strings {
@@ -5073,6 +5788,149 @@ const ES_ES: Strings = Strings {
     updates_release_notes_label: "Notas de la versión",
     updates_toast_available_title: "Actualización disponible",
     updates_toast_apply_failed: "No se pudo aplicar la actualización",
+
+    // Update Modal
+    update_modal_title: "Actualización de software",
+    update_available_subtitle: "Hay una nueva versión de DataForge lista para descargar e instalar.",
+    update_current_version: "Versión actual",
+    update_new_version: "Nueva versión",
+    update_release_notes: "Novedades",
+    update_download_install: "Descargar y actualizar",
+    update_downloading_progress: "Descargando paquete de actualización...",
+    update_ready_title: "Listo para instalar",
+    update_ready_desc: "La actualización ha sido verificada. DataForge aplicará la nueva versión y se reiniciará.",
+    update_apply_restart: "Aplicar y reiniciar",
+    update_later: "Más tarde",
+    update_retry: "Reintentar",
+
+    // Workspace Session Persistence
+    settings_restore_session: "Restaurar sesión al iniciar",
+    settings_restore_session_desc: "Reconectar automáticamente a la última base de datos activa y reabrir sus pestañas.",
+    session_restoring_connection: "Restaurando conexión anterior...",
+
+    // Visual Schema & DDL Designer
+    schema_designer: "Diseñador de esquemas",
+    schema_create_table: "Crear tabla",
+    schema_alter_table: "Modificar tabla",
+    schema_add_column: "Agregar columna",
+    schema_drop_column: "Eliminar columna",
+    schema_rename_column: "Renombrar columna",
+    schema_column_name: "Nombre de columna",
+    schema_column_type: "Tipo de dato",
+    schema_nullable: "Admite NULL",
+    schema_primary_key: "Clave primaria",
+    schema_default_value: "Valor predeterminado",
+    schema_add_index: "Agregar índice",
+    schema_add_fk: "Agregar clave foránea",
+    schema_fk_ref_table: "Tabla referenciada",
+    schema_fk_ref_column: "Columna referenciada",
+    schema_preview_sql: "Vista previa SQL",
+    schema_execute_ddl: "Ejecutar DDL",
+    schema_truncate_table: "Truncar tabla",
+    schema_drop_table: "Eliminar tabla",
+
+    // Data Import & SQL Script Runner
+    import_wizard: "Asistente de importación",
+    import_select_file: "Seleccionar archivo",
+    import_format_label: "Formato",
+    import_target_table: "Tabla de destino",
+    import_create_new_table: "Crear tabla nueva",
+    import_preview_rows: "Vista previa de filas",
+    import_column_mapping: "Mapeo de columnas",
+    import_run_import: "Ejecutar importación",
+    import_sql_script: "Ejecutar script SQL",
+    import_statements_count: "Sentencias",
+    import_success_summary: "Importación completada con éxito",
+
+    // Grid & Editor UX
+    grid_agg_count: "Recuento",
+    grid_agg_sum: "Suma",
+    grid_agg_avg: "Promedio",
+    grid_agg_min: "Mínimo",
+    grid_agg_max: "Máximo",
+    grid_copy_rows: "Copiar filas",
+    grid_paste_rows: "Pegar filas",
+    grid_pin_column: "Fijar columna",
+    editor_find: "Buscar",
+    editor_replace: "Reemplazar",
+    editor_replace_all: "Reemplazar todo",
+    editor_format_sql: "Formatear SQL",
+
+    // Metadata Search & Environments
+    metadata_search: "Búsqueda de metadatos",
+    metadata_search_placeholder: "Buscar tablas, vistas, columnas...",
+    metadata_type_all: "Todos los tipos",
+    env_label: "Entorno",
+    env_local: "Local",
+    env_development: "Desarrollo",
+    env_staging: "Pruebas",
+    env_production: "Producción",
+
+    // ER Diagram
+    er_diagram: "Diagrama ER",
+    er_zoom_in: "Acercar",
+    er_zoom_out: "Alejar",
+    er_zoom_reset: "Restablecer zoom",
+    er_auto_layout: "Diseño automático",
+    er_export_svg: "Exportar SVG",
+    er_filter_schema: "Filtrar esquema",
+    er_fk_relations: "Relaciones de clave foránea",
+    er_no_tables: "No hay tablas disponibles para el diagrama ER",
+
+    // Visual EXPLAIN
+    explain_plan: "Plan de ejecución",
+    explain_analyze: "Analizar ejecución",
+    explain_visual_tab: "Plan visual",
+    explain_seq_scan_warn: "Advertencia de escaneo secuencial",
+    explain_est_rows: "Filas est.",
+    explain_cost: "Costo",
+    explain_actual_time: "Tiempo real",
+
+    // Data Charts
+    charts_tab: "Gráficos",
+    charts_bar: "Barras",
+    charts_line: "Líneas",
+    charts_donut: "Anillo",
+    charts_x_axis: "Eje X",
+    charts_y_axis: "Eje Y",
+    charts_agg: "Agregación",
+    charts_no_numeric: "No hay columnas numéricas para graficar",
+
+    // Visual Query Builder
+    query_builder: "Constructor de consultas",
+    qb_add_table: "Agregar tabla",
+    qb_columns: "Columnas",
+    qb_joins: "Uniones",
+    qb_where: "Condiciones",
+    qb_group_by: "Agrupar por",
+    qb_order_by: "Ordenar por",
+    qb_limit: "Límite",
+    qb_run_query: "Ejecutar consulta",
+    qb_open_in_editor: "Abrir en editor SQL",
+
+    // Schema & Data Compare
+    compare_title: "Comparar esquema y datos",
+    compare_schema: "Comparar esquema",
+    compare_data: "Comparar datos",
+    compare_source: "Origen",
+    compare_target: "Destino",
+    compare_run: "Comparar",
+    compare_generate_sync: "Generar script de sincronización",
+    compare_execute_sync: "Ejecutar sincronización",
+    compare_differences: "Diferencias",
+    compare_identical: "El origen y el destino son idénticos",
+
+    // Server Admin & Scheduled Tasks
+    admin_title: "Administración del servidor",
+    admin_users_roles: "Usuarios y roles",
+    admin_active_sessions: "Sesiones activas",
+    admin_kill_session: "Terminar sesión",
+    admin_scheduled_tasks: "Tareas programadas",
+    admin_new_task: "Nueva tarea",
+    admin_task_name: "Nombre de tarea",
+    admin_task_interval_min: "Intervalo (min)",
+    admin_run_now: "Ejecutar ahora",
+    admin_task_history: "Historial de tareas",
 };
 
 const FR_FR: Strings = Strings {
@@ -5894,6 +6752,149 @@ const FR_FR: Strings = Strings {
     updates_release_notes_label: "Notes de version",
     updates_toast_available_title: "Mise à jour disponible",
     updates_toast_apply_failed: "Échec de l'application de la mise à jour",
+
+    // Update Modal
+    update_modal_title: "Mise à jour logicielle",
+    update_available_subtitle: "Une nouvelle version de DataForge est prête à être téléchargée et installée.",
+    update_current_version: "Version actuelle",
+    update_new_version: "Nouvelle version",
+    update_release_notes: "Nouveautés",
+    update_download_install: "Télécharger et mettre à jour",
+    update_downloading_progress: "Téléchargement du paquet de mise à jour...",
+    update_ready_title: "Prêt à installer",
+    update_ready_desc: "La mise à jour a été vérifiée. DataForge va appliquer la nouvelle version et redémarrer.",
+    update_apply_restart: "Appliquer et redémarrer",
+    update_later: "Plus tard",
+    update_retry: "Réessayer",
+
+    // Workspace Session Persistence
+    settings_restore_session: "Restaurer la session au lancement",
+    settings_restore_session_desc: "Reconnecter automatiquement la dernière base de données active et rouvrir les onglets.",
+    session_restoring_connection: "Restauration de la connexion précédente...",
+
+    // Visual Schema & DDL Designer
+    schema_designer: "Concepteur de schéma",
+    schema_create_table: "Créer une table",
+    schema_alter_table: "Modifier la table",
+    schema_add_column: "Ajouter une colonne",
+    schema_drop_column: "Supprimer la colonne",
+    schema_rename_column: "Renommer la colonne",
+    schema_column_name: "Nom de la colonne",
+    schema_column_type: "Type de données",
+    schema_nullable: "Autoriser NULL",
+    schema_primary_key: "Clé primaire",
+    schema_default_value: "Valeur par défaut",
+    schema_add_index: "Ajouter un index",
+    schema_add_fk: "Ajouter une clé étrangère",
+    schema_fk_ref_table: "Table référencée",
+    schema_fk_ref_column: "Colonne référencée",
+    schema_preview_sql: "Aperçu SQL",
+    schema_execute_ddl: "Exécuter le DDL",
+    schema_truncate_table: "Vider la table",
+    schema_drop_table: "Supprimer la table",
+
+    // Data Import & SQL Script Runner
+    import_wizard: "Assistant d'importation",
+    import_select_file: "Sélectionner un fichier",
+    import_format_label: "Format",
+    import_target_table: "Table cible",
+    import_create_new_table: "Créer une nouvelle table",
+    import_preview_rows: "Aperçu des lignes",
+    import_column_mapping: "Mappage des colonnes",
+    import_run_import: "Lancer l'importation",
+    import_sql_script: "Exécuter un script SQL",
+    import_statements_count: "Instructions",
+    import_success_summary: "Importation terminée avec succès",
+
+    // Grid & Editor UX
+    grid_agg_count: "Nombre",
+    grid_agg_sum: "Somme",
+    grid_agg_avg: "Moyenne",
+    grid_agg_min: "Minimum",
+    grid_agg_max: "Maximum",
+    grid_copy_rows: "Copier les lignes",
+    grid_paste_rows: "Coller les lignes",
+    grid_pin_column: "Épingler la colonne",
+    editor_find: "Rechercher",
+    editor_replace: "Remplacer",
+    editor_replace_all: "Tout remplacer",
+    editor_format_sql: "Formater le SQL",
+
+    // Metadata Search & Environments
+    metadata_search: "Recherche de métadonnées",
+    metadata_search_placeholder: "Rechercher tables, vues, colonnes...",
+    metadata_type_all: "Tous les types",
+    env_label: "Environnement",
+    env_local: "Local",
+    env_development: "Développement",
+    env_staging: "Préproduction",
+    env_production: "Production",
+
+    // ER Diagram
+    er_diagram: "Diagramme ER",
+    er_zoom_in: "Zoom avant",
+    er_zoom_out: "Zoom arrière",
+    er_zoom_reset: "Réinitialiser le zoom",
+    er_auto_layout: "Disposition automatique",
+    er_export_svg: "Exporter en SVG",
+    er_filter_schema: "Filtrer le schéma",
+    er_fk_relations: "Relations de clé étrangère",
+    er_no_tables: "Aucune table disponible pour le diagramme ER",
+
+    // Visual EXPLAIN
+    explain_plan: "Plan d'exécution",
+    explain_analyze: "Analyser l'exécution",
+    explain_visual_tab: "Plan visuel",
+    explain_seq_scan_warn: "Alerte de balayage séquentiel",
+    explain_est_rows: "Lignes est.",
+    explain_cost: "Coût",
+    explain_actual_time: "Temps réel",
+
+    // Data Charts
+    charts_tab: "Graphiques",
+    charts_bar: "Barres",
+    charts_line: "Courbes",
+    charts_donut: "Anneau",
+    charts_x_axis: "Axe X",
+    charts_y_axis: "Axe Y",
+    charts_agg: "Agrégation",
+    charts_no_numeric: "Aucune colonne numérique disponible pour tracer",
+
+    // Visual Query Builder
+    query_builder: "Générateur de requêtes",
+    qb_add_table: "Ajouter une table",
+    qb_columns: "Colonnes",
+    qb_joins: "Jointures",
+    qb_where: "Filtres",
+    qb_group_by: "Grouper par",
+    qb_order_by: "Trier par",
+    qb_limit: "Limite",
+    qb_run_query: "Exécuter la requête",
+    qb_open_in_editor: "Ouvrir dans l'éditeur SQL",
+
+    // Schema & Data Compare
+    compare_title: "Comparaison de schéma et données",
+    compare_schema: "Comparer le schéma",
+    compare_data: "Comparer les données",
+    compare_source: "Source",
+    compare_target: "Cible",
+    compare_run: "Comparer",
+    compare_generate_sync: "Générer le script de synchro",
+    compare_execute_sync: "Exécuter la synchro",
+    compare_differences: "Différences",
+    compare_identical: "La source et la cible sont identiques",
+
+    // Server Admin & Scheduled Tasks
+    admin_title: "Administration serveur",
+    admin_users_roles: "Utilisateurs et rôles",
+    admin_active_sessions: "Sessions actives",
+    admin_kill_session: "Terminer la session",
+    admin_scheduled_tasks: "Tâches planifiées",
+    admin_new_task: "Nouvelle tâche",
+    admin_task_name: "Nom de la tâche",
+    admin_task_interval_min: "Intervalle (min)",
+    admin_run_now: "Exécuter maintenant",
+    admin_task_history: "Historique des tâches",
 };
 
 /// Initializes i18n locale selection from saved preference or OS environment variables.
@@ -5958,5 +6959,58 @@ mod tests {
         assert_eq!(Locale::from_code("es_419"), Some(Locale::EsEs));
         assert_eq!(Locale::from_code("fr_CA"), Some(Locale::FrFr));
         assert_eq!(Locale::from_code("xx"), None);
+    }
+
+    #[test]
+    fn wave2_and_update_modal_keys_are_translated_across_all_locales() {
+        let en = Strings::for_locale(Locale::EnUs);
+        for locale in Locale::ALL {
+            let s = Strings::for_locale(locale);
+            let samples = [
+                s.update_modal_title,
+                s.update_available_subtitle,
+                s.update_current_version,
+                s.update_new_version,
+                s.update_release_notes,
+                s.update_download_install,
+                s.update_downloading_progress,
+                s.update_ready_title,
+                s.update_ready_desc,
+                s.update_apply_restart,
+                s.update_later,
+                s.update_retry,
+                s.settings_restore_session,
+                s.settings_restore_session_desc,
+                s.session_restoring_connection,
+                s.schema_designer,
+                s.schema_create_table,
+                s.schema_execute_ddl,
+                s.import_wizard,
+                s.import_run_import,
+                s.grid_agg_count,
+                s.editor_format_sql,
+                s.metadata_search,
+                s.env_production,
+                s.er_diagram,
+                s.explain_plan,
+                s.charts_tab,
+                s.query_builder,
+                s.compare_title,
+                s.admin_title,
+            ];
+            for item in samples {
+                assert!(!item.trim().is_empty(), "empty string in {locale:?}");
+            }
+            if locale != Locale::EnUs {
+                assert_ne!(s.update_modal_title, en.update_modal_title);
+                assert_ne!(s.schema_designer, en.schema_designer);
+                assert_ne!(s.import_wizard, en.import_wizard);
+                assert_ne!(s.query_builder, en.query_builder);
+                assert_ne!(s.compare_title, en.compare_title);
+                assert_ne!(s.admin_title, en.admin_title);
+                assert_ne!(s.er_diagram, en.er_diagram);
+                assert_ne!(s.charts_tab, en.charts_tab);
+            }
+        }
     }
 }
