@@ -1,0 +1,206 @@
+---
+import {
+  siPostgresql,
+  siMysql,
+  siSqlite,
+  siDuckdb,
+  siClickhouse,
+  siApachecassandra,
+  siMongodb,
+  siRedis,
+} from 'simple-icons';
+import SectionBand from './SectionBand.astro';
+
+interface DriverItem {
+  id: string;
+  name: string;
+  notes: string;
+  category: 'oltp' | 'olap';
+  svgPath: string;
+  brandHex: string;
+}
+
+const mssqlFallbackPath =
+  'M12 2C7.03 2 3 3.79 3 6v12c0 2.21 4.03 4 9 4s9-1.79 9-4V6c0-2.21-4.03-4-9-4zm0 2c4.08 0 7 1.35 7 2s-2.92 2-7 2-7-1.35-7-2 2.92-2 7-2zm0 16c-4.08 0-7-1.35-7-2v-3.11C6.64 15.61 9.21 16 12 16s5.36-.39 7-1.11V18c0 .65-2.92 2-7 2zm0-6c-4.08 0-7-1.35-7-2V8.89C6.64 9.61 9.21 10 12 10s5.36-.39 7-1.11V12c0 .65-2.92 2-7 2z';
+
+const drivers: DriverItem[] = [
+  {
+    id: 'postgres',
+    name: 'PostgreSQL',
+    notes: 'COPY IN bulk loading, schema & catalog DDL inspection, multi-statement queries.',
+    category: 'oltp',
+    svgPath: siPostgresql.path,
+    brandHex: `#${siPostgresql.hex}`,
+  },
+  {
+    id: 'mysql',
+    name: 'MySQL / MariaDB',
+    notes: 'Full SQL dialect highlighting, routines, indexes, and catalog metadata.',
+    category: 'oltp',
+    svgPath: siMysql.path,
+    brandHex: `#${siMysql.hex}`,
+  },
+  {
+    id: 'sqlite',
+    name: 'SQLite',
+    notes: 'Open local .sqlite / .db files via GUI, drag-and-drop, or CLI path.',
+    category: 'olap',
+    svgPath: siSqlite.path,
+    brandHex: '#3B82F6',
+  },
+  {
+    id: 'duckdb',
+    name: 'DuckDB',
+    notes: 'Analytical queries with json and parquet extensions compiled directly in.',
+    category: 'olap',
+    svgPath: siDuckdb.path,
+    brandHex: `#${siDuckdb.hex}`,
+  },
+  {
+    id: 'mssql',
+    name: 'Microsoft SQL Server',
+    notes: 'Built on tiberius with rustls TLS encryption and multi-result batches.',
+    category: 'oltp',
+    svgPath: mssqlFallbackPath,
+    brandHex: '#CC2927',
+  },
+  {
+    id: 'clickhouse',
+    name: 'ClickHouse',
+    notes: 'High-throughput analytical table browsing and schema inspection.',
+    category: 'olap',
+    svgPath: siClickhouse.path,
+    brandHex: `#${siClickhouse.hex}`,
+  },
+  {
+    id: 'cassandra',
+    name: 'Cassandra / ScyllaDB',
+    notes: 'Asynchronous CQL queries and keyspace inspection over rustls.',
+    category: 'oltp',
+    svgPath: siApachecassandra.path,
+    brandHex: `#${siApachecassandra.hex}`,
+  },
+  {
+    id: 'mongodb',
+    name: 'MongoDB',
+    notes: 'Document queries, BSON type mapping, and system CA verification.',
+    category: 'oltp',
+    svgPath: siMongodb.path,
+    brandHex: `#${siMongodb.hex}`,
+  },
+  {
+    id: 'redis',
+    name: 'Redis',
+    notes: 'Key-value inspection and interactive command execution over TLS or TCP.',
+    category: 'oltp',
+    svgPath: siRedis.path,
+    brandHex: `#${siRedis.hex}`,
+  },
+];
+---
+
+<SectionBand as="section" id="drivers" bandClass="scroll-mt-[57px]">
+  <div class="px-4 py-10 sm:px-10 sm:py-12 border-b border-[var(--rule)] lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start">
+    <p
+      data-i18n="drivers.eyebrow"
+      class="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)] lg:col-span-3 lg:pt-1.5"
+    >
+      9 Compiled-In Drivers
+    </p>
+
+    <div class="mt-2.5 lg:mt-0 lg:col-span-9 flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+      <div class="max-w-2xl">
+        <h2
+          data-i18n="drivers.title"
+          class="section-heading text-[var(--foreground)]"
+        >
+          Every engine inside one binary.
+        </h2>
+        <p
+          data-i18n="drivers.subtitle"
+          class="mt-2.5 text-sm sm:text-[15px] leading-relaxed text-[var(--muted)]"
+        >
+          All 9 database drivers compile directly into dataforge.exe. No ODBC driver managers, no JVM bridges, and no external runtime plugins.
+        </p>
+      </div>
+
+      <div
+        role="group"
+        aria-label="Filter database drivers"
+        class="inline-flex flex-wrap items-center gap-1 rounded-[6px] border border-[var(--rule)] bg-[var(--surface)] p-1 self-start xl:self-auto shrink-0"
+      >
+        <button
+          type="button"
+          aria-pressed="true"
+          data-driver-filter="all"
+          data-i18n="drivers.filter.all"
+          class="df-seg-btn min-h-[36px] rounded-[4px] px-3 font-mono text-xs cursor-pointer"
+        >
+          All (9)
+        </button>
+        <button
+          type="button"
+          aria-pressed="false"
+          data-driver-filter="oltp"
+          data-i18n="drivers.filter.oltp"
+          class="df-seg-btn min-h-[36px] rounded-[4px] px-3 font-mono text-xs cursor-pointer"
+        >
+          OLTP (6)
+        </button>
+        <button
+          type="button"
+          aria-pressed="false"
+          data-driver-filter="olap"
+          data-i18n="drivers.filter.olap"
+          class="df-seg-btn min-h-[36px] rounded-[4px] px-3 font-mono text-xs cursor-pointer"
+        >
+          OLAP / Embedded (3)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3x3 Desktop / 2-col Tablet / 1-col Mobile .cell-grid -->
+  <div data-driver-grid class="cell-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+    {drivers.map((driver) => (
+      <article
+        data-driver-card
+        data-driver-category={driver.category}
+        class="driver-cell cell-hover p-5 sm:p-7 flex flex-col justify-between gap-4"
+        style={`--driver-brand: ${driver.brandHex};`}
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="driver-logo-box flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] border border-[var(--rule)] bg-[var(--surface)]">
+              <svg
+                viewBox="0 0 24 24"
+                role="img"
+                aria-label={`${driver.name} logo`}
+                class="h-[18px] w-[18px] fill-current"
+              >
+                <path d={driver.svgPath} />
+              </svg>
+            </div>
+            <h3 class="text-[15px] font-medium tracking-tight text-[var(--foreground)] truncate">
+              {driver.name}
+            </h3>
+          </div>
+          <span
+            data-i18n={`drivers.cat.${driver.category}`}
+            class="shrink-0 rounded-[6px] border border-[var(--rule)] bg-[var(--surface)] px-2 py-0.5 font-mono text-[10px] text-[var(--dim)]"
+          >
+            {driver.category === 'oltp' ? 'OLTP' : 'OLAP / Embedded'}
+          </span>
+        </div>
+
+        <p
+          data-i18n={`drivers.items.${driver.id}.notes`}
+          class="text-[13px] leading-relaxed text-[var(--muted)]"
+        >
+          {driver.notes}
+        </p>
+      </article>
+    ))}
+    <div id="driver-tablet-filler" class="hidden sm:block lg:hidden" aria-hidden="true"></div>
+  </div>
+</SectionBand>
