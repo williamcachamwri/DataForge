@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use dataforge_windows_platform::{ForeignAppDirs, ForeignHost, PlainHost, foreign_app_dirs};
+use tableminus_windows_platform::{ForeignAppDirs, ForeignHost, PlainHost, foreign_app_dirs};
 use tablepro_core::connection_url::{ConnectionUrl, parse as parse_url};
 use tablepro_core::credentials::CredentialInteraction;
 use tablepro_foreign_import::{
@@ -109,7 +109,7 @@ pub async fn test_connection(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dataforge_windows_platform::ForeignPlatform;
+    use tableminus_windows_platform::ForeignPlatform;
 
     #[test]
     fn supported_import_apps_includes_all_five_clients() {
