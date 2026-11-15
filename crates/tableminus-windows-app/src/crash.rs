@@ -1,11 +1,11 @@
 //! Startup tracing initialization and panic/crash report persistence
-//! backed by `dataforge_services::diagnostics`.
+//! backed by `tableminus_services::diagnostics`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
-use dataforge_services::diagnostics::{
+use tableminus_services::diagnostics::{
     CrashReport, init_logging, write_crash_report as write_service_crash_report,
 };
 
@@ -21,7 +21,7 @@ pub fn init_logging_and_crash_reports(log_dir: &Path) -> Result<()> {
     let crash_dir = log_dir.to_path_buf();
 
     LOG_INIT.call_once(|| {
-        init_logging("dataforge=info,warn");
+        init_logging("tableminus=info,warn");
         install_panic_hook(crash_dir);
     });
 
