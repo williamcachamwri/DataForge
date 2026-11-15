@@ -91,14 +91,14 @@ impl crate::app::AppController {
         if self.headless {
             return;
         }
-        if let Ok(tasks) = dataforge_windows_platform::load_scheduled_tasks(None) {
+        if let Ok(tasks) = tableminus_windows_platform::load_scheduled_tasks(None) {
             self.scheduled_tasks = tasks;
         }
     }
 
     /// Loads persisted scheduled tasks from an explicit `path`.
     pub fn load_scheduled_tasks_from_path(&mut self, path: &std::path::Path) {
-        if let Ok(tasks) = dataforge_windows_platform::load_scheduled_tasks(Some(path)) {
+        if let Ok(tasks) = tableminus_windows_platform::load_scheduled_tasks(Some(path)) {
             self.scheduled_tasks = tasks;
         }
     }
@@ -108,18 +108,18 @@ impl crate::app::AppController {
         if self.headless {
             return Ok(());
         }
-        dataforge_windows_platform::save_scheduled_tasks(None, &self.scheduled_tasks)?;
+        tableminus_windows_platform::save_scheduled_tasks(None, &self.scheduled_tasks)?;
         Ok(())
     }
 
     /// Saves `self.scheduled_tasks` to an explicit `path`.
     pub fn save_scheduled_tasks_to_path(&self, path: &std::path::Path) -> crate::error::Result<()> {
-        dataforge_windows_platform::save_scheduled_tasks(Some(path), &self.scheduled_tasks)?;
+        tableminus_windows_platform::save_scheduled_tasks(Some(path), &self.scheduled_tasks)?;
         Ok(())
     }
 
     /// Inserts or updates a scheduled task by ID and persists the task list.
-    pub fn upsert_scheduled_task(&mut self, task: dataforge_windows_platform::ScheduledTaskRecord) {
+    pub fn upsert_scheduled_task(&mut self, task: tableminus_windows_platform::ScheduledTaskRecord) {
         if let Some(existing) = self.scheduled_tasks.iter_mut().find(|t| t.id == task.id) {
             *existing = task;
         } else {
@@ -154,7 +154,7 @@ impl crate::app::AppController {
     pub fn run_scheduled_task_now(
         &mut self,
         id: &str,
-    ) -> crate::error::Result<dataforge_windows_platform::ScheduledTaskRunEntry> {
+    ) -> crate::error::Result<tableminus_windows_platform::ScheduledTaskRunEntry> {
         let task = self
             .scheduled_tasks
             .iter()
@@ -170,13 +170,13 @@ impl crate::app::AppController {
         let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         let entry = match &outcome {
-            Ok(summary) => dataforge_windows_platform::ScheduledTaskRunEntry {
+            Ok(summary) => tableminus_windows_platform::ScheduledTaskRunEntry {
                 ran_at_unix: started_unix,
                 success: true,
                 summary: summary.clone(),
                 duration_ms,
             },
-            Err(err) => dataforge_windows_platform::ScheduledTaskRunEntry {
+            Err(err) => tableminus_windows_platform::ScheduledTaskRunEntry {
                 ran_at_unix: started_unix,
                 success: false,
                 summary: err.to_string(),
@@ -193,10 +193,10 @@ impl crate::app::AppController {
     /// Evaluates due scheduled tasks against the current time and executes each one.
     pub fn tick_due_scheduled_tasks(
         &mut self,
-    ) -> Vec<dataforge_windows_platform::ScheduledTaskRunEntry> {
+    ) -> Vec<tableminus_windows_platform::ScheduledTaskRunEntry> {
         let now_unix = current_unix_timestamp();
         let due_indices =
-            dataforge_services::evaluate_due_task_indices(&self.scheduled_tasks, now_unix, |t| {
+            tableminus_services::evaluate_due_task_indices(&self.scheduled_tasks, now_unix, |t| {
                 (t.enabled, t.last_run_unix, t.interval_minutes)
             });
         let due_ids: Vec<String> = due_indices
@@ -208,7 +208,7 @@ impl crate::app::AppController {
         for task_id in due_ids {
             match self.run_scheduled_task_now(&task_id) {
                 Ok(entry) => results.push(entry),
-                Err(err) => results.push(dataforge_windows_platform::ScheduledTaskRunEntry {
+                Err(err) => results.push(tableminus_windows_platform::ScheduledTaskRunEntry {
                     ran_at_unix: now_unix,
                     success: false,
                     summary: err.to_string(),
@@ -221,12 +221,12 @@ impl crate::app::AppController {
 
     fn execute_scheduled_task_body(
         &mut self,
-        task: &dataforge_windows_platform::ScheduledTaskRecord,
+        task: &tableminus_windows_platform::ScheduledTaskRecord,
     ) -> crate::error::Result<String> {
         if !task.connection_id.is_empty()
             && self.active_connection_id() != Some(task.connection_id.as_str())
             && self.library.storage().connections.contains_key(
-                &dataforge_state::library::LibraryConnectionId(task.connection_id.clone()),
+                &tableminus_state::library::LibraryConnectionId(task.connection_id.clone()),
             )
         {
             self.connect_library_item_blocking(&task.connection_id)?;
@@ -248,8 +248,8 @@ impl crate::app::AppController {
                     })?;
                 let (cols, rows) = self.execute_query_capture_blocking(sql)?;
                 let target_path = std::path::Path::new(target_str);
-                let opts = dataforge_services::export::ExportOptions::default();
-                let count = dataforge_services::export::export_rows_atomic(
+                let opts = tableminus_services::export::ExportOptions::default();
+                let count = tableminus_services::export::export_rows_atomic(
                     target_path,
                     &cols,
                     &rows,
@@ -277,7 +277,7 @@ impl crate::app::AppController {
     fn record_scheduled_task_run(
         &mut self,
         id: &str,
-        entry: &dataforge_windows_platform::ScheduledTaskRunEntry,
+        entry: &tableminus_windows_platform::ScheduledTaskRunEntry,
     ) {
         if let Some(task) = self.scheduled_tasks.iter_mut().find(|t| t.id == id) {
             task.last_run_unix = Some(entry.ran_at_unix);
