@@ -44,6 +44,10 @@ Sur Windows 11 avec une compilation release, le démarrage à froid prend enviro
 
 ![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
+### Diagramme ER interactif, relations de clés étrangères et export SVG
+
+![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+
 ---
 
 ## Bases de données prises en charge
