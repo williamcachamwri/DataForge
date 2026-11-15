@@ -1,11 +1,11 @@
 //! Pill Tab Strip view (detachable/re-attachable tabs, `+` button, close button).
 
-use dataforge_gfx::Result;
-use dataforge_gfx::context::{
+use tableminus_gfx::Result;
+use tableminus_gfx::context::{
     FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign, point_f,
 };
-use dataforge_gfx::palette::ThemePalette;
-use dataforge_state::tabs::{TabId, TabItem};
+use tableminus_gfx::palette::ThemePalette;
+use tableminus_state::tabs::{TabId, TabItem};
 
 use crate::shell_layout::{Rect, ShellLayout};
 
