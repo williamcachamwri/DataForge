@@ -12,11 +12,11 @@ use tracing::{debug, info, warn};
 use velopack::sources::GithubSource;
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, VelopackAsset};
 
-/// Canonical GitHub repository URL hosting DataForge Velopack releases.
-pub const GITHUB_REPO_URL: &str = "https://github.com/williamcachamwri/DataForge";
+/// Canonical GitHub repository URL hosting TableMinus Velopack releases.
+pub const GITHUB_REPO_URL: &str = "https://github.com/williamcachamwri/TableMinus";
 
-/// Velopack package identifier (`--packId DataForge`).
-pub const VELOPACK_PACK_ID: &str = "DataForge";
+/// Velopack package identifier (`--packId TableMinus`).
+pub const VELOPACK_PACK_ID: &str = "TableMinus";
 
 /// Maximum time to wait for a remote update feed check before reporting an error.
 const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(25);
@@ -181,7 +181,7 @@ impl UpdaterManager {
         let state = map_velopack_error(err);
         match &state {
             UpdateState::StandaloneMode => {
-                debug!("DataForge is running in standalone mode (no Velopack install detected)");
+                debug!("TableMinus is running in standalone mode (no Velopack install detected)");
             }
             UpdateState::Error(msg) => {
                 warn!(error = %msg, "Velopack UpdateManager initialization warning");
@@ -267,7 +267,7 @@ impl UpdaterManager {
         self.pending_update = None;
         let channel = self.channel.clone();
         let spawned = thread::Builder::new()
-            .name("dataforge-update-check".to_owned())
+            .name("tableminus-update-check".to_owned())
             .spawn(move || run_check_with_timeout(um, &channel));
         if let Err(err) = spawned {
             self.state = UpdateState::Error(format!("failed to start update check: {err}"));
@@ -292,12 +292,12 @@ impl UpdaterManager {
         let (prog_tx, prog_rx) = mpsc::channel::<i16>();
         let channel_progress = self.channel.clone();
         let _ = thread::Builder::new()
-            .name("dataforge-update-progress".to_owned())
+            .name("tableminus-update-progress".to_owned())
             .spawn(move || forward_progress_events(&prog_rx, &channel_progress));
 
         let channel_done = self.channel.clone();
         let spawned = thread::Builder::new()
-            .name("dataforge-update-download".to_owned())
+            .name("tableminus-update-download".to_owned())
             .spawn(move || run_download_worker(um, info, prog_tx, &channel_done));
         if let Err(err) = spawned {
             self.state = UpdateState::Error(format!("failed to start update download: {err}"));
@@ -307,7 +307,7 @@ impl UpdaterManager {
     /// Applies the staged update package and restarts the application.
     ///
     /// On success, Velopack exits the current process (`exit(0)`) after launching
-    /// `Update.exe` to swap binaries and relaunch DataForge.
+    /// `Update.exe` to swap binaries and relaunch TableMinus.
     pub fn apply_and_restart(&mut self) -> Result<(), String> {
         let Some(um) = self.manager.as_ref() else {
             return Err("application is running in standalone mode".to_owned());
@@ -362,7 +362,7 @@ impl UpdaterManager {
 fn run_check_with_timeout(um: UpdateManager, channel: &UpdateChannel) {
     let (done_tx, done_rx) = mpsc::channel();
     let spawned = thread::Builder::new()
-        .name("dataforge-update-http".to_owned())
+        .name("tableminus-update-http".to_owned())
         .spawn(move || {
             let outcome = catch_unwind(AssertUnwindSafe(|| um.check_for_updates()));
             let event = match outcome {
@@ -451,11 +451,11 @@ fn log_check_event(event: &UpdateEvent) {
         UpdateEvent::Available { info } => {
             info!(
                 version = %info.TargetFullRelease.Version,
-                "DataForge update available"
+                "TableMinus update available"
             );
         }
         UpdateEvent::StateChanged(UpdateState::UpToDate) => {
-            info!("DataForge is up to date");
+            info!("TableMinus is up to date");
         }
         UpdateEvent::StateChanged(UpdateState::Error(err)) => {
             warn!(error = %err, "Velopack update check failed");
@@ -568,7 +568,7 @@ mod tests {
             PackageId: VELOPACK_PACK_ID.to_owned(),
             Version: "0.2.0".to_owned(),
             Type: "Full".to_owned(),
-            FileName: "DataForge-0.2.0-full.nupkg".to_owned(),
+            FileName: "TableMinus-0.2.0-full.nupkg".to_owned(),
             NotesMarkdown: "## Highlights\n- Faster SQL grid".to_owned(),
             ..VelopackAsset::default()
         };
