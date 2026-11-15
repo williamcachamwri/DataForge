@@ -462,6 +462,7 @@ fn render_tab_strip_actions(
                         .aria_label(s.cmd_new_query_tab)
                         .on_press(cx.listener(|ws, _, window, cx| {
                             ws.execute_key_command(KeyCommand::NewQueryTab, window, cx);
+                            ws.workspace_pane.close_tool();
                             ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
                             cx.notify();
                         }))
@@ -489,6 +490,8 @@ fn render_tab_strip_actions(
                             if ws.controller.reopen_closed_tab().is_none() {
                                 let msg = ws.controller.strings.no_recent_tab;
                                 ws.notify_toast(ToastSeverity::Info, msg, None, cx);
+                            } else {
+                                ws.workspace_pane.close_tool();
                             }
                             cx.notify();
                         }))
@@ -541,6 +544,7 @@ fn apply_subview_selection(
     key: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
+    ws.workspace_pane.close_tool();
     match key {
         "sql" => {
             ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
@@ -572,6 +576,7 @@ fn select_workspace_tab(
 ) {
     ws.controller.tabs.select(tab_id);
     ws.controller.screen_mode = ScreenMode::Workspace;
+    ws.workspace_pane.close_tool();
     ws.workspace_pane.sub_view = match kind {
         TabKind::QueryEditor { sql } => {
             if !sql.is_empty() {
@@ -661,6 +666,7 @@ fn duplicate_workspace_tab(
     kind: &TabKind,
     cx: &mut Context<DataForgeWorkspace>,
 ) {
+    ws.workspace_pane.close_tool();
     let copy_title = format!("{title} {}", ws.controller.strings.copy_suffix);
     match kind {
         TabKind::QueryEditor { sql } => {
