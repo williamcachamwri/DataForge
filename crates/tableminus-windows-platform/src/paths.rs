@@ -12,7 +12,7 @@ use windows::core::{GUID, PWSTR};
 use crate::error::PlatformError;
 
 /// Default application directory name under `%LOCALAPPDATA%` and `%APPDATA%`.
-pub const APP_DIR_NAME: &str = "DataForge";
+pub const APP_DIR_NAME: &str = "TableMinus";
 
 /// RAII guard ensuring a `PWSTR` allocated by `SHGetKnownFolderPath` is freed via `CoTaskMemFree`.
 struct CoTaskMemPwstr(PWSTR);
@@ -48,10 +48,10 @@ pub(crate) fn known_folder(
     Ok(PathBuf::from(text))
 }
 
-/// Returns [`StoragePaths`] resolved from Windows Known Folders for DataForge.
+/// Returns [`StoragePaths`] resolved from Windows Known Folders for TableMinus.
 ///
-/// - `FOLDERID_LocalAppData` (`%LOCALAPPDATA%\DataForge`) -> `data`, `cache`, `runtime`
-/// - `FOLDERID_RoamingAppData` (`%APPDATA%\DataForge`) -> `config`, `state`
+/// - `FOLDERID_LocalAppData` (`%LOCALAPPDATA%\TableMinus`) -> `data`, `cache`, `runtime`
+/// - `FOLDERID_RoamingAppData` (`%APPDATA%\TableMinus`) -> `config`, `state`
 pub fn storage_paths() -> Result<StoragePaths, PlatformError> {
     storage_paths_for(APP_DIR_NAME)
 }
