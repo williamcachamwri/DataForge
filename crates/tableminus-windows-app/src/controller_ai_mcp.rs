@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use dataforge_services::{AiAssistantService, AiEndpointConfig};
+use tableminus_services::{AiAssistantService, AiEndpointConfig};
 use secrecy::SecretString;
 use tablepro_ai::{ChatMessage, QueryLanguage, ReplyEvent};
 use tablepro_core::AiProvider;
@@ -78,7 +78,7 @@ impl AppController {
             while let Some(ev) = rx.recv().await {
                 self.apply_ai_reply_event(ev);
             }
-            Ok::<_, dataforge_services::ServiceError>(())
+            Ok::<_, tableminus_services::ServiceError>(())
         })?;
 
         let reply_text = self
@@ -121,7 +121,7 @@ impl AppController {
         self.services.as_ref().is_some_and(|s| s.is_mcp_running())
     }
 
-    /// Imports a VS Code or DataForge theme JSON file from `path`.
+    /// Imports a VS Code or TableMinus theme JSON file from `path`.
     pub fn import_vscode_theme_file(&mut self, path: &Path) -> Result<()> {
         let bytes = std::fs::read(path)?;
         self.import_vscode_theme(&bytes)
