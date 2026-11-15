@@ -1,5 +1,5 @@
 ---
-import { Activity, ArrowRight, Binary, DatabaseZap, GitFork, Shuffle, Table2 } from 'lucide-astro';
+import { ArrowRight, Binary, DatabaseZap, GitFork, Shuffle, Table2 } from 'lucide-astro';
 import SectionBand from './SectionBand.astro';
 
 interface ShowcaseTab {
@@ -113,15 +113,6 @@ const tabs: ShowcaseTab[] = [
     descKey: 'workbench.tabs.value-viewer.desc',
     image: '/images/rich-value-viewer.png',
     alt: 'TableMinus docked Row Inspector and Rich Value Viewer showing Text, JSON, Hex, and Image tabs',
-  },
-  {
-    id: 'live-monitor',
-    label: 'Live Monitor',
-    labelKey: 'workbench.tabs.live-monitor.label',
-    title: 'Real-time PID sessions, lock chains, and triage.',
-    titleKey: 'workbench.tabs.live-monitor.title',
-    desc: 'Inspect active queries, idle transactions, and blocking locks in real time with Safe Mode confirmation before terminating a PID.',
-    descKey: 'workbench.tabs.live-monitor.desc',
   },
 ];
 ---
@@ -300,44 +291,6 @@ const tabs: ShowcaseTab[] = [
                   <div class="mt-2 text-base font-medium text-[var(--foreground)]">Binary Bulk Load</div>
                   <p class="mt-1.5 text-xs text-[var(--muted)]">
                     Uses native COPY IN and prepared batch inserts over rustls TLS or russh tunnels.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {tab.id === 'live-monitor' && (
-              <div class="cell-grid grid-cols-1 md:grid-cols-3">
-                <div class="p-5 sm:p-6">
-                  <div class="flex items-center justify-between">
-                    <span class="font-mono text-[11px] text-[var(--dim)]">Sessions</span>
-                    <span class="inline-flex items-center gap-1.5 font-mono text-[10px] text-[var(--status-ok)]">
-                      <span class="h-1.5 w-1.5 rounded-full bg-[var(--status-ok)]"></span>
-                      Live
-                    </span>
-                  </div>
-                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Active PID &amp; Query State</div>
-                  <p class="mt-1.5 text-xs text-[var(--muted)]">
-                    Monitor running queries, duration, and idle-in-transaction sessions in real time.
-                  </p>
-                </div>
-                <div class="p-5 sm:p-6">
-                  <div class="flex items-center justify-between">
-                    <span class="font-mono text-[11px] text-[var(--dim)]">Contention</span>
-                    <span class="font-mono text-[10px] text-[var(--status-warn)]">Lock Graph</span>
-                  </div>
-                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Blocking Lock Detection</div>
-                  <p class="mt-1.5 text-xs text-[var(--muted)]">
-                    Identify blocking PIDs, lock modes, and waiting relations without manual system queries.
-                  </p>
-                </div>
-                <div class="p-5 sm:p-6">
-                  <div class="flex items-center justify-between">
-                    <span class="font-mono text-[11px] text-[var(--dim)]">Safety</span>
-                    <Activity class="h-3.5 w-3.5 text-[var(--accent)]" />
-                  </div>
-                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Confirmed Termination</div>
-                  <p class="mt-1.5 text-xs text-[var(--muted)]">
-                    Two-step Safe Mode confirmation prevents accidental backend termination on production hosts.
                   </p>
                 </div>
               </div>
