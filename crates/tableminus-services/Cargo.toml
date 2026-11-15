@@ -1,5 +1,5 @@
 [package]
-name = "dataforge-services"
+name = "tableminus-services"
 version = "0.1.4"
 edition.workspace = true
 rust-version.workspace = true
@@ -10,8 +10,8 @@ publish.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 csv.workspace = true
-dataforge-state.workspace = true
-dataforge-windows-platform.workspace = true
+tableminus-state.workspace = true
+tableminus-windows-platform.workspace = true
 futures.workspace = true
 secrecy.workspace = true
 serde.workspace = true
