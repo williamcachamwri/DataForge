@@ -1,4 +1,4 @@
-//! DataForge Windows desktop application library.
+//! TableMinus Windows desktop application library.
 
 pub mod accessibility;
 pub mod app;
