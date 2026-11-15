@@ -1,9 +1,10 @@
 //! Reactive screen, sub-view, result-pane, cell-edit, and toast state helpers
 //! for the HeroGPUI workspace shell.
 
+use crate::i18n::Strings;
 use dataforge_state::editor::RunEventAccumulator;
 use dataforge_state::tabs::TabId;
-use herogpui::components::Toast;
+use herogpui::components::{IconName, Toast};
 use herogpui::core::Color as HeroColor;
 use herogpui::gpui::{App, SharedString};
 use tablepro_core::{ResultEvent, RunSummary};
@@ -148,6 +149,40 @@ pub enum WorkspaceToolView {
     QueryBuilder,
     Compare,
     Admin,
+    MockGenerator,
+    DataTransfer,
+}
+
+impl WorkspaceToolView {
+    /// Returns the localized display label for this workbench tool.
+    #[must_use]
+    pub fn label(self, s: &Strings) -> SharedString {
+        match self {
+            Self::SchemaDesigner => s.schema_designer.into(),
+            Self::ImportWizard => s.import_wizard.into(),
+            Self::ErDiagram => s.er_diagram.into(),
+            Self::QueryBuilder => s.query_builder.into(),
+            Self::Compare => s.compare_title.into(),
+            Self::Admin => format!("{} & {}", s.admin_title, s.admin_scheduled_tasks).into(),
+            Self::MockGenerator => s.mock_generator_title.into(),
+            Self::DataTransfer => s.data_transfer_title.into(),
+        }
+    }
+
+    /// Returns the HeroGPUI icon representing this workbench tool.
+    #[must_use]
+    pub const fn icon(self) -> IconName {
+        match self {
+            Self::SchemaDesigner => IconName::Layers,
+            Self::ImportWizard => IconName::Upload,
+            Self::ErDiagram => IconName::Share2,
+            Self::QueryBuilder => IconName::SlidersHorizontal,
+            Self::Compare => IconName::ArrowLeftRight,
+            Self::Admin => IconName::ShieldCheck,
+            Self::MockGenerator => IconName::WandSparkles,
+            Self::DataTransfer => IconName::Repeat,
+        }
+    }
 }
 
 /// UI state for the active Workspace panes (filter bar, inline edit, confirm sheets).
@@ -262,5 +297,33 @@ mod tests {
         assert!(!state.running);
         assert_eq!(state.elapsed_ms, Some(12));
         assert!(state.accumulator.summary.is_some());
+    }
+
+    #[test]
+    fn workspace_tool_view_supports_mock_generator_and_data_transfer() {
+        use crate::i18n::Locale;
+
+        let s = Strings::for_locale(Locale::EnUs);
+        assert_eq!(
+            WorkspaceToolView::MockGenerator.label(&s).as_ref(),
+            s.mock_generator_title
+        );
+        assert_eq!(
+            WorkspaceToolView::DataTransfer.label(&s).as_ref(),
+            s.data_transfer_title
+        );
+        assert_eq!(
+            WorkspaceToolView::MockGenerator.icon(),
+            IconName::WandSparkles
+        );
+        assert_eq!(WorkspaceToolView::DataTransfer.icon(), IconName::Repeat);
+
+        let mut pane = WorkspacePaneState::default();
+        pane.toggle_tool(WorkspaceToolView::MockGenerator);
+        assert_eq!(pane.active_tool, Some(WorkspaceToolView::MockGenerator));
+        pane.toggle_tool(WorkspaceToolView::MockGenerator);
+        assert_eq!(pane.active_tool, None);
+        pane.open_tool(WorkspaceToolView::DataTransfer);
+        assert_eq!(pane.active_tool, Some(WorkspaceToolView::DataTransfer));
     }
 }
