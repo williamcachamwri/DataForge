@@ -50,7 +50,7 @@ pub use import_bridge::{
     import_from_app_with_dirs, parse_connection_url, test_connection,
 };
 pub use mcp_host::{
-    TableMinusMcpHost, McpServerController, OpenConnectionHandler, QueryHistoryRecorder,
+    McpServerController, OpenConnectionHandler, QueryHistoryRecorder, TableMinusMcpHost,
     WriteApprovalHandler, classify_cli_args,
 };
 pub use runtime::{AppRuntime, REGISTERED_ENGINE_IDS, build_driver_registry};
