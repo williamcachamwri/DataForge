@@ -18,7 +18,7 @@ pub const MAX_THEME_FILE_BYTES: usize = 64 * 1024;
 /// Maximum JSON nesting depth accepted for untrusted theme files.
 pub const MAX_THEME_JSON_DEPTH: usize = 16;
 
-/// All themeable content slots in DataForge.
+/// All themeable content slots in TableMinus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ThemeSlot {
     EditorBackground,
@@ -424,7 +424,7 @@ impl ThemeDefinition {
         colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0xFF, 0xFF, 0xFF));
         Self {
             id: ThemeId::builtin_light(),
-            name: "DataForge Light".to_owned(),
+            name: "TableMinus Light".to_owned(),
             appearance: ThemeAppearance::Light,
             is_builtin: true,
             colors,
@@ -496,7 +496,7 @@ impl ThemeDefinition {
         colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x1B, 0x1C, 0x20));
         Self {
             id: ThemeId::builtin_dark(),
-            name: "DataForge Dark".to_owned(),
+            name: "TableMinus Dark".to_owned(),
             appearance: ThemeAppearance::Dark,
             is_builtin: true,
             colors,
@@ -565,7 +565,7 @@ impl ThemeDefinition {
         colors.insert(ThemeSlot::WindowBackground, Rgba::rgb(0x00, 0x00, 0x00));
         Self {
             id: ThemeId::builtin_high_contrast(),
-            name: "DataForge High Contrast".to_owned(),
+            name: "TableMinus High Contrast".to_owned(),
             appearance: ThemeAppearance::HighContrast,
             is_builtin: true,
             colors,
@@ -1305,7 +1305,7 @@ impl ThemeFileFormat {
     }
 }
 
-/// Imports VS Code JSON color themes into DataForge `ThemeDefinition`s.
+/// Imports VS Code JSON color themes into TableMinus `ThemeDefinition`s.
 ///
 /// Untrusted input rules:
 /// - Checks size before reading (`<= MAX_THEME_FILE_BYTES`).
