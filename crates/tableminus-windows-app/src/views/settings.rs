@@ -1,7 +1,9 @@
 //! Settings view and VS Code Theme JSON importer.
 
 use tableminus_gfx::Result;
-use tableminus_gfx::context::{FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign};
+use tableminus_gfx::context::{
+    FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign,
+};
 use tableminus_gfx::palette::ThemePalette;
 use tableminus_state::theme::{ThemeDefinition, VsCodeThemeImporter};
 use tableminus_windows_platform::{AppSettings, ThemePreference};
