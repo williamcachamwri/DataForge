@@ -8,6 +8,7 @@ use dataforge_services::import_bridge::{
     SUPPORTED_IMPORT_APPS, foreign_inventory, import_from_app, import_from_app_with_dirs,
     parse_connection_url,
 };
+use dataforge_state::connection_window::AttemptToken;
 use dataforge_state::library::{
     ForeignImportReport, LibraryConnection, LibraryConnectionId, LibraryGroup, LibraryGroupId,
     connection_from_url,
@@ -179,9 +180,19 @@ impl AppController {
             )),
             None => Arc::new(NoStoredCredentials),
         };
+        self.restoring_connection_id = Some(id.to_owned());
         let _ =
             self.connect_blocking_inner_with_creds(services, ws, request, label, engine, creds)?;
         Ok(())
+    }
+
+    /// Reconnects asynchronously to a saved [`LibraryConnection`] by ID using stored credentials.
+    pub fn reconnect_saved_connection_async(&mut self, conn_id: &str) -> Result<AttemptToken> {
+        let saved = self.hydrate_library_form_with_saved(conn_id)?;
+        let services = self.require_services()?.clone();
+        let password = load_saved_db_password(&services, conn_id, saved.as_ref());
+        self.restoring_connection_id = Some(conn_id.to_owned());
+        self.connect_from_draft_async(password)
     }
 
     fn hydrate_library_form_with_saved(&mut self, id: &str) -> Result<Option<SavedConnection>> {
