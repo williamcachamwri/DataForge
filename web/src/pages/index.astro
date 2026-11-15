@@ -1,0 +1,101 @@
+---
+import { ArrowUpRight, Download, Github } from 'lucide-astro';
+import Layout from '../layouts/Layout.astro';
+import Navbar from '../components/Navbar.astro';
+import SectionBand from '../components/SectionBand.astro';
+import WorkbenchShowcase from '../components/WorkbenchShowcase.astro';
+import DriverMatrix from '../components/DriverMatrix.astro';
+import BenchmarksSection from '../components/BenchmarksSection.astro';
+import CliAndShortcuts from '../components/CliAndShortcuts.astro';
+import Footer from '../components/Footer.astro';
+import { getBuildReleaseInfo } from '../lib/release';
+
+const release = await getBuildReleaseInfo();
+---
+
+<Layout>
+  <Navbar release={release} />
+
+  <main>
+    <!-- Top architectural rail spacer so Hero's top crosshairs sit clear of the sticky Navbar -->
+    <SectionBand as="div" crosshairs={false} frameClass="h-5 sm:h-8" />
+
+    <!-- Hero Section: Clean Typography + Real App Screenshot -->
+    <SectionBand as="section" frameClass="px-4 pt-10 pb-12 sm:px-10 sm:pt-16 sm:pb-16">
+      <div class="max-w-3xl">
+        <div class="inline-flex max-w-full items-center gap-2 rounded-[6px] border border-[var(--rule)] bg-[var(--surface)] px-2.5 py-1 font-mono text-[11px] text-[var(--muted)]">
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]" aria-hidden="true"></span>
+          <span data-i18n="hero.badge" class="truncate">
+            Rust 2024 · HeroGPUI / Direct3D 11 · Windows 10 &amp; 11 x64
+          </span>
+        </div>
+
+        <h1 class="hero-headline mt-6 text-[var(--foreground)]">
+          <span class="block" data-i18n="hero.line1">Native SQL &amp; database</span>
+          <span class="block" data-i18n="hero.line2">workbench for Windows.</span>
+        </h1>
+
+        <p
+          data-i18n="hero.subtitle"
+          class="mt-5 max-w-2xl text-[15px] sm:text-base leading-relaxed text-[var(--muted)]"
+        >
+          Built in Rust with Direct3D 11 rendering and 9 compiled-in database drivers. No Electron wrapper, no JVM runtime, and cold startup in ~10&nbsp;ms.
+        </p>
+
+        <div class="mt-8 flex flex-wrap items-center gap-3">
+          <a
+            href={release.releaseUrl}
+            data-release-link
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-primary inline-flex min-h-[42px] items-center gap-2 rounded-[6px] px-4 py-2 text-sm font-medium tracking-tight"
+          >
+            <Download class="h-4 w-4 shrink-0" />
+            <span>
+              <span data-i18n="hero.download">Download</span>
+              <span data-release-version class="font-mono">{release.tag}</span>
+            </span>
+          </a>
+
+          <a
+            href={release.repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-secondary inline-flex min-h-[42px] items-center gap-2 rounded-[6px] px-4 py-2 text-sm font-medium tracking-tight"
+          >
+            <Github class="h-4 w-4 shrink-0 opacity-85" />
+            <span data-i18n="hero.github">GitHub Repository</span>
+            <ArrowUpRight class="h-3.5 w-3.5 shrink-0 opacity-70" />
+          </a>
+
+          <span data-i18n="hero.artifacts" class="font-mono text-xs text-[var(--dim)] sm:ml-1">
+            Setup.exe &amp; Portable.zip
+          </span>
+        </div>
+      </div>
+
+      <!-- Clean Real App Screenshot inside 1px rule frame -->
+      <div class="mt-10 sm:mt-14 border border-[var(--rule)] bg-[var(--stage-bg)] overflow-hidden">
+        <img
+          src="/images/sql-editor-10m.jpg"
+          alt="DataForge SQL Editor querying 10 million indexed rows in SQLite on Windows"
+          loading="eager"
+          decoding="async"
+          class="block w-full h-auto object-cover select-none"
+        />
+      </div>
+    </SectionBand>
+
+    <WorkbenchShowcase />
+    <DriverMatrix />
+    <BenchmarksSection />
+    <CliAndShortcuts release={release} />
+  </main>
+
+  <Footer release={release} />
+
+  <script>
+    import { initDataForgeMotion } from '../scripts/motion';
+    initDataForgeMotion();
+  </script>
+</Layout>
