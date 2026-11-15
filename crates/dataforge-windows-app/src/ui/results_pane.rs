@@ -192,7 +192,16 @@ fn render_results_pane_body(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let active_tab = ws.controller.tabs.active_tab();
-    let result_snapshot = active_tab.and_then(|id| ws.tab_results.get(&id).cloned());
+    let result_snapshot = active_tab
+        .and_then(|id| ws.tab_results.get(&id).cloned())
+        .or_else(|| {
+            (!ws.controller.last_explain_nodes.is_empty()).then(|| {
+                let mut tmp =
+                    QueryTabResultState::new(active_tab.unwrap_or(dataforge_state::tabs::TabId(0)));
+                tmp.sub_view = ResultPaneSubView::Explain;
+                tmp
+            })
+        });
 
     let Some(res) = result_snapshot else {
         return render_honest_empty_results(ws, cx);
@@ -203,7 +212,12 @@ fn render_results_pane_body(
         || !res.accumulator.result_sets.is_empty()
         || !res.accumulator.notices.is_empty()
         || !res.accumulator.commands_completed.is_empty()
-        || res.accumulator.summary.is_some();
+        || res.accumulator.summary.is_some()
+        || !ws.controller.last_explain_nodes.is_empty()
+        || matches!(
+            res.sub_view,
+            ResultPaneSubView::Explain | ResultPaneSubView::Charts
+        );
 
     if !has_any_output {
         return render_honest_empty_results(ws, cx);
@@ -244,6 +258,8 @@ fn render_results_pane_body(
         }
         ResultPaneSubView::Messages => render_messages_view(&res, ws, cx),
         ResultPaneSubView::Summary => render_summary_view(&res, ws, cx),
+        ResultPaneSubView::Explain => super::explain_view::render_explain_view(ws, window, cx),
+        ResultPaneSubView::Charts => super::charts_view::render_charts_view(ws, window, cx),
     };
 
     div()
@@ -355,6 +371,8 @@ fn render_results_header(
         },
     ));
     tab_items.push(TabItem::new("summary", s.summary));
+    tab_items.push(TabItem::new("explain", s.explain_visual_tab));
+    tab_items.push(TabItem::new("charts", s.charts_tab));
 
     let selected_key: SharedString = match res.sub_view {
         ResultPaneSubView::Results if !res.accumulator.result_sets.is_empty() => {
@@ -365,6 +383,8 @@ fn render_results_header(
         }
         ResultPaneSubView::Results | ResultPaneSubView::Messages => "messages".into(),
         ResultPaneSubView::Summary => "summary".into(),
+        ResultPaneSubView::Explain => "explain".into(),
+        ResultPaneSubView::Charts => "charts".into(),
     };
 
     let entity = cx.entity().clone();
@@ -385,6 +405,10 @@ fn render_results_header(
                     target.sub_view = ResultPaneSubView::Messages;
                 } else if key_str == "summary" {
                     target.sub_view = ResultPaneSubView::Summary;
+                } else if key_str == "explain" {
+                    target.sub_view = ResultPaneSubView::Explain;
+                } else if key_str == "charts" {
+                    target.sub_view = ResultPaneSubView::Charts;
                 }
                 ws.results_ui.selected_cell = None;
                 ws.results_ui.h_scroll_offset_px = 0.0;
