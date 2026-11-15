@@ -50,31 +50,47 @@ jobs:
           -p dataforge-e2e
           -- --check
 
-      - name: Run Clippy (release)
+      - name: Run Clippy (release, all targets)
         run: >
-          cargo clippy --release --no-deps
+          cargo clippy --release --no-deps --all-targets
           -p dataforge-windows-platform
           -p dataforge-state
           -p dataforge-gfx
           -p dataforge-services
           -p dataforge-windows-app
+          -p dataforge-e2e
           -- -D warnings
 
-      - name: Run unit tests (release)
-        run: >
-          cargo test --release
-          -p dataforge-windows-platform
-          -p dataforge-state
-          -p dataforge-services
-          -p dataforge-windows-app
-          --lib
+      - name: Test dataforge-windows-platform (release)
+        run: cargo test --release -p dataforge-windows-platform
 
-      - name: Run app integration tests (release)
+      - name: Test dataforge-state (release)
+        run: cargo test --release -p dataforge-state
+
+      - name: Test dataforge-services (release)
+        run: cargo test --release -p dataforge-services
+
+      - name: Test dataforge-windows-app (unit + integration parity suites)
         run: >
-          cargo test --release
-          -p dataforge-windows-app
+          cargo test --release -p dataforge-windows-app
+          --lib
           --test startup_shell
           --test layout_hit_test
+          --test keyboard_nav
+          --test live_wiring
+          --test app_model_parity
+          --test editor_and_grid_parity
+          --test workbench_parity_tools
+
+      - name: Test dataforge-e2e (self-contained release suites)
+        run: >
+          cargo test --release -p dataforge-e2e
+          --test sqlite_e2e
+          --test duckdb_e2e
+          --test import_e2e
+          --test workflow_e2e
+          --test startup_perf_e2e
+          --test grid_perf_and_interop_e2e
 
       - name: Build release binary
         run: cargo build --release -p dataforge-windows-app
