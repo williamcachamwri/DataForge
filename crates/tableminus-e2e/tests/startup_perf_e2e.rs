@@ -5,13 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use dataforge_e2e::E2eResult;
-use dataforge_gfx::context::{D2dContext, DEFAULT_MEMORY_BUDGET_BYTES, MemoryBudget};
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_state::tabs::{
+use tableminus_e2e::E2eResult;
+use tableminus_gfx::context::{D2dContext, DEFAULT_MEMORY_BUDGET_BYTES, MemoryBudget};
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::tabs::{
     CrashSafeTabPersistence, SessionRestorePlanner, TabConnectionId, TabKind, TabStripModel,
 };
-use dataforge_windows_platform::{AppSettings, is_forwardable_target, storage_paths_for};
+use tableminus_windows_platform::{AppSettings, is_forwardable_target, storage_paths_for};
 
 fn workspace_root() -> E2eResult<PathBuf> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -25,8 +25,8 @@ fn workspace_root() -> E2eResult<PathBuf> {
 #[test]
 fn i18n_locale_catalogs_are_complete_and_non_empty() -> E2eResult<()> {
     let root = workspace_root()?;
-    let app_i18n = fs::read_to_string(root.join("crates/dataforge-windows-app/src/i18n.rs"))?;
-    let svc_diag = fs::read_to_string(root.join("crates/dataforge-services/src/diagnostics.rs"))?;
+    let app_i18n = fs::read_to_string(root.join("crates/tableminus-windows-app/src/i18n.rs"))?;
+    let svc_diag = fs::read_to_string(root.join("crates/tableminus-services/src/diagnostics.rs"))?;
 
     let required_app_fields = [
         "app_title",
@@ -82,17 +82,17 @@ fn crash_report_atomic_write_and_session_recovery() -> E2eResult<()> {
     fs::create_dir_all(&crash_dir)?;
 
     // Verify atomic `.part` -> rename write semantics for crash reports.
-    let target = crash_dir.join("dataforge-crash-test.txt");
-    let part = crash_dir.join("dataforge-crash-test.txt.part");
+    let target = crash_dir.join("tableminus-crash-test.txt");
+    let part = crash_dir.join("tableminus-crash-test.txt.part");
     fs::write(
         &part,
-        "DataForge Crash Report\nVersion: 0.1.0\nMessage: simulated panic\n",
+        "TableMinus Crash Report\nVersion: 0.1.0\nMessage: simulated panic\n",
     )?;
     fs::rename(&part, &target)?;
     assert!(!part.exists());
     assert!(target.exists());
     let body = fs::read_to_string(&target)?;
-    assert!(body.contains("DataForge Crash Report"));
+    assert!(body.contains("TableMinus Crash Report"));
 
     // Verify CrashSafeTabPersistence primary + backup recovery on corruption.
     let primary = temp.path().join("tabs-session.json");
@@ -132,8 +132,8 @@ fn crash_report_atomic_write_and_session_recovery() -> E2eResult<()> {
 #[test]
 fn tracing_logging_init_settings_and_d2d_budget_checks() -> E2eResult<()> {
     let root = workspace_root()?;
-    let diag_src = fs::read_to_string(root.join("crates/dataforge-services/src/diagnostics.rs"))?;
-    let crash_src = fs::read_to_string(root.join("crates/dataforge-windows-app/src/crash.rs"))?;
+    let diag_src = fs::read_to_string(root.join("crates/tableminus-services/src/diagnostics.rs"))?;
+    let crash_src = fs::read_to_string(root.join("crates/tableminus-windows-app/src/crash.rs"))?;
 
     // Verify idempotent tracing subscriber initialization and RUST_LOG fallback exist.
     assert!(diag_src.contains("pub fn init_logging"));
@@ -142,7 +142,7 @@ fn tracing_logging_init_settings_and_d2d_budget_checks() -> E2eResult<()> {
     assert!(crash_src.contains("LOG_INIT.call_once"));
 
     // Verify StoragePaths resolution and AppSettings roundtrip in an isolated temp directory.
-    let paths = storage_paths_for("DataForge-E2E-Test")?;
+    let paths = storage_paths_for("TableMinus-E2E-Test")?;
     assert!(paths.config.ends_with("config"));
     assert!(paths.state.ends_with("state"));
     assert!(paths.data.ends_with("data"));
@@ -177,7 +177,7 @@ fn locate_app_binary(root: &Path) -> Option<(&'static str, PathBuf)> {
         .unwrap_or_else(|| root.join("target"));
 
     for profile in ["release", "debug"] {
-        let candidate = target_dir.join(profile).join("dataforge-windows-app.exe");
+        let candidate = target_dir.join(profile).join("tableminus-windows-app.exe");
         if candidate.is_file() {
             return Some((profile, candidate));
         }
@@ -190,7 +190,7 @@ fn verify_app_binary_startup_and_footprint_if_built() -> E2eResult<()> {
     let root = workspace_root()?;
     let Some((profile, bin_path)) = locate_app_binary(&root) else {
         eprintln!(
-            "startup_perf_e2e: skipping binary startup probe (dataforge-windows-app.exe not built in target/{{release,debug}})"
+            "startup_perf_e2e: skipping binary startup probe (tableminus-windows-app.exe not built in target/{{release,debug}})"
         );
         return Ok(());
     };
