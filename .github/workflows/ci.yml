@@ -42,37 +42,37 @@ jobs:
       - name: Check formatting
         run: >
           cargo fmt
-          -p dataforge-windows-platform
-          -p dataforge-state
-          -p dataforge-gfx
-          -p dataforge-services
-          -p dataforge-windows-app
-          -p dataforge-e2e
+          -p tableminus-windows-platform
+          -p tableminus-state
+          -p tableminus-gfx
+          -p tableminus-services
+          -p tableminus-windows-app
+          -p tableminus-e2e
           -- --check
 
       - name: Run Clippy (release, all targets)
         run: >
           cargo clippy --release --no-deps --all-targets
-          -p dataforge-windows-platform
-          -p dataforge-state
-          -p dataforge-gfx
-          -p dataforge-services
-          -p dataforge-windows-app
-          -p dataforge-e2e
+          -p tableminus-windows-platform
+          -p tableminus-state
+          -p tableminus-gfx
+          -p tableminus-services
+          -p tableminus-windows-app
+          -p tableminus-e2e
           -- -D warnings
 
-      - name: Test dataforge-windows-platform (release)
-        run: cargo test --release -p dataforge-windows-platform
+      - name: Test tableminus-windows-platform (release)
+        run: cargo test --release -p tableminus-windows-platform
 
-      - name: Test dataforge-state (release)
-        run: cargo test --release -p dataforge-state
+      - name: Test tableminus-state (release)
+        run: cargo test --release -p tableminus-state
 
-      - name: Test dataforge-services (release)
-        run: cargo test --release -p dataforge-services
+      - name: Test tableminus-services (release)
+        run: cargo test --release -p tableminus-services
 
-      - name: Test dataforge-windows-app (unit + integration parity suites)
+      - name: Test tableminus-windows-app (unit + integration parity suites)
         run: >
-          cargo test --release -p dataforge-windows-app
+          cargo test --release -p tableminus-windows-app
           --lib
           --test startup_shell
           --test layout_hit_test
@@ -82,9 +82,9 @@ jobs:
           --test editor_and_grid_parity
           --test workbench_parity_tools
 
-      - name: Test dataforge-e2e (self-contained release suites)
+      - name: Test tableminus-e2e (self-contained release suites)
         run: >
-          cargo test --release -p dataforge-e2e
+          cargo test --release -p tableminus-e2e
           --test sqlite_e2e
           --test duckdb_e2e
           --test import_e2e
@@ -93,7 +93,20 @@ jobs:
           --test grid_perf_and_interop_e2e
 
       - name: Build release binary
-        run: cargo build --release -p dataforge-windows-app
+        run: cargo build --release -p tableminus-windows-app
 
       - name: Verify smoke startup
-        run: .\target\release\dataforge.exe --smoke-startup
+        run: .\target\release\tableminus.exe --smoke-startup
+
+      - name: Run screenshot tour
+        continue-on-error: true
+        run: .\crates\tableminus-windows-app\tests\screenshots\run-tour.ps1 -PrepareDesktop
+
+      - name: Upload screenshot tour artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tableminus-screenshots
+          path: target/screenshots/tableminus-screenshots.zip
+          if-no-files-found: warn
+          retention-days: 14
