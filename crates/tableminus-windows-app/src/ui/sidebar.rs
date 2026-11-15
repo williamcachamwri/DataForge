@@ -4,9 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tableminus_state::connection_window::ConnectionWindowPhase;
-use tableminus_state::tabs::TabConnectionId;
-use tableminus_windows_platform::EnvironmentKind;
 use herogpui::components::{
     Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant, Chip,
     ChipLabel, ChipVariant, Color, ContextMenu, Dropdown, DropdownPlacement, Filter, Icon,
@@ -22,6 +19,9 @@ use herogpui::gpui::{
     SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
 };
 use herogpui::theme::{ActiveTheme, SkeletonAnimation};
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::tabs::TabConnectionId;
+use tableminus_windows_platform::EnvironmentKind;
 use tablepro_core::column::ColumnInfo;
 use tablepro_core::meta::{IndexInfo, ObjectInfo, ObjectKind, ObjectScope, TableRef};
 use tablepro_session::{OperationError, OperationKind};
