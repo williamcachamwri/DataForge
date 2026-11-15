@@ -4,7 +4,7 @@
 use std::process::Command;
 use std::sync::Arc;
 
-use dataforge_e2e::{E2eResult, shutdown_session};
+use tableminus_e2e::{E2eResult, shutdown_session};
 use secrecy::SecretString;
 use tablepro_core::credentials::{CredentialInteraction, Credentials};
 use tablepro_core::{
