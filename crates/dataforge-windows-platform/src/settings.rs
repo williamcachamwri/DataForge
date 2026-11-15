@@ -44,6 +44,17 @@ pub enum WindowBackdropPreference {
     MicaAlt,
 }
 
+/// Window title-bar caption button style (traffic lights vs. Windows controls).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowControlsStyle {
+    /// macOS-style traffic-light window controls on the leading edge.
+    #[default]
+    MacOs,
+    /// Native Windows-style minimize/maximize/close caption buttons on the trailing edge.
+    Windows,
+}
+
 /// Deployment environment classification tag assigned to a saved connection.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
@@ -203,6 +214,9 @@ pub struct AppSettings {
     /// Window backdrop blur / Mica preference.
     #[serde(default)]
     pub window_backdrop: WindowBackdropPreference,
+    /// Title-bar window controls style (`mac_os` or `windows`).
+    #[serde(default)]
+    pub window_controls: WindowControlsStyle,
     /// Selected built-in content + syntax theme preset ID (e.g. `builtin.tokyo_night`).
     #[serde(default)]
     pub content_theme_id: Option<String>,
@@ -243,6 +257,7 @@ impl Default for AppSettings {
         Self {
             theme: ThemePreference::default(),
             window_backdrop: WindowBackdropPreference::default(),
+            window_controls: WindowControlsStyle::default(),
             content_theme_id: None,
             syntax_palette_id: None,
             editor_font: EditorFont::default(),
@@ -368,6 +383,7 @@ mod tests {
 
         let loaded = AppSettings::load(&path)?;
         assert_eq!(loaded.theme, ThemePreference::Dark);
+        assert_eq!(loaded.window_controls, WindowControlsStyle::MacOs);
         assert!(!loaded.restore_session);
         assert!(loaded.restore_last_session);
         assert!(loaded.environment_tags.is_empty());
@@ -417,5 +433,42 @@ mod tests {
         assert!(EnvironmentKind::Local < EnvironmentKind::Development);
         assert!(EnvironmentKind::Development < EnvironmentKind::Staging);
         assert!(EnvironmentKind::Staging < EnvironmentKind::Production);
+    }
+
+    #[test]
+    fn window_controls_style_serde_and_backcompat() -> TestResult {
+        assert_eq!(WindowControlsStyle::default(), WindowControlsStyle::MacOs);
+        assert_eq!(
+            serde_json::to_string(&WindowControlsStyle::MacOs)?,
+            "\"mac_os\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WindowControlsStyle::Windows)?,
+            "\"windows\""
+        );
+        assert_eq!(
+            serde_json::from_str::<WindowControlsStyle>("\"mac_os\"")?,
+            WindowControlsStyle::MacOs
+        );
+        assert_eq!(
+            serde_json::from_str::<WindowControlsStyle>("\"windows\"")?,
+            WindowControlsStyle::Windows
+        );
+
+        let dir = TempDir::new()?;
+        let path = dir.path().join("settings.json");
+
+        let settings = AppSettings {
+            window_controls: WindowControlsStyle::Windows,
+            ..AppSettings::default()
+        };
+        settings.save_atomic(&path)?;
+        let loaded = AppSettings::load(&path)?;
+        assert_eq!(loaded.window_controls, WindowControlsStyle::Windows);
+
+        let legacy_json = r#"{ "theme": "light" }"#;
+        let legacy: AppSettings = serde_json::from_str(legacy_json)?;
+        assert_eq!(legacy.window_controls, WindowControlsStyle::MacOs);
+        Ok(())
     }
 }
