@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="crates/dataforge-windows-app/assets/dataforge_logo.png" alt="DataForge Logo" width="112" height="112" />
+<img src="crates/tableminus-windows-app/assets/tableminus_logo.png" alt="TableMinus Logo" width="112" height="112" />
 
-# DataForge
+# TableMinus
 
 **Rust と Direct3D 11 で構築された Windows ネイティブ SQL・データベースワークベンチ。**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/release.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#概要)
 [![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#対応データベース)
@@ -24,9 +24,9 @@
 
 ## 概要
 
-DataForge は Rust で書かれた Windows 向けのネイティブ SQL・データベースワークベンチです。UI 描画には Direct3D 11 上で動く [HeroGPUI](https://github.com/williamcachamwri/DataForge) を採用し、データベース処理にはオープンソースの [TablePro](https://github.com/TableProApp/TablePro) Rust コアを利用しているため、Electron や JVM ランタイムは不要です。
+TableMinus は Rust で書かれた Windows 向けのネイティブ SQL・データベースワークベンチです。UI 描画には Direct3D 11 上で動く [HeroGPUI](https://github.com/williamcachamwri/TableMinus) を採用し、データベース処理にはオープンソースの [TablePro](https://github.com/TableProApp/TablePro) Rust コアを利用しているため、Electron や JVM ランタイムは不要です。
 
-Windows 11 のリリースビルドでは、コールドスタートが約 `10 ms`（9 ドライバ登録込みの `--smoke-startup` 実測値で `9.21` から `10.11 ms`）、`100k` / `500k` / `1M` 行の負荷クエリ実行中でもプロセスのメモリ使用量は `~55 MB` 前後に収まります。`dataforge-e2e` の SQLite テストスイートでは、`100k` 行のグリッド読み込みが `24.43 ms`、`10k` フレームのスクロールが `0.432 ms` で完了します。
+Windows 11 のリリースビルドでは、コールドスタートが約 `10 ms`（9 ドライバ登録込みの `--smoke-startup` 実測値で `9.21` から `10.11 ms`）、`100k` / `500k` / `1M` 行の負荷クエリ実行中でもプロセスのメモリ使用量は `~55 MB` 前後に収まります。`tableminus-e2e` の SQLite テストスイートでは、`100k` 行のグリッド読み込みが `24.43 ms`、`10k` フレームのスクロールが `0.432 ms` で完了します。
 
 ---
 
@@ -34,25 +34,25 @@ Windows 11 のリリースビルドでは、コールドスタートが約 `10 m
 
 ### SQL エディタ、Vim モード、分割結果ペイン（1,000 万行のインデックス付きクエリ `15 ms`）
 
-![DataForge SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
 
 ### 仮想化データグリッド、構造インスペクタ、パラメータ化フィルタ
 
-![DataForge Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
 
 ### スキーマ情報のみを送る AI ドロワー（`Ctrl+Shift+A`）
 
-![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
+![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
 ### インタラクティブ ER 図、外部キーリレーション、SVG エクスポート
 
-![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
 ## 対応データベース
 
-DataForge は 9 種類のデータベースドライバを `dataforge.exe` に直接コンパイルして内蔵しているため、別途 ODBC ドライバやプラグインを入れる必要はありません。
+TableMinus は 9 種類のデータベースドライバを `tableminus.exe` に直接コンパイルして内蔵しているため、別途 ODBC ドライバやプラグインを入れる必要はありません。
 
 | データベース | ドライバ Crate | 備考 |
 | :--- | :--- | :--- |
@@ -92,7 +92,7 @@ AI ドロワー（`Ctrl+Shift+A`）はローカルの Ollama（`http://127.0.0.1
 
 - `list_connections`、`connect`、`list_databases`、`list_schemas`、`list_tables`、`describe_table`、`get_table_ddl`、`browse_table`、`count_rows`、`execute_query`、`export_data`
 
-`execute_query` は各接続の External Clients 設定およびセーフモードに従い、書き込みクエリを実行する前には DataForge 画面上でユーザーの確認を要求します。
+`execute_query` は各接続の External Clients 設定およびセーフモードに従い、書き込みクエリを実行する前には TableMinus 画面上でユーザーの確認を要求します。
 
 ### テーマ、背景マテリアル、多言語対応
 
@@ -102,7 +102,7 @@ Windows 11 ではメインウィンドウに DWM の `Gaussian Blur`、`Mica`、
 
 ### CLI の使い方
 
-`dataforge.exe` は GUI ランチャーとスクリプト向け CLI（`tablepro-cli`）を兼ねています。`.sqlite`、`.db`、`.duckdb`、`.sql` のファイルパスや接続 URL（`postgresql://...`）を渡すと Named Pipe IPC 経由で起動中のウィンドウに開きます（別ウィンドウで開く場合は `-n` / `--new-window` を指定）。
+`tableminus.exe` は GUI ランチャーとスクリプト向け CLI（`tablepro-cli`）を兼ねています。`.sqlite`、`.db`、`.duckdb`、`.sql` のファイルパスや接続 URL（`postgresql://...`）を渡すと Named Pipe IPC 経由で起動中のウィンドウに開きます（別ウィンドウで開く場合は `-n` / `--new-window` を指定）。
 
 主なトップレベルフラグ：
 - `--version`（`-V`） バージョンを表示して終了します。
@@ -113,25 +113,25 @@ Windows 11 ではメインウィンドウに DWM の `Gaussian Blur`、`Mica`、
 
 ```powershell
 # 読み取り専用クエリを実行して JSON Lines で出力
-.\target\release\dataforge.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
+.\target\release\tableminus.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
 
 # テーブルの CREATE TABLE DDL を表示
-.\target\release\dataforge.exe describe -c Staging --ddl users
+.\target\release\tableminus.exe describe -c Staging --ddl users
 ```
 
 ---
 
 ## ダウンロードとインストール
 
-対応 OS は **Windows 10 / Windows 11（x64）** です。ビルド済みバイナリは [GitHub Releases](https://github.com/williamcachamwri/DataForge/releases) で配布しています。
+対応 OS は **Windows 10 / Windows 11（x64）** です。ビルド済みバイナリは [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases) で配布しています。
 
-- **インストーラー（`DataForge-win-Setup.exe`）**: UAC の管理者昇格なしで `%LocalAppData%` にインストールし、スタートメニューとデスクトップにショートカットを作成します。Velopack によるバックグラウンドの差分アップデートに対応しており、設定は **Settings -> About** から変更できます。
-- **ポータブル版（`DataForge-win-Portable.zip`）**: 任意のフォルダに展開して `dataforge.exe` を直接実行でき、インストーラー側の状態を変更しません。
+- **インストーラー（`TableMinus-win-Setup.exe`）**: UAC の管理者昇格なしで `%LocalAppData%` にインストールし、スタートメニューとデスクトップにショートカットを作成します。Velopack によるバックグラウンドの差分アップデートに対応しており、設定は **Settings -> About** から変更できます。
+- **ポータブル版（`TableMinus-win-Portable.zip`）**: 任意のフォルダに展開して `tableminus.exe` を直接実行でき、インストーラー側の状態を変更しません。
 
 各リリースには `SHA256SUMS.txt` が含まれており、PowerShell からハッシュを確認できます。
 
 ```powershell
-Get-FileHash .\DataForge-win-Setup.exe -Algorithm SHA256
+Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
 ```
 
 ---
@@ -178,24 +178,24 @@ SQL エディタのツールバーから Vim ナビゲーション（`NORMAL`、
 ### ビルド・テストコマンド
 
 ```powershell
-# target\release\dataforge.exe をロックしているプロセスがないか確認
-Get-Process dataforge -ErrorAction SilentlyContinue
+# target\release\tableminus.exe をロックしているプロセスがないか確認
+Get-Process tableminus -ErrorAction SilentlyContinue
 
 # release モードでの型チェックとビルド
-cargo check --release -j 1 -p dataforge-windows-app
-cargo build --release -j 1 -p dataforge-windows-app
+cargo check --release -j 1 -p tableminus-windows-app
+cargo build --release -j 1 -p tableminus-windows-app
 
 # ヘッドレス起動チェックの実行とアプリ起動
-.\target\release\dataforge.exe --smoke-startup
-.\target\release\dataforge.exe
+.\target\release\tableminus.exe --smoke-startup
+.\target\release\tableminus.exe
 ```
 
 リリース用テストスイート：
 
 ```powershell
 cargo test --release -j 1 -p tablepro-core filter
-cargo test --release -j 1 -p dataforge-e2e --test startup_perf_e2e -- --nocapture
-cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture
 ```
 
 ### ワークスペース構成
@@ -213,12 +213,12 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 | `core/crates/foreign-import` | `tablepro-foreign-import`: 他の DB クライアントからの接続インポート |
 | `core/crates/account` | `tablepro-account`: アカウントとトークンのトレイト |
 | `core/crates/drivers/*` | 9 データベースドライバ（`postgres`, `mysql`, `sqlite`, `duckdb`, `mssql`, `clickhouse`, `cassandra`, `mongodb`, `redis`） |
-| `crates/dataforge-gfx` | ベクターグリフとデータベースエンジンアイコン |
-| `crates/dataforge-state` | エディタ状態、補完、グリッドモデル、タブ、14 組み込みテーマ |
-| `crates/dataforge-services` | 非同期 Tokio ランタイム、セッション/AI/MCP 制御、多言語診断 |
-| `crates/dataforge-windows-platform` | 設定 JSON、Win32 資格情報マネージャー、DWM・視覚効果軽減ヘルパー |
-| `crates/dataforge-windows-app` | HeroGPUI（Direct3D 11）デスクトップアプリ、Velopack アップデータ、6 言語 |
-| `crates/dataforge-e2e` | SQLite、DuckDB、起動時間、グリッド描画のベンチマーク |
+| `crates/tableminus-gfx` | ベクターグリフとデータベースエンジンアイコン |
+| `crates/tableminus-state` | エディタ状態、補完、グリッドモデル、タブ、14 組み込みテーマ |
+| `crates/tableminus-services` | 非同期 Tokio ランタイム、セッション/AI/MCP 制御、多言語診断 |
+| `crates/tableminus-windows-platform` | 設定 JSON、Win32 資格情報マネージャー、DWM・視覚効果軽減ヘルパー |
+| `crates/tableminus-windows-app` | HeroGPUI（Direct3D 11）デスクトップアプリ、Velopack アップデータ、6 言語 |
+| `crates/tableminus-e2e` | SQLite、DuckDB、起動時間、グリッド描画のベンチマーク |
 
 ---
 
@@ -226,4 +226,4 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 
 バグ報告、機能改善、翻訳修正などのコントリビュートを歓迎します。ビルドや GPUI の制約については [CONTRIBUTING.md](CONTRIBUTING.md)、リリース履歴は [CHANGELOG.md](CHANGELOG.md)、行動規範は [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)、脆弱性の非公開報告手順は [SECURITY.md](SECURITY.md) をご覧ください。
 
-DataForge は [LICENSE](LICENSE)（GNU Affero General Public License v3.0）および [LICENSE-MIT](LICENSE-MIT)（MIT、上流コアである [TableProApp/TablePro](https://github.com/TableProApp/TablePro) への帰属表示を含む）のもとでライセンスされています。
+TableMinus は [LICENSE](LICENSE)（GNU Affero General Public License v3.0）および [LICENSE-MIT](LICENSE-MIT)（MIT、上流コアである [TableProApp/TablePro](https://github.com/TableProApp/TablePro) への帰属表示を含む）のもとでライセンスされています。
