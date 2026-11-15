@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
+
 use dataforge_windows_platform::{
-    AppSettings, EditorFont, FontSpec, McpSettings, ThemePreference, WindowGeometry, WindowsTheme,
-    apps_use_light_theme, detect_reduced_motion, detect_theme, detect_theme_or_default,
-    is_high_contrast, theme_from_flags,
+    AppSettings, EditorFont, EnvironmentKind, FontSpec, McpSettings, ThemePreference,
+    WindowGeometry, WindowsTheme, apps_use_light_theme, detect_reduced_motion, detect_theme,
+    detect_theme_or_default, is_high_contrast, theme_from_flags,
 };
 use tempfile::TempDir;
 
@@ -53,6 +55,8 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
         restore_session: false,
         auto_check_updates: false,
         locale: Some("vi-VN".to_owned()),
+        environment_tags: BTreeMap::from([("prod-db".to_owned(), EnvironmentKind::Production)]),
+        restore_last_session: false,
     };
 
     custom.save_atomic(&path)?;
@@ -96,6 +100,8 @@ fn settings_load_backcompat_defaults_missing_value_font() -> TestResult {
     assert_eq!(loaded.value_font, FontSpec::default());
     assert!(!loaded.restore_session);
     assert!(loaded.auto_check_updates);
+    assert!(loaded.restore_last_session);
+    assert!(loaded.environment_tags.is_empty());
     Ok(())
 }
 
