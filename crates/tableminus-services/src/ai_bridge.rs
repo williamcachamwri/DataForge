@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use dataforge_windows_platform::WindowsCredentialStore;
+use tableminus_windows_platform::WindowsCredentialStore;
 use secrecy::SecretString;
 use tablepro_ai::{
     AiClient, ApiKeyVault, ChatMessage, ChatRequest, Endpoint, QueryLanguage, ReplyEnd, ReplyEvent,
@@ -264,7 +264,7 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_endpoint_allows_local_ollama_without_key() -> Result<(), ServiceError> {
-        let creds = Arc::new(WindowsCredentialStore::new("DataForgeTestAi/"));
+        let creds = Arc::new(WindowsCredentialStore::new("TableMinusTestAi/"));
         let service = AiAssistantService::new(creds)?;
         let endpoint = service
             .resolve_endpoint(&AiEndpointConfig::ollama("qwen2.5-coder"))
