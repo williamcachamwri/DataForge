@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use dataforge_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
-use dataforge_state::tabs::TabConnectionId;
+use tableminus_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
+use tableminus_state::tabs::TabConnectionId;
 use herogpui::components::{Alert, Button, Icon, IconName, IconSize, InputState, SearchField};
 use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::prelude::FluentBuilder as _;
@@ -19,7 +19,7 @@ use tablepro_core::meta::{ObjectInfo, ObjectKind, TableRef};
 
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{ease_out_cubic, ease_out_quint, effective_duration_ms, hairline_border_color};
-use super::{DataForgeWorkspace, TableViewMode};
+use super::{TableMinusWorkspace, TableViewMode};
 use crate::app::ScreenMode;
 
 const MAX_DISPLAYED_RESULTS: usize = 120;
@@ -71,9 +71,9 @@ pub struct MetadataSearchState {
 }
 
 impl MetadataSearchState {
-    /// Creates initial Metadata Search palette state owned by [`DataForgeWorkspace`].
+    /// Creates initial Metadata Search palette state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self {
             open: false,
             closing: false,
@@ -90,7 +90,7 @@ impl MetadataSearchState {
     }
 
     /// Opens the Metadata Search palette and focuses the search input.
-    pub fn open_modal(&mut self, window: &mut Window, cx: &mut Context<DataForgeWorkspace>) {
+    pub fn open_modal(&mut self, window: &mut Window, cx: &mut Context<TableMinusWorkspace>) {
         self.close_task = None;
         self.closing = false;
         if !self.open {
@@ -111,12 +111,12 @@ impl MetadataSearchState {
         self.open = false;
     }
 
-    /// Closes the Metadata Search palette with a 100ms exit transition matching `Cmd+K`.
-    pub fn close_modal_animated(&mut self, cx: &mut Context<DataForgeWorkspace>) {
+    /// Closes the Metadata Search palette with a 140ms exit transition matching `Cmd+K`.
+    pub fn close_modal_animated(&mut self, cx: &mut Context<TableMinusWorkspace>) {
         if !self.open || self.closing {
             return;
         }
-        let exit_ms = effective_duration_ms(100, cx);
+        let exit_ms = effective_duration_ms(140, cx);
         if exit_ms == 0 {
             self.close_modal();
             cx.notify();
@@ -127,9 +127,9 @@ impl MetadataSearchState {
         self.anim_gen = self.anim_gen.wrapping_add(1);
         let expected_gen = self.anim_gen;
         self.close_task = Some(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 cx.background_executor()
-                    .timer(Duration::from_millis(exit_ms))
+                    .timer(Duration::from_millis(exit_ms + 32))
                     .await;
                 let _ = this.update(cx, |ws, cx| {
                     if ws.metadata_search_ui.closing
@@ -149,9 +149,9 @@ impl MetadataSearchState {
 /// Renders the Cmd+K style Metadata Search spotlight overlay above the workspace.
 #[must_use]
 pub fn render_metadata_search_modal(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_open = ws.metadata_search_ui.open;
     let is_closing = ws.metadata_search_ui.closing;
@@ -193,7 +193,7 @@ pub fn render_metadata_search_modal(
 
     let palette = div()
         .id("metadata-search-palette")
-        .w(px(620.0))
+        .w_full()
         .max_w(px(620.0))
         .rounded(px(12.0))
         .border_1()
@@ -237,8 +237,8 @@ pub fn render_metadata_search_modal(
         .child(div().h(px(1.0)).w_full().bg(border))
         .child(render_palette_footer(ws, matches.len(), cx));
 
-    let enter_ms = effective_duration_ms(150, cx);
-    let exit_ms = effective_duration_ms(100, cx);
+    let enter_ms = effective_duration_ms(160, cx);
+    let exit_ms = effective_duration_ms(140, cx);
     let anim_ms = if is_closing { exit_ms } else { enter_ms };
     let animated_palette = wrap_metadata_palette_anim(palette, anim_gen, anim_ms, is_closing);
 
@@ -320,7 +320,7 @@ fn wrap_metadata_backdrop_anim(
         .into_any_element()
 }
 
-fn ensure_columns_cached_once(ws: &mut DataForgeWorkspace, is_connected: bool) {
+fn ensure_columns_cached_once(ws: &mut TableMinusWorkspace, is_connected: bool) {
     if !ws.metadata_search_ui.open || !is_connected {
         return;
     }
@@ -335,7 +335,7 @@ fn ensure_columns_cached_once(ws: &mut DataForgeWorkspace, is_connected: bool) {
     refresh_cached_columns(ws);
 }
 
-fn refresh_cached_columns(ws: &mut DataForgeWorkspace) {
+fn refresh_cached_columns(ws: &mut TableMinusWorkspace) {
     match ws.controller.fetch_all_table_definitions_blocking() {
         Ok(defs) => {
             ws.metadata_search_ui.cached_defs = defs;
@@ -348,9 +348,9 @@ fn refresh_cached_columns(ws: &mut DataForgeWorkspace) {
 }
 
 fn render_search_controls(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let ws_clear = cx.entity().downgrade();
@@ -446,7 +446,7 @@ fn filter_pill(
     label: &'static str,
     kind: MetadataFilterKind,
     active: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let bg = if active {
@@ -485,10 +485,10 @@ fn filter_pill(
 }
 
 fn render_results_container(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
     matches: &[SearchResultEntry],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -578,7 +578,7 @@ fn render_result_row(
     idx: usize,
     is_selected: bool,
     entry: &SearchResultEntry,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let (icon, icon_color, tag_color) = match entry.kind {
@@ -677,7 +677,7 @@ fn render_result_row(
         .into_any_element()
 }
 
-fn render_palette_footer(ws: &DataForgeWorkspace, total: usize, cx: &App) -> AnyElement {
+fn render_palette_footer(ws: &TableMinusWorkspace, total: usize, cx: &App) -> AnyElement {
     let colors = cx.colors();
     let s = &ws.controller.strings;
     let shown = total.min(MAX_DISPLAYED_RESULTS);
@@ -702,10 +702,10 @@ fn render_palette_footer(ws: &DataForgeWorkspace, total: usize, cx: &App) -> Any
 }
 
 fn activate_search_result(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     target_table: Option<&TableRef>,
     qualified_name: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.screen_mode = ScreenMode::Workspace;
     ws.workspace_pane.close_tool();
@@ -730,8 +730,7 @@ fn activate_search_result(
         ws.workspace_pane.sub_view = WorkspaceSubView::SqlEditor;
     }
 
-    ws.metadata_search_ui.close_modal();
-    cx.notify();
+    ws.metadata_search_ui.close_modal_animated(cx);
 }
 
 fn collect_search_results(
