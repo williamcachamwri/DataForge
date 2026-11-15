@@ -13,7 +13,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CAPTUREBLT, CreateCompatibleBitmap,
-    CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC,
+    CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, HDC, ReleaseDC,
     SRCCOPY, SelectObject,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -101,6 +101,14 @@ pub fn start(
                         let path = dir.join(format!("{w}x{h}-{label}.png"));
                         if let Err(err) = capture_window(hwnd, &path) {
                             tracing::error!(error = %err, "screenshot capture failed");
+                            let _ = std::fs::OpenOptions::new()
+                                .create(true)
+                                .append(true)
+                                .open(dir.join("tour.log"))
+                                .and_then(|mut f| {
+                                    use std::io::Write;
+                                    writeln!(f, "{w}x{h}-{label}: {err}")
+                                });
                         }
                     }
                 }
@@ -118,7 +126,13 @@ fn hwnd_of(window: &Window) -> Option<HWND> {
     }
 }
 
+#[link(name = "user32")]
+unsafe extern "system" {
+    fn PrintWindow(hwnd: HWND, hdc_blt: HDC, n_flags: u32) -> i32;
+}
+
 fn capture_window(hwnd: HWND, path: &Path) -> Result<(), String> {
+    const PW_RENDERFULLCONTENT: u32 = 2;
     // SAFETY: GDI calls on handles created and released within this function.
     unsafe {
         let _ = SetForegroundWindow(hwnd);
@@ -132,17 +146,22 @@ fn capture_window(hwnd: HWND, path: &Path) -> Result<(), String> {
         let mem = CreateCompatibleDC(Some(screen));
         let bmp = CreateCompatibleBitmap(screen, w, h);
         let old = SelectObject(mem, bmp.into());
-        let blt = BitBlt(
-            mem,
-            0,
-            0,
-            w,
-            h,
-            Some(screen),
-            rect.left,
-            rect.top,
-            SRCCOPY | CAPTUREBLT,
-        );
+        let ok = if PrintWindow(hwnd, mem, PW_RENDERFULLCONTENT) != 0 {
+            Ok(())
+        } else {
+            BitBlt(
+                mem,
+                0,
+                0,
+                w,
+                h,
+                Some(screen),
+                rect.left,
+                rect.top,
+                SRCCOPY | CAPTUREBLT,
+            )
+            .map_err(|e| e.to_string())
+        };
         let mut info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -169,7 +188,7 @@ fn capture_window(hwnd: HWND, path: &Path) -> Result<(), String> {
         let _ = DeleteObject(bmp.into());
         let _ = DeleteDC(mem);
         ReleaseDC(None, screen);
-        blt.map_err(|e| e.to_string())?;
+        ok?;
         if rows == 0 {
             return Err("GetDIBits returned 0 rows".into());
         }
