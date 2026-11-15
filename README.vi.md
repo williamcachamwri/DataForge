@@ -4,151 +4,151 @@
 
 # TableMinus
 
-**Trình quản lý cơ sở dữ liệu và SQL workbench thuần Rust cho Windows.**
+**TrÃ¬nh quáº£n lÃ½ cÆ¡ sá»Ÿ dá»¯ liá»‡u vÃ  SQL workbench thuáº§n Rust cho Windows.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#tổng-quan)
-[![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#hệ-quản-trị-csdl-được-hỗ-trợ)
-[![Memory](https://img.shields.io/badge/RAM-~55%20MB%20khi%20tải-F59E0B?style=flat-square)](#tổng-quan)
-[![Startup](https://img.shields.io/badge/Khởi%20động-~10%20ms-6366F1?style=flat-square)](#tổng-quan)
-[![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows11&logoColor=white)](#tải-về-và-cài-đặt)
+[![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#tá»•ng-quan)
+[![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#há»‡-quáº£n-trá»‹-csdl-Ä‘Æ°á»£c-há»—-trá»£)
+[![Memory](https://img.shields.io/badge/RAM-~55%20MB%20khi%20táº£i-F59E0B?style=flat-square)](#tá»•ng-quan)
+[![Startup](https://img.shields.io/badge/Khá»Ÿi%20Ä‘á»™ng-~10%20ms-6366F1?style=flat-square)](#tá»•ng-quan)
+[![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows11&logoColor=white)](#táº£i-vá»-vÃ -cÃ i-Ä‘áº·t)
 [![License: MIT / AGPL-3.0](https://img.shields.io/badge/License-MIT%20%2F%20AGPL--3.0-blue?style=flat-square)](LICENSE-MIT)
 
-[English](README.md) · [Tiếng Việt](README.vi.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Español](README.es.md) · [Français](README.fr.md)
+[English](README.md) Â· [Tiáº¿ng Viá»‡t](README.vi.md) Â· [ç®€ä½“ä¸­æ–‡](README.zh-CN.md) Â· [æ—¥æœ¬èªž](README.ja.md) Â· [EspaÃ±ol](README.es.md) Â· [FranÃ§ais](README.fr.md)
 
 </div>
 
 ---
 
-## Tổng quan
+## Tá»•ng quan
 
-TableMinus là ứng dụng SQL và quản lý cơ sở dữ liệu viết bằng Rust dành riêng cho Windows. Giao diện dựng bằng [HeroGPUI](https://github.com/williamcachamwri/TableMinus) trên nền Direct3D 11 và sử dụng lõi Rust mã nguồn mở của [TablePro](https://github.com/TableProApp/TablePro), không chạy qua Electron hay JVM.
+TableMinus lÃ  á»©ng dá»¥ng SQL vÃ  quáº£n lÃ½ cÆ¡ sá»Ÿ dá»¯ liá»‡u viáº¿t báº±ng Rust dÃ nh riÃªng cho Windows. Giao diá»‡n dá»±ng báº±ng [HeroGPUI](https://github.com/williamcachamwri/TableMinus) trÃªn ná»n Direct3D 11 vÃ  sá»­ dá»¥ng lÃµi Rust mÃ£ nguá»“n má»Ÿ cá»§a [TablePro](https://github.com/TableProApp/TablePro), khÃ´ng cháº¡y qua Electron hay JVM.
 
-Trên bản dựng release ở Windows 11, thời gian khởi động lạnh đo được quanh mức `10 ms` (từ `9.21` đến `10.11 ms` qua `--smoke-startup` khi nạp đủ 9 driver), còn bộ nhớ tiến trình giữ ở khoảng `~55 MB` trong các bài kiểm tra tải `100k`, `500k` và `1M` dòng. Trong bộ test SQLite của `tableminus-e2e`, việc nạp `100k` dòng vào bảng lưới mất `24.43 ms` và cuộn `10k` khung hình mất `0.432 ms`.
+TrÃªn báº£n dá»±ng release á»Ÿ Windows 11, thá»i gian khá»Ÿi Ä‘á»™ng láº¡nh Ä‘o Ä‘Æ°á»£c quanh má»©c `10 ms` (tá»« `9.21` Ä‘áº¿n `10.11 ms` qua `--smoke-startup` khi náº¡p Ä‘á»§ 9 driver), cÃ²n bá»™ nhá»› tiáº¿n trÃ¬nh giá»¯ á»Ÿ khoáº£ng `~55 MB` trong cÃ¡c bÃ i kiá»ƒm tra táº£i `100k`, `500k` vÃ  `1M` dÃ²ng. Trong bá»™ test SQLite cá»§a `tableminus-e2e`, viá»‡c náº¡p `100k` dÃ²ng vÃ o báº£ng lÆ°á»›i máº¥t `24.43 ms` vÃ  cuá»™n `10k` khung hÃ¬nh máº¥t `0.432 ms`.
 
 ---
 
-## Ảnh chụp màn hình
+## áº¢nh chá»¥p mÃ n hÃ¬nh
 
-### Trình soạn thảo SQL, biểu đồ trực tiếp và kết quả truy vấn
+### TrÃ¬nh soáº¡n tháº£o SQL, biá»ƒu Ä‘á»“ trá»±c tiáº¿p vÃ  káº¿t quáº£ truy váº¥n
 
 ![TableMinus SQL Editor and Live Charts](docs/screenshots/sql-editor-charts.png)
 
-### Lưới dữ liệu ảo hóa, tổng hợp cột và bộ lọc tham số hóa
+### LÆ°á»›i dá»¯ liá»‡u áº£o hÃ³a, tá»•ng há»£p cá»™t vÃ  bá»™ lá»c tham sá»‘ hÃ³a
 
 ![TableMinus Data Grid view](docs/screenshots/data-grid.png)
 
-### Sơ đồ ER tương tác, quan hệ khóa ngoại và xuất SVG
+### SÆ¡ Ä‘á»“ ER tÆ°Æ¡ng tÃ¡c, quan há»‡ khÃ³a ngoáº¡i vÃ  xuáº¥t SVG
 
 ![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram.png)
 
-### Trình hướng dẫn nhập dữ liệu (CSV, JSON, XLSX) tự động ánh xạ kiểu
+### TrÃ¬nh hÆ°á»›ng dáº«n nháº­p dá»¯ liá»‡u (CSV, JSON, XLSX) tá»± Ä‘á»™ng Ã¡nh xáº¡ kiá»ƒu
 
 ![TableMinus Import Wizard](docs/screenshots/import-wizard.png)
 
-### So sánh Schema & Dữ liệu kèm tóm tắt khác biệt và tạo script đồng bộ
+### So sÃ¡nh Schema & Dá»¯ liá»‡u kÃ¨m tÃ³m táº¯t khÃ¡c biá»‡t vÃ  táº¡o script Ä‘á»“ng bá»™
 
 ![TableMinus Schema and Data Compare](docs/screenshots/data-compare.png)
 
-### Trình tạo dữ liệu giả lập với seed cố định và thứ tự khóa ngoại
+### TrÃ¬nh táº¡o dá»¯ liá»‡u giáº£ láº­p vá»›i seed cá»‘ Ä‘á»‹nh vÃ  thá»© tá»± khÃ³a ngoáº¡i
 
 ![TableMinus Mock Data Generator](docs/screenshots/mock-generator.png)
 
-### Truyền dữ liệu liên cơ sở dữ liệu kèm xem trước DDL trực tiếp
+### Truyá»n dá»¯ liá»‡u liÃªn cÆ¡ sá»Ÿ dá»¯ liá»‡u kÃ¨m xem trÆ°á»›c DDL trá»±c tiáº¿p
 
 ![TableMinus Cross-Engine Data Transfer](docs/screenshots/data-transfer.png)
 
-### Tìm kiếm siêu dữ liệu (`Ctrl+P` / Metadata Search)
+### TÃ¬m kiáº¿m siÃªu dá»¯ liá»‡u (`Ctrl+P` / Metadata Search)
 
 ![TableMinus Metadata Search](docs/screenshots/metadata-search.png)
 
-### Ngăn trợ lý AI chỉ đọc schema (`Ctrl+Shift+A`)
+### NgÄƒn trá»£ lÃ½ AI chá»‰ Ä‘á»c schema (`Ctrl+Shift+A`)
 
-![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
+![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.png)
 
 ---
 
-## Hệ quản trị CSDL được hỗ trợ
+## Há»‡ quáº£n trá»‹ CSDL Ä‘Æ°á»£c há»— trá»£
 
-TableMinus biên dịch sẵn 9 driver vào thẳng tệp `tableminus.exe`, không cần cài thêm ODBC hay plugin ngoài:
+TableMinus biÃªn dá»‹ch sáºµn 9 driver vÃ o tháº³ng tá»‡p `tableminus.exe`, khÃ´ng cáº§n cÃ i thÃªm ODBC hay plugin ngoÃ i:
 
-| Hệ quản trị | Crate driver | Ghi chú |
+| Há»‡ quáº£n trá»‹ | Crate driver | Ghi chÃº |
 | :--- | :--- | :--- |
-| PostgreSQL | `tablepro-driver-postgres` | `tokio-postgres` + `deadpool`, hỗ trợ `COPY IN`, xem schema và DDL |
-| MySQL / MariaDB | `tablepro-driver-mysql` | Hỗ trợ đầy đủ dialect SQL và metadata danh mục |
-| SQLite | `tablepro-driver-sqlite` | Mở trực tiếp tệp `.sqlite` / `.db` qua giao diện, kéo thả hoặc CLI |
-| DuckDB | `tablepro-driver-duckdb` | Đóng gói sẵn DuckDB 2.0 kèm `json` và `parquet` |
-| Microsoft SQL Server | `tablepro-driver-mssql` | TDS 8.0 thuần Rust (`tiberius`) hỗ trợ TLS và nhiều tập kết quả |
-| ClickHouse | `tablepro-driver-clickhouse` | Truy vấn qua HTTP/TLS bằng `hyper-rustls` |
-| Cassandra / ScyllaDB | `tablepro-driver-cassandra` | Driver CQL thuần (`scylla`) chạy trên `rustls` |
-| MongoDB | `tablepro-driver-mongodb` | Truy vấn document, ánh xạ BSON 3 và phân giải DNS seed list |
-| Redis | `tablepro-driver-redis` | Xem key-value và chạy lệnh qua TLS/TCP bất đồng bộ |
+| PostgreSQL | `tablepro-driver-postgres` | `tokio-postgres` + `deadpool`, há»— trá»£ `COPY IN`, xem schema vÃ  DDL |
+| MySQL / MariaDB | `tablepro-driver-mysql` | Há»— trá»£ Ä‘áº§y Ä‘á»§ dialect SQL vÃ  metadata danh má»¥c |
+| SQLite | `tablepro-driver-sqlite` | Má»Ÿ trá»±c tiáº¿p tá»‡p `.sqlite` / `.db` qua giao diá»‡n, kÃ©o tháº£ hoáº·c CLI |
+| DuckDB | `tablepro-driver-duckdb` | ÄÃ³ng gÃ³i sáºµn DuckDB 2.0 kÃ¨m `json` vÃ  `parquet` |
+| Microsoft SQL Server | `tablepro-driver-mssql` | TDS 8.0 thuáº§n Rust (`tiberius`) há»— trá»£ TLS vÃ  nhiá»u táº­p káº¿t quáº£ |
+| ClickHouse | `tablepro-driver-clickhouse` | Truy váº¥n qua HTTP/TLS báº±ng `hyper-rustls` |
+| Cassandra / ScyllaDB | `tablepro-driver-cassandra` | Driver CQL thuáº§n (`scylla`) cháº¡y trÃªn `rustls` |
+| MongoDB | `tablepro-driver-mongodb` | Truy váº¥n document, Ã¡nh xáº¡ BSON 3 vÃ  phÃ¢n giáº£i DNS seed list |
+| Redis | `tablepro-driver-redis` | Xem key-value vÃ  cháº¡y lá»‡nh qua TLS/TCP báº¥t Ä‘á»“ng bá»™ |
 
-Kết nối hỗ trợ SSH tunnel tích hợp sẵn qua `russh` (`tablepro-ssh` với mật khẩu, khóa riêng, hộp thoại nhập passphrase và xác minh host key), TLS qua `rustls` và kho chứng chỉ Windows (`Disable`, `Prefer`, `Require`, `VerifyCA`, `VerifyFull`, hỗ trợ CA riêng và client cert/key), chế độ Safe Mode (`Off`, `ConfirmWrites`, `ReadOnly`), cùng khả năng nhập kết nối đã lưu từ các ứng dụng khác qua `tablepro-foreign-import`.
+Káº¿t ná»‘i há»— trá»£ SSH tunnel tÃ­ch há»£p sáºµn qua `russh` (`tablepro-ssh` vá»›i máº­t kháº©u, khÃ³a riÃªng, há»™p thoáº¡i nháº­p passphrase vÃ  xÃ¡c minh host key), TLS qua `rustls` vÃ  kho chá»©ng chá»‰ Windows (`Disable`, `Prefer`, `Require`, `VerifyCA`, `VerifyFull`, há»— trá»£ CA riÃªng vÃ  client cert/key), cháº¿ Ä‘á»™ Safe Mode (`Off`, `ConfirmWrites`, `ReadOnly`), cÃ¹ng kháº£ nÄƒng nháº­p káº¿t ná»‘i Ä‘Ã£ lÆ°u tá»« cÃ¡c á»©ng dá»¥ng khÃ¡c qua `tablepro-foreign-import`.
 
 ---
 
-## Tính năng
+## TÃ­nh nÄƒng
 
-### Trình soạn thảo SQL và Lưới dữ liệu
+### TrÃ¬nh soáº¡n tháº£o SQL vÃ  LÆ°á»›i dá»¯ liá»‡u
 
-Trình soạn thảo hỗ trợ tô màu cú pháp theo từng dialect (`PostgreSQL`, `MySQL`, `SQLite`, `MsSql` và các hệ khác), tự động gợi ý bảng, cột, schema, từ khóa và mệnh đề SQL (`FROM`, `JOIN`, `INTO`, `UPDATE`), chỉnh sửa đa con trỏ, thư viện truy vấn đã lưu, lịch sử truy vấn và tùy chọn chế độ Vim (`NORMAL`, `INSERT`, `VISUAL`, `COMMAND`).
+TrÃ¬nh soáº¡n tháº£o há»— trá»£ tÃ´ mÃ u cÃº phÃ¡p theo tá»«ng dialect (`PostgreSQL`, `MySQL`, `SQLite`, `MsSql` vÃ  cÃ¡c há»‡ khÃ¡c), tá»± Ä‘á»™ng gá»£i Ã½ báº£ng, cá»™t, schema, tá»« khÃ³a vÃ  má»‡nh Ä‘á» SQL (`FROM`, `JOIN`, `INTO`, `UPDATE`), chá»‰nh sá»­a Ä‘a con trá», thÆ° viá»‡n truy váº¥n Ä‘Ã£ lÆ°u, lá»‹ch sá»­ truy váº¥n vÃ  tÃ¹y chá»n cháº¿ Ä‘á»™ Vim (`NORMAL`, `INSERT`, `VISUAL`, `COMMAND`).
 
-Trong lưới dữ liệu, bạn có thể xem chi tiết bản ghi qua Row Inspector (`Ctrl+I`), chuyển giữa các tab Structure, Columns, Indexes, Foreign Keys và DDL, ghim các cột đầu tối đa 2/3 chiều rộng khung nhìn, ẩn/hiện hoặc kéo giãn cột, và ghép nhiều điều kiện lọc tham số hóa với 11 toán tử (`=`, `!=`, `Contains`, `StartsWith`, `EndsWith`, `<`, `<=`, `>`, `>=`, `IS NULL`, `IS NOT NULL`). Các thao tác sửa ô, thêm dòng (`Alt+Insert`) hay đánh dấu xóa dòng (`Ctrl+Shift+Backspace`) được gom theo lô để kiểm tra trước khi `Commit` (`Ctrl+Shift+S`) hoặc `Rollback` (`Ctrl+Shift+R`).
+Trong lÆ°á»›i dá»¯ liá»‡u, báº¡n cÃ³ thá»ƒ xem chi tiáº¿t báº£n ghi qua Row Inspector (`Ctrl+I`), chuyá»ƒn giá»¯a cÃ¡c tab Structure, Columns, Indexes, Foreign Keys vÃ  DDL, ghim cÃ¡c cá»™t Ä‘áº§u tá»‘i Ä‘a 2/3 chiá»u rá»™ng khung nhÃ¬n, áº©n/hiá»‡n hoáº·c kÃ©o giÃ£n cá»™t, vÃ  ghÃ©p nhiá»u Ä‘iá»u kiá»‡n lá»c tham sá»‘ hÃ³a vá»›i 11 toÃ¡n tá»­ (`=`, `!=`, `Contains`, `StartsWith`, `EndsWith`, `<`, `<=`, `>`, `>=`, `IS NULL`, `IS NOT NULL`). CÃ¡c thao tÃ¡c sá»­a Ã´, thÃªm dÃ²ng (`Alt+Insert`) hay Ä‘Ã¡nh dáº¥u xÃ³a dÃ²ng (`Ctrl+Shift+Backspace`) Ä‘Æ°á»£c gom theo lÃ´ Ä‘á»ƒ kiá»ƒm tra trÆ°á»›c khi `Commit` (`Ctrl+Shift+S`) hoáº·c `Rollback` (`Ctrl+Shift+R`).
 
-Kết quả truy vấn và bảng được xuất qua tệp tạm `.part` để đảm bảo ghi nguyên tử sang CSV (`.csv`), JSON Array (`.json`), JSON Lines (`.jsonl`) hoặc câu lệnh SQL `INSERT` (`.sql`) bằng tổ hợp `Ctrl+Shift+E`. Ngoài ra `tablepro-core` còn có bộ mã hóa TSV, XML và XLSX tiết kiệm bộ nhớ.
+Káº¿t quáº£ truy váº¥n vÃ  báº£ng Ä‘Æ°á»£c xuáº¥t qua tá»‡p táº¡m `.part` Ä‘á»ƒ Ä‘áº£m báº£o ghi nguyÃªn tá»­ sang CSV (`.csv`), JSON Array (`.json`), JSON Lines (`.jsonl`) hoáº·c cÃ¢u lá»‡nh SQL `INSERT` (`.sql`) báº±ng tá»• há»£p `Ctrl+Shift+E`. NgoÃ i ra `tablepro-core` cÃ²n cÃ³ bá»™ mÃ£ hÃ³a TSV, XML vÃ  XLSX tiáº¿t kiá»‡m bá»™ nhá»›.
 
-### Bảo mật và Lưu trữ cục bộ
+### Báº£o máº­t vÃ  LÆ°u trá»¯ cá»¥c bá»™
 
-Mật khẩu cơ sở dữ liệu, khóa SSH, API key AI và Bearer token của MCP được lưu trong Windows Credential Manager (`CredWriteW` / `CredReadW`) và xóa khỏi RAM bằng `zeroize` thay vì ghi dạng văn bản rõ vào tệp cấu hình hay nhật ký. Ở chế độ Safe Mode, kết nối có thể đặt ở mức `ConfirmWrites` hoặc `ReadOnly` để các lệnh `UPDATE`, `DELETE`, `DROP` phải được xác nhận hoặc bị chặn trước khi chạy.
+Máº­t kháº©u cÆ¡ sá»Ÿ dá»¯ liá»‡u, khÃ³a SSH, API key AI vÃ  Bearer token cá»§a MCP Ä‘Æ°á»£c lÆ°u trong Windows Credential Manager (`CredWriteW` / `CredReadW`) vÃ  xÃ³a khá»i RAM báº±ng `zeroize` thay vÃ¬ ghi dáº¡ng vÄƒn báº£n rÃµ vÃ o tá»‡p cáº¥u hÃ¬nh hay nháº­t kÃ½. á»ž cháº¿ Ä‘á»™ Safe Mode, káº¿t ná»‘i cÃ³ thá»ƒ Ä‘áº·t á»Ÿ má»©c `ConfirmWrites` hoáº·c `ReadOnly` Ä‘á»ƒ cÃ¡c lá»‡nh `UPDATE`, `DELETE`, `DROP` pháº£i Ä‘Æ°á»£c xÃ¡c nháº­n hoáº·c bá»‹ cháº·n trÆ°á»›c khi cháº¡y.
 
-### Trợ lý AI và Máy chủ MCP
+### Trá»£ lÃ½ AI vÃ  MÃ¡y chá»§ MCP
 
-Ngăn AI (`Ctrl+Shift+A`) kết nối với Ollama nội bộ (`http://127.0.0.1:11434/v1`), các endpoint tương thích OpenAI, OpenAI hoặc Anthropic. Chỉ thông tin schema (tên bảng, tên cột, kiểu dữ liệu và dialect SQL) được gửi tới mô hình; dữ liệu từng dòng trong bảng luôn nằm lại trên máy.
+NgÄƒn AI (`Ctrl+Shift+A`) káº¿t ná»‘i vá»›i Ollama ná»™i bá»™ (`http://127.0.0.1:11434/v1`), cÃ¡c endpoint tÆ°Æ¡ng thÃ­ch OpenAI, OpenAI hoáº·c Anthropic. Chá»‰ thÃ´ng tin schema (tÃªn báº£ng, tÃªn cá»™t, kiá»ƒu dá»¯ liá»‡u vÃ  dialect SQL) Ä‘Æ°á»£c gá»­i tá»›i mÃ´ hÃ¬nh; dá»¯ liá»‡u tá»«ng dÃ²ng trong báº£ng luÃ´n náº±m láº¡i trÃªn mÃ¡y.
 
-Với các công cụ lập trình hoặc IDE bên ngoài, `tablepro-mcp` chạy một máy chủ MCP HTTP nội bộ trên `127.0.0.1`, xác thực bằng Bearer token trong Windows Credential Manager và kiểm tra tiến trình gọi. Máy chủ cung cấp 11 công cụ:
+Vá»›i cÃ¡c cÃ´ng cá»¥ láº­p trÃ¬nh hoáº·c IDE bÃªn ngoÃ i, `tablepro-mcp` cháº¡y má»™t mÃ¡y chá»§ MCP HTTP ná»™i bá»™ trÃªn `127.0.0.1`, xÃ¡c thá»±c báº±ng Bearer token trong Windows Credential Manager vÃ  kiá»ƒm tra tiáº¿n trÃ¬nh gá»i. MÃ¡y chá»§ cung cáº¥p 11 cÃ´ng cá»¥:
 
 - `list_connections`, `connect`, `list_databases`, `list_schemas`, `list_tables`, `describe_table`, `get_table_ddl`, `browse_table`, `count_rows`, `execute_query`, `export_data`
 
-Công cụ `execute_query` tuân thủ cấu hình External Clients và Safe Mode của từng kết nối, đồng thời yêu cầu người dùng bấm xác nhận ngay trong TableMinus trước khi chạy bất kỳ lệnh ghi nào.
+CÃ´ng cá»¥ `execute_query` tuÃ¢n thá»§ cáº¥u hÃ¬nh External Clients vÃ  Safe Mode cá»§a tá»«ng káº¿t ná»‘i, Ä‘á»“ng thá»i yÃªu cáº§u ngÆ°á»i dÃ¹ng báº¥m xÃ¡c nháº­n ngay trong TableMinus trÆ°á»›c khi cháº¡y báº¥t ká»³ lá»‡nh ghi nÃ o.
 
-### Giao diện, Vật liệu nền và Ngôn ngữ
+### Giao diá»‡n, Váº­t liá»‡u ná»n vÃ  NgÃ´n ngá»¯
 
-TableMinus có sẵn 14 bộ giao diện (`Dark`, `Light`, `High Contrast`, `Gaussian Glass Dark`, `Gaussian Glass Light`, `Tokyo Night`, `Dracula`, `Catppuccin Mocha`, `One Dark Pro`, `Nord`, `Monokai Pro`, `Gruvbox Dark`, `GitHub Light`, `Catppuccin Latte`). Bạn có thể chọn tách biệt giao diện khung ứng dụng và bảng màu mã nguồn, hoặc nhập tệp theme `.json` từ VS Code.
+TableMinus cÃ³ sáºµn 14 bá»™ giao diá»‡n (`Dark`, `Light`, `High Contrast`, `Gaussian Glass Dark`, `Gaussian Glass Light`, `Tokyo Night`, `Dracula`, `Catppuccin Mocha`, `One Dark Pro`, `Nord`, `Monokai Pro`, `Gruvbox Dark`, `GitHub Light`, `Catppuccin Latte`). Báº¡n cÃ³ thá»ƒ chá»n tÃ¡ch biá»‡t giao diá»‡n khung á»©ng dá»¥ng vÃ  báº£ng mÃ u mÃ£ nguá»“n, hoáº·c nháº­p tá»‡p theme `.json` tá»« VS Code.
 
-Trên Windows 11, cửa sổ chính hỗ trợ các vật liệu nền DWM gồm `Gaussian Blur`, `Mica`, `Mica Alt` và `Opaque`, trong khi các lớp nổi (modal, dropdown, toast) luôn giữ nền đục (`1.0` alpha) để chữ không bị nhòe. Tùy chọn Reduced Motion tự đồng bộ theo `SPI_GETCLIENTAREAANIMATION` của Windows để bỏ qua hiệu ứng chuyển động khi hệ thống tắt hoạt ảnh. Toàn bộ nhãn giao diện, menu, hộp thoại và thông báo lỗi từ driver hỗ trợ 6 ngôn ngữ: `en-US`, `vi-VN`, `zh-CN`, `ja-JP`, `es-ES` và `fr-FR`.
+TrÃªn Windows 11, cá»­a sá»• chÃ­nh há»— trá»£ cÃ¡c váº­t liá»‡u ná»n DWM gá»“m `Gaussian Blur`, `Mica`, `Mica Alt` vÃ  `Opaque`, trong khi cÃ¡c lá»›p ná»•i (modal, dropdown, toast) luÃ´n giá»¯ ná»n Ä‘á»¥c (`1.0` alpha) Ä‘á»ƒ chá»¯ khÃ´ng bá»‹ nhÃ²e. TÃ¹y chá»n Reduced Motion tá»± Ä‘á»“ng bá»™ theo `SPI_GETCLIENTAREAANIMATION` cá»§a Windows Ä‘á»ƒ bá» qua hiá»‡u á»©ng chuyá»ƒn Ä‘á»™ng khi há»‡ thá»‘ng táº¯t hoáº¡t áº£nh. ToÃ n bá»™ nhÃ£n giao diá»‡n, menu, há»™p thoáº¡i vÃ  thÃ´ng bÃ¡o lá»—i tá»« driver há»— trá»£ 6 ngÃ´n ngá»¯: `en-US`, `vi-VN`, `zh-CN`, `ja-JP`, `es-ES` vÃ  `fr-FR`.
 
-### Sử dụng qua CLI
+### Sá»­ dá»¥ng qua CLI
 
-`tableminus.exe` vừa khởi chạy giao diện đồ họa vừa đóng vai trò công cụ dòng lệnh (`tablepro-cli`). Khi truyền đường dẫn `.sqlite`, `.db`, `.duckdb`, `.sql` hoặc chuỗi kết nối (`postgresql://...`), tệp sẽ mở ngay trong cửa sổ đang chạy qua Named Pipe IPC (thêm `-n` / `--new-window` nếu muốn mở cửa sổ mới).
+`tableminus.exe` vá»«a khá»Ÿi cháº¡y giao diá»‡n Ä‘á»“ há»a vá»«a Ä‘Ã³ng vai trÃ² cÃ´ng cá»¥ dÃ²ng lá»‡nh (`tablepro-cli`). Khi truyá»n Ä‘Æ°á»ng dáº«n `.sqlite`, `.db`, `.duckdb`, `.sql` hoáº·c chuá»—i káº¿t ná»‘i (`postgresql://...`), tá»‡p sáº½ má»Ÿ ngay trong cá»­a sá»• Ä‘ang cháº¡y qua Named Pipe IPC (thÃªm `-n` / `--new-window` náº¿u muá»‘n má»Ÿ cá»­a sá»• má»›i).
 
-Các cờ cấp ứng dụng:
-- `--version` (`-V`) in phiên bản rồi thoát.
-- `--help` (`-h`) in hướng dẫn sử dụng CLI.
-- `--smoke-startup` chạy kiểm tra thời gian khởi động không giao diện và xác nhận đủ 9 driver.
+CÃ¡c cá» cáº¥p á»©ng dá»¥ng:
+- `--version` (`-V`) in phiÃªn báº£n rá»“i thoÃ¡t.
+- `--help` (`-h`) in hÆ°á»›ng dáº«n sá»­ dá»¥ng CLI.
+- `--smoke-startup` cháº¡y kiá»ƒm tra thá»i gian khá»Ÿi Ä‘á»™ng khÃ´ng giao diá»‡n vÃ  xÃ¡c nháº­n Ä‘á»§ 9 driver.
 
-Các lệnh con: `open`, `query`, `connections`, `databases`, `schemas`, `tables`, `describe`, `export`, `status` và `completion` (`bash`, `zsh`, `fish`), đi kèm các tùy chọn `--format`, `--read-only`, `--limit` và `--timeout`.
+CÃ¡c lá»‡nh con: `open`, `query`, `connections`, `databases`, `schemas`, `tables`, `describe`, `export`, `status` vÃ  `completion` (`bash`, `zsh`, `fish`), Ä‘i kÃ¨m cÃ¡c tÃ¹y chá»n `--format`, `--read-only`, `--limit` vÃ  `--timeout`.
 
 ```powershell
-# Chạy truy vấn chỉ đọc và xuất kết quả dạng JSON Lines
+# Cháº¡y truy váº¥n chá»‰ Ä‘á»c vÃ  xuáº¥t káº¿t quáº£ dáº¡ng JSON Lines
 .\target\release\tableminus.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
 
-# Xem câu lệnh CREATE TABLE DDL của một bảng
+# Xem cÃ¢u lá»‡nh CREATE TABLE DDL cá»§a má»™t báº£ng
 .\target\release\tableminus.exe describe -c Staging --ddl users
 ```
 
 ---
 
-## Tải về và Cài đặt
+## Táº£i vá» vÃ  CÃ i Ä‘áº·t
 
-Yêu cầu **Windows 10 hoặc Windows 11 (x64)**. Các bản dựng sẵn được phát hành tại [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases):
+YÃªu cáº§u **Windows 10 hoáº·c Windows 11 (x64)**. CÃ¡c báº£n dá»±ng sáºµn Ä‘Æ°á»£c phÃ¡t hÃ nh táº¡i [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases):
 
-- **Bộ cài đặt (`TableMinus-win-Setup.exe`)**: Cài vào `%LocalAppData%` kèm lối tắt Start Menu và màn hình nền mà không cần quyền quản trị UAC. Sử dụng Velopack để cập nhật phần sai khác (delta) chạy nền, tùy chỉnh trong **Settings -> About**.
-- **Bản Portable (`TableMinus-win-Portable.zip`)**: Giải nén ra thư mục bất kỳ và chạy thẳng `tableminus.exe` mà không ảnh hưởng trạng thái bộ cài.
+- **Bá»™ cÃ i Ä‘áº·t (`TableMinus-win-Setup.exe`)**: CÃ i vÃ o `%LocalAppData%` kÃ¨m lá»‘i táº¯t Start Menu vÃ  mÃ n hÃ¬nh ná»n mÃ  khÃ´ng cáº§n quyá»n quáº£n trá»‹ UAC. Sá»­ dá»¥ng Velopack Ä‘á»ƒ cáº­p nháº­t pháº§n sai khÃ¡c (delta) cháº¡y ná»n, tÃ¹y chá»‰nh trong **Settings -> About**.
+- **Báº£n Portable (`TableMinus-win-Portable.zip`)**: Giáº£i nÃ©n ra thÆ° má»¥c báº¥t ká»³ vÃ  cháº¡y tháº³ng `tableminus.exe` mÃ  khÃ´ng áº£nh hÆ°á»Ÿng tráº¡ng thÃ¡i bá»™ cÃ i.
 
-Mỗi bản phát hành đều kèm tệp `SHA256SUMS.txt` để đối chiếu bằng PowerShell:
+Má»—i báº£n phÃ¡t hÃ nh Ä‘á»u kÃ¨m tá»‡p `SHA256SUMS.txt` Ä‘á»ƒ Ä‘á»‘i chiáº¿u báº±ng PowerShell:
 
 ```powershell
 Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
@@ -156,61 +156,61 @@ Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
 
 ---
 
-## Phím tắt
+## PhÃ­m táº¯t
 
-| Phím tắt | Thao tác |
+| PhÃ­m táº¯t | Thao tÃ¡c |
 | :--- | :--- |
-| `Ctrl+K` / `Ctrl+Shift+K` / `Ctrl+P` | Mở Bảng lệnh (Command Palette) |
-| `Ctrl+Enter` / `F5` | Chạy truy vấn SQL hiện tại |
-| `Ctrl+Shift+Enter` | Chạy đoạn SQL đang bôi đen |
-| `Shift+Esc` | Hủy truy vấn đang chạy |
-| `Ctrl+S` | Lưu truy vấn vào thư viện |
-| `Ctrl+T` / `Ctrl+W` / `Ctrl+Shift+T` | Tab truy vấn mới / Đóng tab / Mở lại tab vừa đóng |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Chuyển sang tab kế tiếp / trước đó |
-| `Ctrl+F` | Trỏ vào ô lọc thanh đối tượng |
-| `Ctrl+B` | Ẩn/hiện thanh bên đối tượng |
-| `Ctrl+I` | Ẩn/hiện Row Inspector |
-| `Ctrl+Shift+A` | Ẩn/hiện ngăn Trợ lý AI |
-| `Ctrl+Shift+O` | Mở thư viện Kết nối |
-| `Ctrl+,` | Mở Cài đặt |
-| `Ctrl+Shift+M` | Đổi giao diện |
-| `Ctrl+Shift+S` / `Ctrl+Shift+R` | Lưu (`Commit`) / Hoàn tác (`Rollback`) thay đổi trên lưới |
-| `Alt+Insert` / `Ctrl+Shift+Backspace` | Thêm dòng / Xóa các dòng đang chọn trên lưới |
-| `Ctrl+Shift+E` | Xuất kết quả hoặc bảng |
-| `Esc` | Đóng hộp thoại hoặc lớp phủ hiện tại |
+| `Ctrl+K` / `Ctrl+Shift+K` / `Ctrl+P` | Má»Ÿ Báº£ng lá»‡nh (Command Palette) |
+| `Ctrl+Enter` / `F5` | Cháº¡y truy váº¥n SQL hiá»‡n táº¡i |
+| `Ctrl+Shift+Enter` | Cháº¡y Ä‘oáº¡n SQL Ä‘ang bÃ´i Ä‘en |
+| `Shift+Esc` | Há»§y truy váº¥n Ä‘ang cháº¡y |
+| `Ctrl+S` | LÆ°u truy váº¥n vÃ o thÆ° viá»‡n |
+| `Ctrl+T` / `Ctrl+W` / `Ctrl+Shift+T` | Tab truy váº¥n má»›i / ÄÃ³ng tab / Má»Ÿ láº¡i tab vá»«a Ä‘Ã³ng |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Chuyá»ƒn sang tab káº¿ tiáº¿p / trÆ°á»›c Ä‘Ã³ |
+| `Ctrl+F` | Trá» vÃ o Ã´ lá»c thanh Ä‘á»‘i tÆ°á»£ng |
+| `Ctrl+B` | áº¨n/hiá»‡n thanh bÃªn Ä‘á»‘i tÆ°á»£ng |
+| `Ctrl+I` | áº¨n/hiá»‡n Row Inspector |
+| `Ctrl+Shift+A` | áº¨n/hiá»‡n ngÄƒn Trá»£ lÃ½ AI |
+| `Ctrl+Shift+O` | Má»Ÿ thÆ° viá»‡n Káº¿t ná»‘i |
+| `Ctrl+,` | Má»Ÿ CÃ i Ä‘áº·t |
+| `Ctrl+Shift+M` | Äá»•i giao diá»‡n |
+| `Ctrl+Shift+S` / `Ctrl+Shift+R` | LÆ°u (`Commit`) / HoÃ n tÃ¡c (`Rollback`) thay Ä‘á»•i trÃªn lÆ°á»›i |
+| `Alt+Insert` / `Ctrl+Shift+Backspace` | ThÃªm dÃ²ng / XÃ³a cÃ¡c dÃ²ng Ä‘ang chá»n trÃªn lÆ°á»›i |
+| `Ctrl+Shift+E` | Xuáº¥t káº¿t quáº£ hoáº·c báº£ng |
+| `Esc` | ÄÃ³ng há»™p thoáº¡i hoáº·c lá»›p phá»§ hiá»‡n táº¡i |
 
-Chế độ Vim (`NORMAL`, `INSERT`, `VISUAL` và lệnh `:`) có thể bật trực tiếp trên thanh công cụ của trình soạn thảo SQL.
+Cháº¿ Ä‘á»™ Vim (`NORMAL`, `INSERT`, `VISUAL` vÃ  lá»‡nh `:`) cÃ³ thá»ƒ báº­t trá»±c tiáº¿p trÃªn thanh cÃ´ng cá»¥ cá»§a trÃ¬nh soáº¡n tháº£o SQL.
 
 ---
 
-## Tự biên dịch từ mã nguồn
+## Tá»± biÃªn dá»‹ch tá»« mÃ£ nguá»“n
 
-### Yêu cầu môi trường
+### YÃªu cáº§u mÃ´i trÆ°á»ng
 
-- Windows 10 hoặc Windows 11 (x64)
-- Bộ công cụ Rust MSVC ổn định (`x86_64-pc-windows-msvc`, Rust `2024` Edition) qua [rustup](https://rustup.rs/)
-- Visual Studio C++ Build Tools và Windows SDK (cho Win32, Direct3D 11 và các driver C đi kèm)
-- Windows PowerShell (dùng `;` thay cho `&&` khi nối nhiều lệnh)
+- Windows 10 hoáº·c Windows 11 (x64)
+- Bá»™ cÃ´ng cá»¥ Rust MSVC á»•n Ä‘á»‹nh (`x86_64-pc-windows-msvc`, Rust `2024` Edition) qua [rustup](https://rustup.rs/)
+- Visual Studio C++ Build Tools vÃ  Windows SDK (cho Win32, Direct3D 11 vÃ  cÃ¡c driver C Ä‘i kÃ¨m)
+- Windows PowerShell (dÃ¹ng `;` thay cho `&&` khi ná»‘i nhiá»u lá»‡nh)
 
 > [!CAUTION]
-> Luôn biên dịch và chạy test với `--release`. Tránh chạy `cargo build` hay `cargo test` ở chế độ debug thông thường nếu không thực sự cần gỡ lỗi symbol, vì các tệp PDB trong `target\debug` cho toàn bộ workspace và 9 driver có thể vượt quá 140 GB. Dùng thêm `-j 1` trên máy ít RAM.
+> LuÃ´n biÃªn dá»‹ch vÃ  cháº¡y test vá»›i `--release`. TrÃ¡nh cháº¡y `cargo build` hay `cargo test` á»Ÿ cháº¿ Ä‘á»™ debug thÃ´ng thÆ°á»ng náº¿u khÃ´ng thá»±c sá»± cáº§n gá»¡ lá»—i symbol, vÃ¬ cÃ¡c tá»‡p PDB trong `target\debug` cho toÃ n bá»™ workspace vÃ  9 driver cÃ³ thá»ƒ vÆ°á»£t quÃ¡ 140 GB. DÃ¹ng thÃªm `-j 1` trÃªn mÃ¡y Ã­t RAM.
 
-### Lệnh biên dịch và kiểm tra
+### Lá»‡nh biÃªn dá»‹ch vÃ  kiá»ƒm tra
 
 ```powershell
-# Kiểm tra xem có tiến trình tableminus.exe nào đang khóa tệp đầu ra không
+# Kiá»ƒm tra xem cÃ³ tiáº¿n trÃ¬nh tableminus.exe nÃ o Ä‘ang khÃ³a tá»‡p Ä‘áº§u ra khÃ´ng
 Get-Process tableminus -ErrorAction SilentlyContinue
 
-# Kiểm tra kiểu và biên dịch bản release
+# Kiá»ƒm tra kiá»ƒu vÃ  biÃªn dá»‹ch báº£n release
 cargo check --release -j 1 -p tableminus-windows-app
 cargo build --release -j 1 -p tableminus-windows-app
 
-# Chạy kiểm tra khởi động và mở ứng dụng
+# Cháº¡y kiá»ƒm tra khá»Ÿi Ä‘á»™ng vÃ  má»Ÿ á»©ng dá»¥ng
 .\target\release\tableminus.exe --smoke-startup
 .\target\release\tableminus.exe
 ```
 
-Các bộ kiểm thử release:
+CÃ¡c bá»™ kiá»ƒm thá»­ release:
 
 ```powershell
 cargo test --release -j 1 -p tablepro-core filter
@@ -218,32 +218,32 @@ cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocaptu
 cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture
 ```
 
-### Cấu trúc workspace
+### Cáº¥u trÃºc workspace
 
-| Đường dẫn | Vai trò |
+| ÄÆ°á»ng dáº«n | Vai trÃ² |
 | :--- | :--- |
-| `core/crates/core` | `tablepro-core`: mô hình truy vấn, bộ lọc, dialect SQL, bộ xuất tệp |
-| `core/crates/session` | `tablepro-session`: phiên kết nối, connection pool, transaction |
-| `core/crates/cli` | `tablepro-cli`: lệnh con CLI và bộ chạy không giao diện |
-| `core/crates/mcp` | `tablepro-mcp`: máy chủ MCP HTTP nội bộ xác thực bằng token |
-| `core/crates/ai` | `tablepro-ai`: client Ollama, OpenAI và Anthropic chỉ gửi schema |
-| `core/crates/ssh` | `tablepro-ssh`: SSH tunnel tích hợp qua `russh` |
-| `core/crates/net` | `tablepro-net`: TLS `rustls` và xác minh chứng chỉ hệ thống |
-| `core/crates/storage` | `tablepro-storage`: kết nối đã lưu, thư viện truy vấn, lịch sử |
-| `core/crates/foreign-import` | `tablepro-foreign-import`: nhập kết nối từ các trình quản lý DB khác |
-| `core/crates/account` | `tablepro-account`: trait tài khoản và token |
+| `core/crates/core` | `tablepro-core`: mÃ´ hÃ¬nh truy váº¥n, bá»™ lá»c, dialect SQL, bá»™ xuáº¥t tá»‡p |
+| `core/crates/session` | `tablepro-session`: phiÃªn káº¿t ná»‘i, connection pool, transaction |
+| `core/crates/cli` | `tablepro-cli`: lá»‡nh con CLI vÃ  bá»™ cháº¡y khÃ´ng giao diá»‡n |
+| `core/crates/mcp` | `tablepro-mcp`: mÃ¡y chá»§ MCP HTTP ná»™i bá»™ xÃ¡c thá»±c báº±ng token |
+| `core/crates/ai` | `tablepro-ai`: client Ollama, OpenAI vÃ  Anthropic chá»‰ gá»­i schema |
+| `core/crates/ssh` | `tablepro-ssh`: SSH tunnel tÃ­ch há»£p qua `russh` |
+| `core/crates/net` | `tablepro-net`: TLS `rustls` vÃ  xÃ¡c minh chá»©ng chá»‰ há»‡ thá»‘ng |
+| `core/crates/storage` | `tablepro-storage`: káº¿t ná»‘i Ä‘Ã£ lÆ°u, thÆ° viá»‡n truy váº¥n, lá»‹ch sá»­ |
+| `core/crates/foreign-import` | `tablepro-foreign-import`: nháº­p káº¿t ná»‘i tá»« cÃ¡c trÃ¬nh quáº£n lÃ½ DB khÃ¡c |
+| `core/crates/account` | `tablepro-account`: trait tÃ i khoáº£n vÃ  token |
 | `core/crates/drivers/*` | 9 driver CSDL (`postgres`, `mysql`, `sqlite`, `duckdb`, `mssql`, `clickhouse`, `cassandra`, `mongodb`, `redis`) |
-| `crates/tableminus-gfx` | Biểu tượng vector và icon hệ quản trị CSDL |
-| `crates/tableminus-state` | Trạng thái editor, autocomplete, mô hình lưới, tab, 14 bộ giao diện |
-| `crates/tableminus-services` | Runtime Tokio bất đồng bộ, điều phối session/AI/MCP, chẩn đoán lỗi |
-| `crates/tableminus-windows-platform` | Cấu hình JSON, Windows Credential Manager, DWM và Reduced Motion |
-| `crates/tableminus-windows-app` | Ứng dụng HeroGPUI (Direct3D 11), bộ cập nhật Velopack, 6 ngôn ngữ |
-| `crates/tableminus-e2e` | Bộ đo hiệu năng SQLite, DuckDB, khởi động và lưới dữ liệu |
+| `crates/tableminus-gfx` | Biá»ƒu tÆ°á»£ng vector vÃ  icon há»‡ quáº£n trá»‹ CSDL |
+| `crates/tableminus-state` | Tráº¡ng thÃ¡i editor, autocomplete, mÃ´ hÃ¬nh lÆ°á»›i, tab, 14 bá»™ giao diá»‡n |
+| `crates/tableminus-services` | Runtime Tokio báº¥t Ä‘á»“ng bá»™, Ä‘iá»u phá»‘i session/AI/MCP, cháº©n Ä‘oÃ¡n lá»—i |
+| `crates/tableminus-windows-platform` | Cáº¥u hÃ¬nh JSON, Windows Credential Manager, DWM vÃ  Reduced Motion |
+| `crates/tableminus-windows-app` | á»¨ng dá»¥ng HeroGPUI (Direct3D 11), bá»™ cáº­p nháº­t Velopack, 6 ngÃ´n ngá»¯ |
+| `crates/tableminus-e2e` | Bá»™ Ä‘o hiá»‡u nÄƒng SQLite, DuckDB, khá»Ÿi Ä‘á»™ng vÃ  lÆ°á»›i dá»¯ liá»‡u |
 
 ---
 
-## Đóng góp và Giấy phép
+## ÄÃ³ng gÃ³p vÃ  Giáº¥y phÃ©p
 
-Mọi đóng góp mã nguồn, báo lỗi hoặc sửa bản dịch đều được hoan nghênh. Xem [CONTRIBUTING.md](CONTRIBUTING.md) để nắm quy tắc biên dịch và GPUI, [CHANGELOG.md](CHANGELOG.md) cho lịch sử phiên bản, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), và [SECURITY.md](SECURITY.md) khi cần báo cáo lỗ hổng bảo mật riêng tư.
+Má»i Ä‘Ã³ng gÃ³p mÃ£ nguá»“n, bÃ¡o lá»—i hoáº·c sá»­a báº£n dá»‹ch Ä‘á»u Ä‘Æ°á»£c hoan nghÃªnh. Xem [CONTRIBUTING.md](CONTRIBUTING.md) Ä‘á»ƒ náº¯m quy táº¯c biÃªn dá»‹ch vÃ  GPUI, [CHANGELOG.md](CHANGELOG.md) cho lá»‹ch sá»­ phiÃªn báº£n, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), vÃ  [SECURITY.md](SECURITY.md) khi cáº§n bÃ¡o cÃ¡o lá»— há»•ng báº£o máº­t riÃªng tÆ°.
 
-TableMinus được phát hành theo [LICENSE](LICENSE) (GNU Affero General Public License v3.0) và [LICENSE-MIT](LICENSE-MIT) (MIT, kèm ghi nhận phần lõi từ [TableProApp/TablePro](https://github.com/TableProApp/TablePro)).
+TableMinus Ä‘Æ°á»£c phÃ¡t hÃ nh theo [LICENSE](LICENSE) (GNU Affero General Public License v3.0) vÃ  [LICENSE-MIT](LICENSE-MIT) (MIT, kÃ¨m ghi nháº­n pháº§n lÃµi tá»« [TableProApp/TablePro](https://github.com/TableProApp/TablePro)).
