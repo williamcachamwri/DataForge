@@ -1,4 +1,4 @@
-//! Shared error and Win32 helper types for `dataforge-windows-platform`.
+//! Shared error and Win32 helper types for `tableminus-windows-platform`.
 
 use thiserror::Error;
 
