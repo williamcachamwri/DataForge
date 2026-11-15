@@ -40,7 +40,7 @@ pub fn classify_cli_args(args: &[OsString]) -> Dispatch {
 }
 
 /// Host adapter bridging `tablepro_mcp::McpHost` to [`SessionManager`] and UI callbacks.
-pub struct DataForgeMcpHost {
+pub struct TableMinusMcpHost {
     sessions: Arc<RwLock<SessionManager>>,
     approval_handler: Option<WriteApprovalHandler>,
     open_handler: Option<OpenConnectionHandler>,
@@ -48,8 +48,8 @@ pub struct DataForgeMcpHost {
     recorded_history: Mutex<Vec<NewEntry>>,
 }
 
-impl DataForgeMcpHost {
-    /// Creates a new [`DataForgeMcpHost`] backed by `sessions`.
+impl TableMinusMcpHost {
+    /// Creates a new [`TableMinusMcpHost`] backed by `sessions`.
     #[must_use]
     pub fn new(sessions: Arc<RwLock<SessionManager>>) -> Self {
         Self {
@@ -89,7 +89,7 @@ impl DataForgeMcpHost {
 }
 
 #[async_trait]
-impl McpHost for DataForgeMcpHost {
+impl McpHost for TableMinusMcpHost {
     async fn session(&self, id: Uuid) -> Option<Arc<Session>> {
         let guard = self.sessions.read().await;
         guard.session_by_id(id)
@@ -207,14 +207,14 @@ mod tests {
 
     #[test]
     fn classify_cli_args_routes_subcommands_and_gui() {
-        let gui_args = vec![OsString::from("dataforge")];
+        let gui_args = vec![OsString::from("tableminus")];
         assert!(matches!(classify_cli_args(&gui_args), Dispatch::Gui(_)));
 
-        let help_args = vec![OsString::from("dataforge"), OsString::from("--help")];
+        let help_args = vec![OsString::from("tableminus"), OsString::from("--help")];
         assert_eq!(classify_cli_args(&help_args), Dispatch::Command);
 
         let url_args = vec![
-            OsString::from("dataforge"),
+            OsString::from("tableminus"),
             OsString::from("postgres://localhost/db"),
         ];
         assert!(matches!(classify_cli_args(&url_args), Dispatch::Gui(_)));
@@ -224,7 +224,7 @@ mod tests {
     fn mcp_host_defaults_to_closed_and_declines_writes() -> Result<(), ServiceError> {
         let runtime = Arc::new(AppRuntime::new(Some(1))?);
         let sessions = Arc::new(RwLock::new(SessionManager::new(runtime.clone())));
-        let host = DataForgeMcpHost::new(sessions);
+        let host = TableMinusMcpHost::new(sessions);
 
         runtime.block_on(async {
             assert!(host.open_connections().await.is_empty());
@@ -247,7 +247,7 @@ mod tests {
     fn mcp_host_uses_custom_approval_handler() -> Result<(), ServiceError> {
         let runtime = Arc::new(AppRuntime::new(Some(1))?);
         let sessions = Arc::new(RwLock::new(SessionManager::new(runtime.clone())));
-        let host = DataForgeMcpHost::new(sessions).with_approval_handler(Arc::new(|approval| {
+        let host = TableMinusMcpHost::new(sessions).with_approval_handler(Arc::new(|approval| {
             Box::pin(async move { !approval.destructive })
         }));
 
