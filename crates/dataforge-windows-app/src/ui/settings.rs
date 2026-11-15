@@ -27,9 +27,7 @@ use secrecy::ExposeSecret;
 use tablepro_mcp::{DEFAULT_PORT, MCP_PATH, obtain_token, replace_token};
 
 use super::DataForgeWorkspace;
-use super::shell_state::{
-    SettingsSection, ToastSeverity, push_error_toast, push_success_toast, push_toast,
-};
+use super::shell_state::{SettingsSection, push_error_toast, push_success_toast};
 use super::syntax_bridge::styled_sql_block;
 use super::theme::{
     CONTROL_RADIUS_PX, ContentThemePalette, HAIRLINE_BORDER_PX, MICRO_GAP_PX, editor_gpui_font,
@@ -187,6 +185,7 @@ pub struct SettingsScreenState {
     async_task: Option<Task<()>>,
     picker_task: Option<Task<()>>,
     updater_task: Option<Task<()>>,
+    auto_prompted_version: Option<String>,
 }
 
 impl SettingsScreenState {
@@ -224,6 +223,7 @@ impl SettingsScreenState {
             async_task: None,
             picker_task: None,
             updater_task: None,
+            auto_prompted_version: None,
         };
         state.load_mcp_token_async(cx);
         state.start_updater_bridge(cx);
@@ -236,6 +236,9 @@ impl SettingsScreenState {
                 let Ok(rx) = this.update(cx, |ws, cx| {
                     let rx = ws.controller.updater.subscribe();
                     let drained = ws.controller.updater.drain_events();
+                    if drained {
+                        maybe_open_update_modal_on_available(ws);
+                    }
                     if ws.controller.trigger_auto_update_check() || drained {
                         cx.notify();
                     }
@@ -246,21 +249,7 @@ impl SettingsScreenState {
                 while rx.recv().await.is_ok() {
                     let Ok(()) = this.update(cx, |ws, cx| {
                         if ws.controller.updater.drain_events() {
-                            if let UpdateState::Available { version, .. } =
-                                ws.controller.updater.state().clone()
-                            {
-                                let msg = ws
-                                    .controller
-                                    .strings
-                                    .updates_status_available_tpl
-                                    .replace("{version}", &version);
-                                push_toast(
-                                    ToastSeverity::Info,
-                                    ws.controller.strings.updates_toast_available_title,
-                                    Some(SharedString::from(msg)),
-                                    cx,
-                                );
-                            }
+                            maybe_open_update_modal_on_available(ws);
                             cx.notify();
                         }
                     }) else {
@@ -1400,6 +1389,13 @@ fn render_behavior_safety_section(
             persist_settings(ws, cx);
         }));
 
+    let restore_last_session_switch = Switch::new("settings-restore-last-session")
+        .is_selected(ws.controller.settings.restore_last_session)
+        .on_change(cx.listener(|ws, &val: &bool, _w, cx| {
+            ws.controller.settings.restore_last_session = val;
+            persist_settings(ws, cx);
+        }));
+
     let safe_mode_switch = Switch::new("settings-safe-mode")
         .is_selected(ws.controller.safe_mode_enabled)
         .on_change(cx.listener(|ws, &val: &bool, _w, cx| {
@@ -1407,39 +1403,7 @@ fn render_behavior_safety_section(
             cx.notify();
         }));
 
-    let fetch_limit = div()
-        .w(px(156.0))
-        .max_w_full()
-        .flex_shrink_0()
-        .overflow_hidden()
-        .child(
-            NumberField::new(&ws.settings_ui.fetch_limit_state)
-                .full_width(true)
-                .min_value(10.0)
-                .max_value(10_000.0)
-                .step(50.0)
-                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                    ws.controller.grid_model.page.limit = (val.round() as u64).clamp(10, 10_000);
-                    cx.notify();
-                })),
-        );
-
-    let timeout_field = div()
-        .w(px(156.0))
-        .max_w_full()
-        .flex_shrink_0()
-        .overflow_hidden()
-        .child(
-            NumberField::new(&ws.settings_ui.query_timeout_state)
-                .full_width(true)
-                .min_value(5.0)
-                .max_value(600.0)
-                .step(5.0)
-                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
-                    ws.settings_ui.query_timeout_secs = (val.round() as u32).clamp(5, 600);
-                    cx.notify();
-                })),
-        );
+    let (fetch_limit, timeout_field) = render_behavior_number_fields(ws, cx);
 
     Card::new()
         .sx(|c| c.w_full().overflow_hidden())
@@ -1455,6 +1419,13 @@ fn render_behavior_safety_section(
                     s.restore_tabs_label,
                     Some(s.restore_tabs_desc),
                     restore_switch,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    s.settings_restore_session,
+                    Some(s.settings_restore_session_desc),
+                    restore_last_session_switch,
                     cx,
                 ))
                 .child(Separator::new())
@@ -1480,6 +1451,49 @@ fn render_behavior_safety_section(
                 )),
         )
         .into_any_element()
+}
+
+fn render_behavior_number_fields(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> (AnyElement, AnyElement) {
+    let fetch_limit = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.fetch_limit_state)
+                .full_width(true)
+                .min_value(10.0)
+                .max_value(10_000.0)
+                .step(50.0)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.controller.grid_model.page.limit = (val.round() as u64).clamp(10, 10_000);
+                    cx.notify();
+                })),
+        )
+        .into_any_element();
+
+    let timeout_field = div()
+        .w(px(156.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(
+            NumberField::new(&ws.settings_ui.query_timeout_state)
+                .full_width(true)
+                .min_value(5.0)
+                .max_value(600.0)
+                .step(5.0)
+                .on_change(cx.listener(|ws, &val: &f64, _w, cx| {
+                    ws.settings_ui.query_timeout_secs = (val.round() as u32).clamp(5, 600);
+                    cx.notify();
+                })),
+        )
+        .into_any_element();
+
+    (fetch_limit, timeout_field)
 }
 
 fn render_mcp_section(
@@ -2406,6 +2420,15 @@ fn render_release_notes_preview(notes: &str, s: &Strings, cx: &App) -> AnyElemen
         .into_any_element()
 }
 
+fn maybe_open_update_modal_on_available(ws: &mut DataForgeWorkspace) {
+    if let UpdateState::Available { version, .. } = ws.controller.updater.state().clone()
+        && ws.settings_ui.auto_prompted_version.as_deref() != Some(version.as_str())
+    {
+        ws.settings_ui.auto_prompted_version = Some(version);
+        ws.modals_ui.open_update_modal();
+    }
+}
+
 fn render_updates_actions(
     install_mode: InstallMode,
     state: &UpdateState,
@@ -2421,6 +2444,7 @@ fn render_updates_actions(
         .size(HeroSize::Sm)
         .is_disabled(is_standalone || is_checking || is_downloading)
         .on_press(cx.listener(|ws, _, _w, cx| {
+            ws.settings_ui.auto_prompted_version = None;
             ws.controller.check_for_updates();
             cx.notify();
         }))
@@ -2446,6 +2470,34 @@ fn render_updates_actions(
         .gap(px(8.0))
         .child(check_btn);
 
+    if matches!(
+        state,
+        UpdateState::Available { .. }
+            | UpdateState::Downloading { .. }
+            | UpdateState::ReadyToRestart { .. }
+            | UpdateState::Error(_)
+    ) {
+        let modal_btn = Button::new("settings-update-open-modal-btn")
+            .variant(Variant::Secondary)
+            .size(HeroSize::Sm)
+            .on_press(cx.listener(|ws, _, _w, cx| {
+                ws.modals_ui.open_update_modal();
+                cx.notify();
+            }))
+            .child(s.update_modal_title);
+        row = row.child(modal_btn);
+    }
+
+    append_updates_action_cta(row, state, is_downloading, s, cx).into_any_element()
+}
+
+fn append_updates_action_cta(
+    mut row: herogpui::gpui::Div,
+    state: &UpdateState,
+    is_downloading: bool,
+    s: &Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> herogpui::gpui::Div {
     if matches!(state, UpdateState::Available { .. }) || is_downloading {
         let download_btn = Button::new("settings-update-download-btn")
             .variant(Variant::Primary)
@@ -2453,6 +2505,7 @@ fn render_updates_actions(
             .is_disabled(is_downloading)
             .on_press(cx.listener(|ws, _, _w, cx| {
                 ws.controller.download_update();
+                ws.modals_ui.open_update_modal();
                 cx.notify();
             }))
             .child(
@@ -2464,7 +2517,7 @@ fn render_updates_actions(
                     .child(if is_downloading {
                         s.updates_btn_downloading
                     } else {
-                        s.updates_btn_download
+                        s.update_download_install
                     }),
             );
         row = row.child(download_btn);
@@ -2490,12 +2543,12 @@ fn render_updates_actions(
                     .items_center()
                     .gap(px(6.0))
                     .child(Icon::new(IconName::RotateCw).size(IconSize::Xs))
-                    .child(s.updates_btn_restart),
+                    .child(s.update_apply_restart),
             );
         row = row.child(restart_btn);
     }
 
-    row.into_any_element()
+    row
 }
 
 fn diag_kv_row(label: &str, value: &str, cx: &App) -> AnyElement {
