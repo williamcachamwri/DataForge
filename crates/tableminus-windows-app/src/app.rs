@@ -4,24 +4,24 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use dataforge_gfx::Result;
-use dataforge_gfx::context::{D2dContext, RenderSurface};
-use dataforge_gfx::editor_renderer::{
+use tableminus_gfx::Result;
+use tableminus_gfx::context::{D2dContext, RenderSurface};
+use tableminus_gfx::editor_renderer::{
     AutocompletePopup, CursorMode, EditorCursor, EditorLine, EditorSelection, SqlEditorRenderer,
 };
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_gfx::grid_renderer::{DataGridRenderer, GridColumn, GridRow, GridSelection};
-use dataforge_gfx::palette::{ThemeMode, ThemePalette};
-use dataforge_state::connection_window::{
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_gfx::grid_renderer::{DataGridRenderer, GridColumn, GridRow, GridSelection};
+use tableminus_gfx::palette::{ThemeMode, ThemePalette};
+use tableminus_state::connection_window::{
     AttemptToken, ConnectionWindowPhase, ConnectionWindowPhaseMachine, WorkspaceId,
 };
-use dataforge_state::data_grid::{DataGridLayoutScope, DataGridModel, RowID};
-use dataforge_state::library::ConnectionsLibraryModel;
-use dataforge_state::tabs::{
+use tableminus_state::data_grid::{DataGridLayoutScope, DataGridModel, RowID};
+use tableminus_state::library::ConnectionsLibraryModel;
+use tableminus_state::tabs::{
     CloseActionResult, RestoredTabMerge, TabConnectionId, TabId, TabItem, TabKind, TabStripModel,
 };
-use dataforge_state::theme::{ThemeDefinition, ThemeSlot};
-use dataforge_windows_platform::{
+use tableminus_state::theme::{ThemeDefinition, ThemeSlot};
+use tableminus_windows_platform::{
     AppSettings, EnvironmentKind, SavedTabSnapshot, ScheduledTaskRecord, ThemePreference,
     WORKSPACE_SESSION_SCHEMA_VERSION, WindowsTheme, WorkspaceSessionSnapshot,
     detect_theme_or_default, load_workspace_session, save_workspace_session, storage_paths,
@@ -118,7 +118,7 @@ pub struct AppController {
     pub last_test_status: Option<String>,
     pub last_export_status: Option<String>,
     pub scheduled_tasks: Vec<ScheduledTaskRecord>,
-    pub last_explain_nodes: Vec<dataforge_services::ExplainNode>,
+    pub last_explain_nodes: Vec<tableminus_services::ExplainNode>,
     pub grid_pinned_columns: BTreeSet<String>,
     pub restoring_connection_id: Option<String>,
     pub last_width_dip: f32,
@@ -266,7 +266,7 @@ impl AppController {
     pub fn resolve_palette(&self) -> ThemePalette {
         let mut palette = ThemePalette::for_mode(self.effective_theme_mode());
         if let Some(bg) = self.content_theme.colors.get(&ThemeSlot::EditorBackground) {
-            palette.content.bg = dataforge_gfx::palette::Color::from_rgba_hex(
+            palette.content.bg = tableminus_gfx::palette::Color::from_rgba_hex(
                 ((u32::from(bg.r)) << 24)
                     | ((u32::from(bg.g)) << 16)
                     | ((u32::from(bg.b)) << 8)
@@ -288,7 +288,7 @@ impl AppController {
         }
     }
 
-    /// Imports a VS Code or DataForge theme JSON payload.
+    /// Imports a VS Code or TableMinus theme JSON payload.
     pub fn import_vscode_theme(&mut self, bytes: &[u8]) -> std::result::Result<(), String> {
         let (def, outcome) = import_vscode_theme_bytes(bytes)?;
         self.content_theme = def;
@@ -542,7 +542,7 @@ impl AppController {
         target
     }
 
-    /// Renders the complete DataForge shell into `surface`.
+    /// Renders the complete TableMinus shell into `surface`.
     pub fn render_frame(&mut self, ctx: &D2dContext, surface: &mut RenderSurface) -> Result<()> {
         let width = surface.width_dip();
         let height = surface.height_dip();
