@@ -30,7 +30,7 @@ pub use session_state::{
 };
 pub use settings::{
     AppSettings, EditorFont, EnvironmentKind, FontSpec, McpSettings, SETTINGS_FILENAME,
-    ThemePreference, WindowBackdropPreference, WindowGeometry,
+    ThemePreference, WindowBackdropPreference, WindowControlsStyle, WindowGeometry,
 };
 pub use single_instance::{
     DEFAULT_MUTEX_NAME, DEFAULT_PIPE_NAME, ForwardPayload, NamedPipeServer, SingleInstanceLock,
