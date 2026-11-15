@@ -1,6 +1,6 @@
 //! Visual Schema & DDL Designer for creating and altering tables, indexes, and foreign keys.
 
-use dataforge_services::{
+use tableminus_services::{
     AlterTableOp, ColumnSpec, CreateTableSpec, DatabaseEngine, ForeignKeySpec, IndexSpec,
     build_alter_table_sql, build_create_table_sql, split_sql_script_statements,
 };
@@ -22,7 +22,7 @@ use tablepro_core::meta::{ObjectInfo, ObjectKind};
 
 use super::results_pane::format_core_value;
 use super::shell_state::{push_error_toast, push_success_toast};
-use super::{DataForgeWorkspace, syntax_bridge, theme};
+use super::{TableMinusWorkspace, syntax_bridge, theme};
 
 /// Active designer mode (new table creation vs altering an existing table).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -111,9 +111,9 @@ pub struct SchemaDesignerState {
 }
 
 impl SchemaDesignerState {
-    /// Creates initial Schema Designer state owned by [`DataForgeWorkspace`].
+    /// Creates initial Schema Designer state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let table_name = "new_table".to_owned();
         let table_name_input = cx.new(|cx| InputState::with_value(cx, table_name.clone()));
         let mut state = Self {
@@ -225,9 +225,9 @@ impl SchemaDesignerState {
 /// Renders the Visual Schema Designer workbench tool view.
 #[must_use]
 pub fn render_schema_designer(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     maybe_auto_load_alter_target(ws, cx);
     let engine = ws.controller.active_database_engine();
@@ -256,7 +256,7 @@ pub fn render_schema_designer(
         .into_any_element()
 }
 
-fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
     let engine = ws.controller.active_database_engine();
@@ -309,7 +309,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
         .into_any_element()
 }
 
-fn render_toolbar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_toolbar(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let mode = ws.schema_designer_ui.mode;
     let selected_key = SharedString::from(mode.key());
@@ -362,8 +362,8 @@ fn render_toolbar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
 }
 
 fn render_create_table_controls(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .min_w_0()
@@ -396,8 +396,8 @@ fn render_create_table_controls(
 }
 
 fn render_alter_table_controls(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let tables = editable_tables(&ws.controller.cached_objects);
     let items: Vec<PickerItem> = tables
@@ -454,8 +454,8 @@ fn render_alter_table_controls(
 }
 
 fn render_destructive_buttons(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     if ws.schema_designer_ui.mode != SchemaDesignerMode::AlterTable {
@@ -501,8 +501,8 @@ fn render_destructive_buttons(
 }
 
 fn render_confirm_banner(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     let action = ws.schema_designer_ui.confirm_action?;
     let s = &ws.controller.strings;
@@ -586,8 +586,8 @@ fn render_confirm_banner(
 }
 
 fn render_status_alert(
-    ws: &DataForgeWorkspace,
-    _cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    _cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     if let Some(err) = &ws.schema_designer_ui.alter_load_error {
         return Some(
@@ -616,8 +616,8 @@ fn render_status_alert(
 }
 
 fn render_editor_column(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .flex_1()
@@ -647,8 +647,8 @@ fn render_editor_column(
 }
 
 fn render_columns_section(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -690,10 +690,10 @@ fn render_columns_section(
 }
 
 fn render_column_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     idx: usize,
     col: &ColumnDraft,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -767,7 +767,7 @@ fn render_column_remove_button(
     idx: usize,
     col: &ColumnDraft,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let col_id = col.id;
     let is_existing = col.original_name.is_some();
@@ -803,7 +803,7 @@ fn render_column_flags_row(
     col: &ColumnDraft,
     renamed: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let mut row = div()
         .flex()
@@ -892,8 +892,8 @@ fn render_column_flags_row(
 }
 
 fn render_indexes_section(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -937,7 +937,7 @@ fn render_indexes_section(
 fn render_index_row(
     idx: usize,
     item: &IndexDraft,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let item_id = item.id;
@@ -1019,7 +1019,7 @@ fn render_index_row(
         .into_any_element()
 }
 
-fn render_fks_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_fks_section(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
     let mut section = div().flex().flex_col().gap(px(8.0)).child(
@@ -1060,10 +1060,10 @@ fn render_fks_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
 }
 
 fn render_fk_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     idx: usize,
     fk: &FkDraft,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -1149,10 +1149,10 @@ fn render_fk_row(
 }
 
 fn render_preview_column(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     preview_sql: String,
     stmts: Vec<String>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let editor_font = theme::editor_gpui_font(&ws.controller.settings);
@@ -1164,6 +1164,7 @@ fn render_preview_column(
         .w(px(340.0))
         .min_w(px(240.0))
         .max_w(px(390.0))
+        .flex_shrink(1.0)
         .min_h_0()
         .p(px(14.0))
         .flex()
@@ -1235,9 +1236,9 @@ fn render_preview_column(
 }
 
 fn switch_designer_mode(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     mode: SchemaDesignerMode,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.schema_designer_ui.mode = mode;
     ws.schema_designer_ui.confirm_action = None;
@@ -1263,7 +1264,7 @@ fn switch_designer_mode(
     }
 }
 
-fn maybe_auto_load_alter_target(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn maybe_auto_load_alter_target(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     if ws.schema_designer_ui.mode != SchemaDesignerMode::AlterTable {
         return;
     }
@@ -1286,10 +1287,10 @@ fn maybe_auto_load_alter_target(ws: &mut DataForgeWorkspace, cx: &mut Context<Da
 }
 
 fn load_table_into_alter_mode(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     schema: Option<String>,
     table: String,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let key = encode_table_key(schema.as_deref(), &table);
     ws.schema_designer_ui.loaded_alter_key = Some(key);
@@ -1371,7 +1372,7 @@ fn populate_from_definition(state: &mut SchemaDesignerState, def: &TableDefiniti
     }
 }
 
-fn add_empty_column(ws: &mut DataForgeWorkspace, cx: &mut App) {
+fn add_empty_column(ws: &mut TableMinusWorkspace, cx: &mut App) {
     let next_num = ws.schema_designer_ui.columns.len() + 1;
     let draft = ws.schema_designer_ui.make_column_draft(
         ColumnSpec {
@@ -1389,7 +1390,7 @@ fn add_empty_column(ws: &mut DataForgeWorkspace, cx: &mut App) {
     ws.schema_designer_ui.columns.push(draft);
 }
 
-fn add_empty_index(ws: &mut DataForgeWorkspace, cx: &mut App) {
+fn add_empty_index(ws: &mut TableMinusWorkspace, cx: &mut App) {
     let tbl = ws.schema_designer_ui.table_name.trim();
     let idx_num = ws.schema_designer_ui.indexes.len() + 1;
     let first_col = ws
@@ -1418,7 +1419,7 @@ fn add_empty_index(ws: &mut DataForgeWorkspace, cx: &mut App) {
     ws.schema_designer_ui.indexes.push(draft);
 }
 
-fn add_empty_fk(ws: &mut DataForgeWorkspace, cx: &mut App) {
+fn add_empty_fk(ws: &mut TableMinusWorkspace, cx: &mut App) {
     let fk_num = ws.schema_designer_ui.foreign_keys.len() + 1;
     let draft = ws.schema_designer_ui.make_fk_draft(
         ForeignKeySpec {
@@ -1477,7 +1478,7 @@ fn read_fk_spec(fk: &FkDraft, cx: &App) -> ForeignKeySpec {
 }
 
 fn compute_preview_statements(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     engine: DatabaseEngine,
     cx: &App,
 ) -> Vec<String> {
@@ -1577,9 +1578,9 @@ fn collect_alter_ops(state: &SchemaDesignerState, cx: &App) -> Vec<AlterTableOp>
 }
 
 fn execute_ddl_statements(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     stmts: &[String],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let runnable: Vec<String> = stmts
         .iter()
@@ -1614,9 +1615,9 @@ fn execute_ddl_statements(
 }
 
 fn handle_destructive_button(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: DestructiveConfirm,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if ws.schema_designer_ui.confirm_action == Some(action) {
         execute_destructive_action(ws, action, cx);
@@ -1627,9 +1628,9 @@ fn handle_destructive_button(
 }
 
 fn execute_destructive_action(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: DestructiveConfirm,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.schema_designer_ui.confirm_action = None;
     let table = ws.schema_designer_ui.table_name.trim().to_owned();
