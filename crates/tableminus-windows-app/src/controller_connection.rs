@@ -4,11 +4,11 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use secrecy::SecretString;
 use tableminus_gfx::glyphs::EngineKind;
 use tableminus_services::DatabaseEngine;
 use tableminus_services::import_bridge::test_connection;
 use tableminus_state::connection_window::{AttemptToken, ConnectionUnavailableView};
-use secrecy::SecretString;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::column::ResultColumn;
 use tablepro_core::credentials::CredentialInteraction;
