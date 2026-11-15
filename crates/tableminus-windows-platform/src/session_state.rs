@@ -10,7 +10,7 @@ use crate::error::PlatformError;
 use crate::paths::storage_paths;
 use crate::settings::write_bytes_atomic;
 
-/// Convenience result alias for `dataforge-windows-platform` operations.
+/// Convenience result alias for `tableminus-windows-platform` operations.
 pub type PlatformResult<T> = Result<T, PlatformError>;
 
 /// Default filename for persisted workspace session state inside [`StoragePaths::state`].
@@ -469,19 +469,19 @@ mod tests {
     #[test]
     fn storage_path_helpers_use_state_dir() {
         let paths = StoragePaths {
-            config: PathBuf::from(r"C:\tmp\DataForge\config"),
-            state: PathBuf::from(r"C:\tmp\DataForge\state"),
-            data: PathBuf::from(r"C:\tmp\DataForge\data"),
-            cache: PathBuf::from(r"C:\tmp\DataForge\cache"),
-            runtime: PathBuf::from(r"C:\tmp\DataForge\runtime"),
+            config: PathBuf::from(r"C:\tmp\TableMinus\config"),
+            state: PathBuf::from(r"C:\tmp\TableMinus\state"),
+            data: PathBuf::from(r"C:\tmp\TableMinus\data"),
+            cache: PathBuf::from(r"C:\tmp\TableMinus\cache"),
+            runtime: PathBuf::from(r"C:\tmp\TableMinus\runtime"),
         };
         assert_eq!(
             workspace_session_path(&paths),
-            PathBuf::from(r"C:\tmp\DataForge\state\workspace_session.json")
+            PathBuf::from(r"C:\tmp\TableMinus\state\workspace_session.json")
         );
         assert_eq!(
             scheduled_tasks_path(&paths),
-            PathBuf::from(r"C:\tmp\DataForge\state\scheduled_tasks.json")
+            PathBuf::from(r"C:\tmp\TableMinus\state\scheduled_tasks.json")
         );
     }
 }
