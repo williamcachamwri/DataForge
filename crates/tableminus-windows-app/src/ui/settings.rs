@@ -5,8 +5,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use dataforge_state::theme::{ThemeAppearance, ThemeDefinition, ThemeSlot, VsCodeThemeImporter};
-use dataforge_windows_platform::{
+use tableminus_state::theme::{ThemeAppearance, ThemeDefinition, ThemeSlot, VsCodeThemeImporter};
+use tableminus_windows_platform::{
     AppSettings, ThemePreference, WindowBackdropPreference, WindowControlsStyle,
     detect_reduced_motion, storage_paths,
 };
@@ -27,7 +27,7 @@ use herogpui::theme::ActiveTheme;
 use secrecy::ExposeSecret;
 use tablepro_mcp::{DEFAULT_PORT, MCP_PATH, obtain_token, replace_token};
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::{SettingsSection, push_error_toast, push_success_toast};
 use super::syntax_bridge::styled_sql_block;
 use super::theme::{
@@ -39,7 +39,7 @@ use crate::app::ScreenMode;
 use crate::i18n::{Locale, Strings};
 use crate::updater::{InstallMode, UpdateState};
 
-const SAMPLE_PREVIEW_SQL: &str = "-- DataForge Live Theme Preview\n\
+const SAMPLE_PREVIEW_SQL: &str = "-- TableMinus Live Theme Preview\n\
 SELECT u.id, u.email, COALESCE(p.plan, 'free') AS plan_name, NULL AS deleted_at\n\
 FROM users AS u\n\
 LEFT JOIN plans p ON p.user_id = u.id\n\
@@ -190,9 +190,9 @@ pub struct SettingsScreenState {
 }
 
 impl SettingsScreenState {
-    /// Initializes Settings screen state owned by [`DataForgeWorkspace`].
+    /// Initializes Settings screen state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let theme_json_input = cx.new(|cx| InputState::new(cx));
         let editor_size_state = cx.new(|cx| NumberState::new(cx, 13.0));
         let editor_line_height_state = cx.new(|cx| NumberState::new(cx, 1.4));
@@ -231,9 +231,9 @@ impl SettingsScreenState {
         state
     }
 
-    fn start_updater_bridge(&mut self, cx: &mut Context<DataForgeWorkspace>) {
+    fn start_updater_bridge(&mut self, cx: &mut Context<TableMinusWorkspace>) {
         self.updater_task = Some(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 let Ok(rx) = this.update(cx, |ws, cx| {
                     let rx = ws.controller.updater.subscribe();
                     let drained = ws.controller.updater.drain_events();
@@ -261,9 +261,9 @@ impl SettingsScreenState {
         ));
     }
 
-    fn load_mcp_token_async(&mut self, cx: &mut Context<DataForgeWorkspace>) {
+    fn load_mcp_token_async(&mut self, cx: &mut Context<TableMinusWorkspace>) {
         self.async_task = Some(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 let services = this
                     .read_with(cx, |ws, _| ws.controller.services.clone())
                     .ok()
@@ -294,14 +294,14 @@ impl SettingsScreenState {
         &mut self,
         key: String,
         payload: String,
-        cx: &mut Context<DataForgeWorkspace>,
+        cx: &mut Context<TableMinusWorkspace>,
     ) {
         cx.write_to_clipboard(ClipboardItem::new_string(payload));
         self.copied_gen = self.copied_gen.wrapping_add(1);
         let generation = self.copied_gen;
         self.copied_key = Some(key);
         self.copy_reset_task = Some(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 cx.background_executor()
                     .timer(Duration::from_millis(1400))
                     .await;
@@ -317,7 +317,7 @@ impl SettingsScreenState {
     }
 }
 
-fn sync_settings_from_controller(ws: &mut DataForgeWorkspace, cx: &mut App) {
+fn sync_settings_from_controller(ws: &mut TableMinusWorkspace, cx: &mut App) {
     let external_section = ws.settings_view.section;
     if external_section != ws.settings_ui.last_external_section {
         ws.settings_ui.last_external_section = external_section;
@@ -353,9 +353,9 @@ fn sync_settings_from_controller(ws: &mut DataForgeWorkspace, cx: &mut App) {
 /// Renders the full-screen Apple System Settings preferences view.
 #[must_use]
 pub fn render_settings_screen(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     sync_settings_from_controller(ws, cx);
 
@@ -390,7 +390,7 @@ pub fn render_settings_screen(
         .into_any_element()
 }
 
-fn render_top_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_top_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let notice = ws.settings_view.status_notice.clone();
@@ -463,7 +463,7 @@ fn render_sidebar_nav_item(
     active_cat: SettingsCategory,
     strings: &Strings,
     nav_motion: Motion,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let is_active = cat == active_cat;
@@ -562,9 +562,9 @@ fn render_sidebar_nav_item(
 }
 
 fn render_sidebar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     sidebar_width: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let active_cat = ws.settings_ui.active_category;
     let nav_motion = Motion {
@@ -607,9 +607,9 @@ fn render_sidebar(
 }
 
 fn render_category_body(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     layout: SettingsLayoutMetrics,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let scroll_handle = ws.settings_ui.content_scroll.clone();
@@ -778,9 +778,9 @@ fn settings_row(
 }
 
 fn render_appearance_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     columns: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let appearance_card = render_appearance_card(ws, cx);
     let importer_card = render_vscode_theme_import_card(ws, cx);
@@ -788,8 +788,8 @@ fn render_appearance_section(
 }
 
 fn render_window_controls_select(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let key = window_controls_key(ws.controller.settings.window_controls);
@@ -815,8 +815,8 @@ fn render_window_controls_select(
 }
 
 fn render_appearance_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let language_items: Vec<PickerItem> = Locale::ALL
@@ -912,8 +912,8 @@ fn render_appearance_card(
 }
 
 fn render_theme_and_blur_selects(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> (AnyElement, AnyElement, AnyElement) {
     let s = &ws.controller.strings;
     let backdrop_key = backdrop_pref_key(ws.controller.settings.window_backdrop);
@@ -995,7 +995,7 @@ fn render_theme_and_blur_selects(
     (backdrop_select, preset_select, syntax_select)
 }
 
-fn render_vscode_theme_preview(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_vscode_theme_preview(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let sql_preview = div()
@@ -1032,8 +1032,8 @@ fn render_vscode_theme_preview(ws: &DataForgeWorkspace, cx: &App) -> AnyElement 
 }
 
 fn render_vscode_theme_import_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let import_err = ws.settings_ui.theme_json_error.clone();
@@ -1157,9 +1157,9 @@ fn render_26_slot_swatches(palette: &ContentThemePalette, cx: &App) -> AnyElemen
 }
 
 fn render_editor_fonts_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     columns: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let editor_font_card = render_editor_font_card(ws, cx);
     let value_font_card = render_value_font_card(ws, cx);
@@ -1181,8 +1181,8 @@ const EDITOR_FONT_FAMILIES: [&str; 5] = [
 ];
 
 fn render_editor_font_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let spec = &ws.controller.settings.editor_font;
     let family_items: Vec<PickerItem> = EDITOR_FONT_FAMILIES
@@ -1280,8 +1280,8 @@ fn render_editor_font_card(
 }
 
 fn render_value_font_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let spec = &ws.controller.settings.value_font;
     let family_items = vec![
@@ -1358,8 +1358,8 @@ fn render_value_font_card(
 }
 
 fn render_editor_behavior_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let vim_on = ws.controller.vim_mode.is_some();
@@ -1416,8 +1416,8 @@ fn render_editor_behavior_card(
 }
 
 fn render_behavior_safety_section(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let restore_switch = Switch::new("settings-restore-session")
@@ -1492,8 +1492,8 @@ fn render_behavior_safety_section(
 }
 
 fn render_behavior_number_fields(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> (AnyElement, AnyElement) {
     let fetch_limit = div()
         .w(px(156.0))
@@ -1535,9 +1535,9 @@ fn render_behavior_number_fields(
 }
 
 fn render_mcp_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     columns: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let running = ws.controller.is_mcp_server_running();
     let live_addr = ws
@@ -1561,10 +1561,10 @@ fn render_mcp_section(
 }
 
 fn render_mcp_lifecycle_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     running: bool,
     status_label: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let enable_switch = Switch::new("settings-mcp-enable")
         .is_selected(running)
@@ -1639,9 +1639,9 @@ fn render_mcp_lifecycle_card(
 }
 
 fn render_mcp_token_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     has_token: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -1730,9 +1730,9 @@ fn render_mcp_token_row(
 }
 
 fn render_mcp_token_and_snippets_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     endpoint_url: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let raw_token = ws.settings_ui.mcp_token.clone();
@@ -1811,8 +1811,8 @@ fn render_mcp_token_and_snippets_card(
 }
 
 fn render_diagnostics_logs_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -1903,9 +1903,9 @@ fn render_diagnostics_logs_card(
 }
 
 fn render_diagnostics_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     columns: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let engine_ver = if ws.controller.toolbar_status.engine_version.is_empty() {
@@ -1969,7 +1969,7 @@ fn render_about_hero_card(version: &str, strings: &Strings, cx: &App) -> AnyElem
                     .items_center()
                     .gap(px(18.0))
                     .child(
-                        img(ImageSource::Image(crate::branding::dataforge_logo_image()))
+                        img(ImageSource::Image(crate::branding::tableminus_logo_image()))
                             .w(px(64.0))
                             .h(px(64.0))
                             .flex_shrink_0(),
@@ -2021,9 +2021,9 @@ fn render_about_hero_card(version: &str, strings: &Strings, cx: &App) -> AnyElem
 }
 
 fn render_about_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     columns: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let version = env!("CARGO_PKG_VERSION");
@@ -2063,9 +2063,9 @@ fn render_about_section(
 }
 
 fn render_about_runtime_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     version: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let os_arch = format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH);
@@ -2188,9 +2188,9 @@ fn render_about_security_card(s: &Strings, cx: &App) -> AnyElement {
 }
 
 fn render_about_license_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     version: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let license_payload = format!(
@@ -2274,8 +2274,8 @@ fn render_about_license_card(
 }
 
 fn render_about_updates_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let version = env!("CARGO_PKG_VERSION");
@@ -2458,7 +2458,7 @@ fn render_release_notes_preview(notes: &str, s: &Strings, cx: &App) -> AnyElemen
         .into_any_element()
 }
 
-fn maybe_open_update_modal_on_available(ws: &mut DataForgeWorkspace) {
+fn maybe_open_update_modal_on_available(ws: &mut TableMinusWorkspace) {
     if let UpdateState::Available { version, .. } = ws.controller.updater.state().clone()
         && ws.settings_ui.auto_prompted_version.as_deref() != Some(version.as_str())
     {
@@ -2471,7 +2471,7 @@ fn render_updates_actions(
     install_mode: InstallMode,
     state: &UpdateState,
     s: &Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_checking = matches!(state, UpdateState::Checking);
     let is_downloading = matches!(state, UpdateState::Downloading { .. });
@@ -2534,7 +2534,7 @@ fn append_updates_action_cta(
     state: &UpdateState,
     is_downloading: bool,
     s: &Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> herogpui::gpui::Div {
     if matches!(state, UpdateState::Available { .. }) || is_downloading {
         let download_btn = Button::new("settings-update-download-btn")
@@ -2656,7 +2656,7 @@ fn copy_chip_button(
         .into_any_element()
 }
 
-fn persist_settings(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn persist_settings(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     match storage_paths() {
         Ok(paths) => {
             let path = AppSettings::file_path(&paths);
@@ -2684,10 +2684,10 @@ fn persist_settings(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorks
 }
 
 fn apply_theme_preference(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     pref: ThemePreference,
     window: &Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.settings.theme = pref;
     if ws.controller.content_theme.id.is_builtin() {
@@ -2710,10 +2710,10 @@ fn apply_theme_preference(
 }
 
 fn apply_builtin_content_theme(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     id: &str,
     window: &Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let mut base =
         ThemeDefinition::from_builtin_id(id).unwrap_or_else(ThemeDefinition::builtin_dark);
@@ -2740,10 +2740,10 @@ fn apply_builtin_content_theme(
 }
 
 fn apply_window_backdrop(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     backdrop: WindowBackdropPreference,
     window: &Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.settings.window_backdrop = backdrop;
     ws.refresh_theme(window, cx);
@@ -2751,19 +2751,19 @@ fn apply_window_backdrop(
 }
 
 fn apply_window_controls(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     style: WindowControlsStyle,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.settings.window_controls = style;
     persist_settings(ws, cx);
 }
 
 fn apply_syntax_palette(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     id: &str,
     window: &Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if id == "match_theme" {
         ws.controller.settings.syntax_palette_id = None;
@@ -2785,10 +2785,10 @@ fn apply_syntax_palette(
 }
 
 fn apply_imported_theme_bytes(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     bytes: &[u8],
     window: &Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match VsCodeThemeImporter::import_bytes(bytes) {
         Ok(def) => {
@@ -2822,9 +2822,9 @@ fn apply_imported_theme_bytes(
 }
 
 fn browse_vscode_theme_file(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
@@ -2833,7 +2833,7 @@ fn browse_vscode_theme_file(
         prompt: Some(ws.controller.strings.select_vscode_theme_prompt.into()),
     });
     ws.settings_ui.picker_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(paths))) = rx.await else {
                 return;
             };
@@ -2887,9 +2887,9 @@ fn browse_vscode_theme_file(
 }
 
 fn toggle_mcp_with_vault_token(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     enable: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
         push_error_toast(ws.controller.strings.services_unavailable_toast, None, cx);
@@ -2935,11 +2935,11 @@ fn toggle_mcp_with_vault_token(
                 return Err(lock_poisoned_msg.to_owned());
             };
             if !guard.is_running() {
-                *guard = dataforge_services::McpServerController::new(Some(port));
+                *guard = tableminus_services::McpServerController::new(Some(port));
             }
             std::mem::replace(
                 &mut *guard,
-                dataforge_services::McpServerController::new(Some(port)),
+                tableminus_services::McpServerController::new(Some(port)),
             )
         };
         let res = ctrl
@@ -2980,7 +2980,7 @@ fn toggle_mcp_with_vault_token(
     cx.notify();
 }
 
-fn rotate_mcp_token(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn rotate_mcp_token(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let Some(services) = ws.controller.services.clone() else {
         return;
     };
@@ -3015,13 +3015,13 @@ fn resolve_log_dir() -> Option<PathBuf> {
 
 fn build_claude_desktop_snippet(url: &str, token: &str) -> String {
     format!(
-        "{{\n  \"mcpServers\": {{\n    \"dataforge\": {{\n      \"url\": \"{url}\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {token}\"\n      }}\n    }}\n  }}\n}}"
+        "{{\n  \"mcpServers\": {{\n    \"tableminus\": {{\n      \"url\": \"{url}\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {token}\"\n      }}\n    }}\n  }}\n}}"
     )
 }
 
 fn build_cursor_snippet(url: &str, token: &str) -> String {
     format!(
-        "{{\n  \"mcpServers\": {{\n    \"dataforge\": {{\n      \"type\": \"streamable-http\",\n      \"url\": \"{url}\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {token}\"\n      }}\n    }}\n  }}\n}}"
+        "{{\n  \"mcpServers\": {{\n    \"tableminus\": {{\n      \"type\": \"streamable-http\",\n      \"url\": \"{url}\",\n      \"headers\": {{\n        \"Authorization\": \"Bearer {token}\"\n      }}\n    }}\n  }}\n}}"
     )
 }
 
