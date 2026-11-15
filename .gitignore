@@ -50,3 +50,4 @@ __pycache__/
 .analysis/
 .docs/
 /plans/reports
+.vercel/
