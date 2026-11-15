@@ -634,7 +634,7 @@ fn render_new_task_form(
         PickerItem::new("schema_compare", s.compare_schema),
     ];
     let kind_select = Select::new("admin-task-kind", kind_items)
-        .label("Kind")
+        .label(s.admin_kind_label)
         .full_width(true)
         .value(Some(SharedString::from(ws.admin_ui.task_kind.clone())))
         .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _w, cx| {
@@ -674,7 +674,7 @@ fn render_new_task_form(
                 div().flex_1().min_w(px(160.0)).child(
                     Input::new(&ws.admin_ui.task_name_input)
                         .label(s.admin_task_name)
-                        .placeholder("Nightly Vacuum")
+                        .placeholder(s.admin_task_name)
                         .full_width(),
                 ),
             )
@@ -1067,7 +1067,10 @@ fn refresh_users_roles(ws: &mut DataForgeWorkspace) {
     let Some(sql) = users_roles_query(engine) else {
         ws.admin_ui.users_cols.clear();
         ws.admin_ui.users_rows.clear();
-        ws.admin_ui.users_notice = Some(embedded_engine_admin_message(engine));
+        ws.admin_ui.users_notice = Some(embedded_engine_admin_message(
+            engine,
+            &ws.controller.strings,
+        ));
         return;
     };
 
@@ -1094,7 +1097,10 @@ fn refresh_active_sessions(ws: &mut DataForgeWorkspace) {
     let Some(sql) = active_sessions_query(engine) else {
         ws.admin_ui.sessions_cols.clear();
         ws.admin_ui.sessions_rows.clear();
-        ws.admin_ui.sessions_notice = Some(embedded_engine_admin_message(engine));
+        ws.admin_ui.sessions_notice = Some(embedded_engine_admin_message(
+            engine,
+            &ws.controller.strings,
+        ));
         return;
     };
 
@@ -1119,13 +1125,17 @@ fn kill_active_session(
 ) {
     let engine = ws.controller.active_database_engine();
     let title = ws.controller.strings.admin_kill_session;
+    let session_prefix = ws.controller.strings.admin_session_prefix;
+    let failed_label = ws.controller.strings.failed;
     let Some(sql) = kill_session_sql(engine, pid) else {
-        push_error_toast(title, Some(format!("Invalid PID: {pid}").into()), cx);
+        let detail = format!("{failed_label}: {session_prefix} {pid}");
+        push_error_toast(title, Some(detail.into()), cx);
         return;
     };
     match ws.controller.execute_ddl_statements_blocking(&[sql]) {
         Ok(_) => {
-            push_success_toast(title, Some(format!("Session {pid}").into()), cx);
+            let detail = format!("{session_prefix} {pid}");
+            push_success_toast(title, Some(detail.into()), cx);
             refresh_active_sessions(ws);
         }
         Err(err) => {
@@ -1160,8 +1170,9 @@ fn save_new_scheduled_task(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
 
     let interval_minutes = match parse_task_inputs(&name, &sql_or_target, &interval_raw) {
         Ok(mins) => mins,
-        Err(msg) => {
-            ws.admin_ui.task_form_error = Some(msg);
+        Err(()) => {
+            ws.admin_ui.task_form_error =
+                Some(ws.controller.strings.admin_task_validation_err.to_owned());
             cx.notify();
             return;
         }
@@ -1220,18 +1231,13 @@ fn run_task_now_with_toast(
     cx.notify();
 }
 
-fn parse_task_inputs(name: &str, sql_or_target: &str, interval_raw: &str) -> Result<u32, String> {
-    if name.is_empty() {
-        return Err("Task name is required.".to_owned());
+fn parse_task_inputs(name: &str, sql_or_target: &str, interval_raw: &str) -> Result<u32, ()> {
+    if name.is_empty() || sql_or_target.is_empty() {
+        return Err(());
     }
-    if sql_or_target.is_empty() {
-        return Err("SQL or target expression is required.".to_owned());
-    }
-    let mins = interval_raw
-        .parse::<u32>()
-        .map_err(|_| "Interval must be a positive integer (minutes).".to_owned())?;
+    let mins = interval_raw.parse::<u32>().map_err(|_| ())?;
     if mins == 0 {
-        return Err("Interval must be at least 1 minute.".to_owned());
+        return Err(());
     }
     Ok(mins)
 }
@@ -1242,11 +1248,8 @@ fn find_pid_column_index(cols: &[String]) -> usize {
         .unwrap_or(0)
 }
 
-fn embedded_engine_admin_message(engine: DatabaseEngine) -> String {
-    format!(
-        "Embedded/local engine '{}' does not expose server user catalogs or active server sessions.",
-        engine.as_str()
-    )
+fn embedded_engine_admin_message(engine: DatabaseEngine, s: &crate::i18n::Strings) -> String {
+    format!("{} ({})", s.admin_embedded_notice, engine.as_str())
 }
 
 fn format_unix_utc(unix_secs: i64) -> String {
