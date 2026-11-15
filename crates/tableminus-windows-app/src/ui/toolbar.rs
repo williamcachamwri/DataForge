@@ -15,13 +15,13 @@ use herogpui::theme::ActiveTheme;
 use crate::accessibility::KeyCommand;
 use crate::app::{AppController, ScreenMode};
 use crate::views::library::engine_from_driver_id;
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_windows_platform::EnvironmentKind;
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_windows_platform::EnvironmentKind;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::meta::ObjectScope;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::ToastSeverity;
 use super::theme::{
@@ -46,9 +46,9 @@ struct ToolbarActionState {
 /// grid transaction actions, and a real database/schema switcher popover.
 #[must_use]
 pub fn render_toolbar(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let phase = ws
         .controller
@@ -126,7 +126,7 @@ pub fn render_toolbar(
 fn render_left_actions(
     s: &crate::i18n::Strings,
     state: &ToolbarActionState,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .id("toolbar-left-cluster")
@@ -162,7 +162,7 @@ fn render_left_actions(
 fn render_sql_file_group(
     s: &crate::i18n::Strings,
     has_export_rows: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     ButtonGroup::new()
@@ -221,7 +221,7 @@ fn render_sql_file_group(
 fn render_execution_controls(
     s: &crate::i18n::Strings,
     state: &ToolbarActionState,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     if !state.is_connected {
         return render_disconnected_execution(s, state.is_connecting, state.skip_anim, cx);
@@ -239,7 +239,7 @@ fn render_disconnected_execution(
     s: &crate::i18n::Strings,
     is_connecting: bool,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let primary = if is_connecting {
@@ -316,7 +316,7 @@ fn render_connected_execution(
     is_running: bool,
     has_selection: bool,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let run_label = if has_selection {
@@ -406,7 +406,7 @@ fn render_grid_edit_controls(
     has_grid_columns: bool,
     pending_edits: usize,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let can_add_row = is_connected && has_grid_columns;
     let can_commit = is_connected && pending_edits > 0;
@@ -436,7 +436,7 @@ fn render_grid_edit_group(
     s: &crate::i18n::Strings,
     can_add_row: bool,
     pending_edits: usize,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     ButtonGroup::new()
@@ -496,7 +496,7 @@ fn render_commit_badge_button(
     can_commit: bool,
     pending_edits: usize,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let commit_btn = Button::new("toolbar-commit")
@@ -558,7 +558,7 @@ fn render_right_controls(
     controller: &AppController,
     phase: &Option<ConnectionWindowPhase>,
     window: &mut Window,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &controller.strings;
@@ -624,7 +624,7 @@ fn render_right_spinner_chip(id: &'static str, label: &'static str) -> AnyElemen
 fn render_connected_right_controls(
     controller: &AppController,
     window: &mut Window,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let mut right = div()
@@ -687,7 +687,7 @@ fn render_connected_right_controls(
 fn render_db_switcher_popover(
     controller: &AppController,
     window: &mut Window,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let schema_items = build_schema_picker_items(controller);
@@ -757,7 +757,7 @@ fn render_db_switcher_popover(
 
 fn build_db_popover_trigger(
     controller: &AppController,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> Button {
     let colors = cx.colors().clone();
     let db_label = active_db_label(controller);
@@ -817,7 +817,7 @@ fn render_schema_select(
     s: &crate::i18n::Strings,
     schema_items: &[PickerItem],
     selected_schema: Option<String>,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let selected_key = selected_schema
         .map(SharedString::from)
@@ -849,7 +849,7 @@ fn render_schema_select(
 fn render_saved_connections_section(
     s: &crate::i18n::Strings,
     saved: Vec<(String, String, String, EngineKind)>,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let mut section = div().w_full().flex().flex_col().gap(px(4.0)).child(
@@ -928,7 +928,7 @@ fn render_saved_connections_section(
 
 fn render_popover_footer_actions(
     s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .w_full()
@@ -1020,7 +1020,7 @@ fn pending_edit_count(controller: &AppController) -> usize {
     edits.modified_cells.len() + edits.inserted_rows.len() + edits.deleted_rows.len()
 }
 
-fn save_active_tab_query(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn save_active_tab_query(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let default_title = ws.controller.strings.new_query_tab;
     let saved_toast = ws.controller.strings.query_saved_toast;
     let title = ws
@@ -1034,7 +1034,7 @@ fn save_active_tab_query(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForge
     cx.notify();
 }
 
-fn run_active_or_selected_sql(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn run_active_or_selected_sql(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let active_tab = ws.controller.tabs.active_tab();
     if let Some(tab_id) = active_tab {
         ws.ensure_tab_result(tab_id).reset_for_run();
@@ -1063,9 +1063,9 @@ fn run_active_or_selected_sql(ws: &mut DataForgeWorkspace, cx: &mut Context<Data
 }
 
 fn reload_objects_for_scope(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     scope: ObjectScope,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
         return;
