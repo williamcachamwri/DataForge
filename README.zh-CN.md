@@ -4,151 +4,151 @@
 
 # TableMinus
 
-**åŸºäºŽ Rust ä¸Ž Direct3D 11 æž„å»ºçš„ Windows åŽŸç”Ÿ SQL ä¸Žæ•°æ®åº“å·¥ä½œå°ã€‚**
+**基于 Rust 与 Direct3D 11 构建的 Windows 原生 SQL 与数据库工作台。**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#æ¦‚è¿°)
-[![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#æ”¯æŒçš„æ•°æ®åº“)
-[![Memory](https://img.shields.io/badge/RAM-~55%20MB-F59E0B?style=flat-square)](#æ¦‚è¿°)
-[![Startup](https://img.shields.io/badge/å†·å¯åŠ¨-~10%20ms-6366F1?style=flat-square)](#æ¦‚è¿°)
-[![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows11&logoColor=white)](#ä¸‹è½½ä¸Žå®‰è£…)
+[![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#概述)
+[![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#支持的数据库)
+[![Memory](https://img.shields.io/badge/RAM-~55%20MB-F59E0B?style=flat-square)](#概述)
+[![Startup](https://img.shields.io/badge/冷启动-~10%20ms-6366F1?style=flat-square)](#概述)
+[![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows11&logoColor=white)](#下载与安装)
 [![License: MIT / AGPL-3.0](https://img.shields.io/badge/License-MIT%20%2F%20AGPL--3.0-blue?style=flat-square)](LICENSE-MIT)
 
-[English](README.md) Â· [Tiáº¿ng Viá»‡t](README.vi.md) Â· [ç®€ä½“ä¸­æ–‡](README.zh-CN.md) Â· [æ—¥æœ¬èªž](README.ja.md) Â· [EspaÃ±ol](README.es.md) Â· [FranÃ§ais](README.fr.md)
+[English](README.md) · [Tiếng Việt](README.vi.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Español](README.es.md) · [Français](README.fr.md)
 
 </div>
 
 ---
 
-## æ¦‚è¿°
+## 概述
 
-TableMinus æ˜¯ä¸€æ¬¾ç”¨ Rust ç¼–å†™çš„ Windows åŽŸç”Ÿ SQL ä¸Žæ•°æ®åº“å·¥ä½œå°ã€‚ç•Œé¢é€šè¿‡ [HeroGPUI](https://github.com/williamcachamwri/TableMinus) ç›´æŽ¥åœ¨ Direct3D 11 ä¸Šæ¸²æŸ“ï¼Œåº•å±‚åŸºäºŽå¼€æºçš„ [TablePro](https://github.com/TableProApp/TablePro) Rust æ•°æ®åº“å†…æ ¸ï¼Œä¸ä¾èµ– Electron æˆ– JVMã€‚
+TableMinus 是一款用 Rust 编写的 Windows 原生 SQL 与数据库工作台。界面通过 [HeroGPUI](https://github.com/williamcachamwri/TableMinus) 直接在 Direct3D 11 上渲染，底层基于开源的 [TablePro](https://github.com/TableProApp/TablePro) Rust 数据库内核，不依赖 Electron 或 JVM。
 
-åœ¨ Windows 11 çš„ release æž„å»ºä¸­ï¼Œå†·å¯åŠ¨æ—¶é—´çº¦ä¸º `10 ms`ï¼ˆé€šè¿‡ `--smoke-startup` åŠ è½½å…¨éƒ¨ 9 ä¸ªé©±åŠ¨å®žæµ‹ä¸º `9.21` åˆ° `10.11 ms`ï¼‰ï¼›åœ¨ `100k`ã€`500k` å’Œ `1M` è¡ŒåŽ‹åŠ›æŸ¥è¯¢æœŸé—´ï¼Œè¿›ç¨‹å†…å­˜å ç”¨ç¨³å®šåœ¨ `~55 MB` å·¦å³ã€‚åœ¨ `tableminus-e2e` SQLite æµ‹è¯•å¥—ä»¶ä¸­ï¼Œå‘æ•°æ®ç½‘æ ¼åŠ è½½ `100k` è¡Œè€—æ—¶ `24.43 ms`ï¼Œæ»šåŠ¨ `10k` å¸§è€—æ—¶ `0.432 ms`ã€‚
+在 Windows 11 的 release 构建中，冷启动时间约为 `10 ms`（通过 `--smoke-startup` 加载全部 9 个驱动实测为 `9.21` 到 `10.11 ms`）；在 `100k`、`500k` 和 `1M` 行压力查询期间，进程内存占用稳定在 `~55 MB` 左右。在 `tableminus-e2e` SQLite 测试套件中，向数据网格加载 `100k` 行耗时 `24.43 ms`，滚动 `10k` 帧耗时 `0.432 ms`。
 
 ---
 
-## ç•Œé¢æˆªå›¾
+## 界面截图
 
-### SQL ç¼–è¾‘å™¨ã€å®žæ—¶å›¾è¡¨ä¸ŽæŸ¥è¯¢ç»“æžœ
+### SQL 编辑器、实时图表与查询结果
 
 ![TableMinus SQL Editor and Live Charts](docs/screenshots/sql-editor-charts.png)
 
-### è™šæ‹ŸåŒ–æ•°æ®ç½‘æ ¼ã€åˆ—èšåˆç»Ÿè®¡ä¸Žå‚æ•°åŒ–ç­›é€‰
+### 虚拟化数据网格、列聚合统计与参数化筛选
 
 ![TableMinus Data Grid view](docs/screenshots/data-grid.png)
 
-### äº¤äº’å¼ ER å…³ç³»å›¾ã€å¤–é”®è¿žçº¿ä¸Ž SVG å¯¼å‡º
+### 交互式 ER 关系图、外键连线与 SVG 导出
 
 ![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram.png)
 
-### æ•°æ®å¯¼å…¥å‘å¯¼ï¼ˆCSVã€JSONã€XLSXï¼‰ä¸Žè‡ªåŠ¨ç±»åž‹æ˜ å°„
+### 数据导入向导（CSV、JSON、XLSX）与自动类型映射
 
 ![TableMinus Import Wizard](docs/screenshots/import-wizard.png)
 
-### æž¶æž„ä¸Žæ•°æ®å¯¹æ¯”ã€å·®å¼‚æ±‡æ€»ä¸ŽåŒæ­¥è„šæœ¬ç”Ÿæˆ
+### 架构与数据对比、差异汇总与同步脚本生成
 
 ![TableMinus Schema and Data Compare](docs/screenshots/data-compare.png)
 
-### æ¨¡æ‹Ÿæ•°æ®ç”Ÿæˆå™¨ï¼ˆç¡®å®šæ€§ç§å­ä¸Žå¤–é”®æ‹“æ‰‘æŽ’åºï¼‰
+### 模拟数据生成器（确定性种子与外键拓扑排序）
 
 ![TableMinus Mock Data Generator](docs/screenshots/mock-generator.png)
 
-### è·¨å¼•æ“Žæ•°æ®ä¼ è¾“ä¸Žå®žæ—¶ DDL é¢„è§ˆ
+### 跨引擎数据传输与实时 DDL 预览
 
 ![TableMinus Cross-Engine Data Transfer](docs/screenshots/data-transfer.png)
 
-### å…ƒæ•°æ®å…¨å±€æœç´¢é¢æ¿ï¼ˆMetadata Searchï¼‰
+### 元数据全局搜索面板（Metadata Search）
 
 ![TableMinus Metadata Search](docs/screenshots/metadata-search.png)
 
-### ä»…å‘é€ Schema çš„ AI æŠ½å±‰ï¼ˆ`Ctrl+Shift+A`ï¼‰
+### 仅发送 Schema 的 AI 抽屉（`Ctrl+Shift+A`）
 
 ![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.png)
 
 ---
 
-## æ”¯æŒçš„æ•°æ®åº“
+## 支持的数据库
 
-TableMinus å°† 9 ä¸ªæ•°æ®åº“é©±åŠ¨ç›´æŽ¥ç¼–è¯‘è¿› `tableminus.exe`ï¼Œæ— éœ€é¢å¤–é…ç½® ODBC é©±åŠ¨æˆ–æ’ä»¶ï¼š
+TableMinus 将 9 个数据库驱动直接编译进 `tableminus.exe`，无需额外配置 ODBC 驱动或插件：
 
-| æ•°æ®åº“ | é©±åŠ¨ Crate | è¯´æ˜Ž |
+| 数据库 | 驱动 Crate | 说明 |
 | :--- | :--- | :--- |
-| PostgreSQL | `tablepro-driver-postgres` | `tokio-postgres` + `deadpool`ï¼Œæ”¯æŒ `COPY IN`ã€Schema ä¸Ž DDL æŸ¥çœ‹ |
-| MySQL / MariaDB | `tablepro-driver-mysql` | å®Œæ•´ SQL æ–¹è¨€ä¸Žç›®å½•å…ƒæ•°æ®æ”¯æŒ |
-| SQLite | `tablepro-driver-sqlite` | æ”¯æŒç›´æŽ¥æ‰“å¼€ã€æ‹–æ‹½æˆ–é€šè¿‡ CLI åŠ è½½ `.sqlite` / `.db` æœ¬åœ°æ–‡ä»¶ |
-| DuckDB | `tablepro-driver-duckdb` | å†…ç½® DuckDB 2.0ï¼Œé™æ€é“¾æŽ¥ `json` ä¸Ž `parquet` |
-| Microsoft SQL Server | `tablepro-driver-mssql` | çº¯ Rust TDS 8.0ï¼ˆ`tiberius`ï¼‰ï¼Œæ”¯æŒ TLS ä¸Žå¤šç»“æžœé›†æ‰¹å¤„ç† |
-| ClickHouse | `tablepro-driver-clickhouse` | é€šè¿‡ `hyper-rustls` æ‰§è¡Œ HTTP/TLS æŸ¥è¯¢ |
-| Cassandra / ScyllaDB | `tablepro-driver-cassandra` | åŸºäºŽ `rustls` çš„åŽŸç”Ÿ CQL é©±åŠ¨ï¼ˆ`scylla`ï¼‰ |
-| MongoDB | `tablepro-driver-mongodb` | æ–‡æ¡£æŸ¥è¯¢ã€BSON 3 æ˜ å°„ä¸Ž DNS ç§å­åˆ—è¡¨è§£æž |
-| Redis | `tablepro-driver-redis` | åŸºäºŽå¼‚æ­¥ TLS/TCP çš„é”®å€¼æŸ¥çœ‹ä¸Žå‘½ä»¤æ‰§è¡Œ |
+| PostgreSQL | `tablepro-driver-postgres` | `tokio-postgres` + `deadpool`，支持 `COPY IN`、Schema 与 DDL 查看 |
+| MySQL / MariaDB | `tablepro-driver-mysql` | 完整 SQL 方言与目录元数据支持 |
+| SQLite | `tablepro-driver-sqlite` | 支持直接打开、拖拽或通过 CLI 加载 `.sqlite` / `.db` 本地文件 |
+| DuckDB | `tablepro-driver-duckdb` | 内置 DuckDB 2.0，静态链接 `json` 与 `parquet` |
+| Microsoft SQL Server | `tablepro-driver-mssql` | 纯 Rust TDS 8.0（`tiberius`），支持 TLS 与多结果集批处理 |
+| ClickHouse | `tablepro-driver-clickhouse` | 通过 `hyper-rustls` 执行 HTTP/TLS 查询 |
+| Cassandra / ScyllaDB | `tablepro-driver-cassandra` | 基于 `rustls` 的原生 CQL 驱动（`scylla`） |
+| MongoDB | `tablepro-driver-mongodb` | 文档查询、BSON 3 映射与 DNS 种子列表解析 |
+| Redis | `tablepro-driver-redis` | 基于异步 TLS/TCP 的键值查看与命令执行 |
 
-è¿žæŽ¥å±‚å†…ç½®åŸºäºŽ `russh` çš„è¿›ç¨‹å†… SSH éš§é“ï¼ˆ`tablepro-ssh`ï¼Œæ”¯æŒå¯†ç ã€ç§é’¥ã€å£ä»¤å¼¹çª—ä¸Žä¸»æœºå¯†é’¥æ ¡éªŒï¼‰ã€åŸºäºŽ `rustls` ä¸Ž Windows è¯ä¹¦å­˜å‚¨çš„ TLSï¼ˆ`Disable`ã€`Prefer`ã€`Require`ã€`VerifyCA`ã€`VerifyFull`ï¼Œæ”¯æŒè‡ªå®šä¹‰ CA ä¸Žå®¢æˆ·ç«¯è¯ä¹¦/ç§é’¥ï¼‰ã€å®‰å…¨æ¨¡å¼ç­–ç•¥ï¼ˆ`Off`ã€`ConfirmWrites`ã€`ReadOnly`ï¼‰ï¼Œä»¥åŠé€šè¿‡ `tablepro-foreign-import` ä»Žå…¶ä»–æ•°æ®åº“å®¢æˆ·ç«¯å¯¼å…¥å·²ä¿å­˜çš„è¿žæŽ¥ã€‚
+连接层内置基于 `russh` 的进程内 SSH 隧道（`tablepro-ssh`，支持密码、私钥、口令弹窗与主机密钥校验）、基于 `rustls` 与 Windows 证书存储的 TLS（`Disable`、`Prefer`、`Require`、`VerifyCA`、`VerifyFull`，支持自定义 CA 与客户端证书/私钥）、安全模式策略（`Off`、`ConfirmWrites`、`ReadOnly`），以及通过 `tablepro-foreign-import` 从其他数据库客户端导入已保存的连接。
 
 ---
 
-## åŠŸèƒ½ç‰¹æ€§
+## 功能特性
 
-### SQL ç¼–è¾‘å™¨ä¸Žæ•°æ®ç½‘æ ¼
+### SQL 编辑器与数据网格
 
-ç¼–è¾‘å™¨æ”¯æŒæŒ‰æ–¹è¨€åŒºåˆ†çš„è¯­æ³•é«˜äº®ï¼ˆ`PostgreSQL`ã€`MySQL`ã€`SQLite`ã€`MsSql` ç­‰ï¼‰ã€è¡¨/åˆ—/Schema/å…³é”®å­—ä¸Ž SQL å­å¥ï¼ˆ`FROM`ã€`JOIN`ã€`INTO`ã€`UPDATE`ï¼‰è‡ªåŠ¨è¡¥å…¨ã€å¤šå…‰æ ‡ç¼–è¾‘ã€å·²ä¿å­˜æŸ¥è¯¢åº“ã€æŒä¹…åŒ–æŸ¥è¯¢åŽ†å²ï¼Œä»¥åŠå¯é€‰çš„ Vim æ¨¡å¼ï¼ˆ`NORMAL`ã€`INSERT`ã€`VISUAL`ã€`COMMAND`ï¼‰ã€‚
+编辑器支持按方言区分的语法高亮（`PostgreSQL`、`MySQL`、`SQLite`、`MsSql` 等）、表/列/Schema/关键字与 SQL 子句（`FROM`、`JOIN`、`INTO`、`UPDATE`）自动补全、多光标编辑、已保存查询库、持久化查询历史，以及可选的 Vim 模式（`NORMAL`、`INSERT`、`VISUAL`、`COMMAND`）。
 
-åœ¨æ•°æ®ç½‘æ ¼ä¸­ï¼Œå¯ä»¥é€šè¿‡åœé çš„ Row Inspectorï¼ˆ`Ctrl+I`ï¼‰æŸ¥çœ‹è¡Œè¯¦æƒ…ï¼Œåˆ‡æ¢ Structureã€Columnsã€Indexesã€Foreign Keys ä¸Ž DDL æ ‡ç­¾é¡µï¼Œå›ºå®šå‰å¯¼åˆ—ï¼ˆæœ€å¤šå è§†å£å®½åº¦çš„ 2/3ï¼‰ï¼Œè°ƒæ•´æˆ–éšè—åˆ—ï¼Œå¹¶å åŠ  11 ç§å‚æ•°åŒ–è¿‡æ»¤æ“ä½œç¬¦ï¼ˆ`=`ã€`!=`ã€`Contains`ã€`StartsWith`ã€`EndsWith`ã€`&lt;`ã€`&lt;=`ã€`&gt;`ã€`&gt;=`ã€`IS NULL`ã€`IS NOT NULL`ï¼‰ã€‚å•å…ƒæ ¼ä¿®æ”¹ã€æ’å…¥è¡Œï¼ˆ`Alt+Insert`ï¼‰å’Œåˆ é™¤è¡Œï¼ˆ`Ctrl+Shift+Backspace`ï¼‰ä¼šå…ˆæš‚å­˜ä¸ºæ‰¹æ¬¡ï¼Œå¾…ç¡®è®¤åŽå†æ‰§è¡Œ `Commit`ï¼ˆ`Ctrl+Shift+S`ï¼‰æˆ– `Rollback`ï¼ˆ`Ctrl+Shift+R`ï¼‰ã€‚
+在数据网格中，可以通过停靠的 Row Inspector（`Ctrl+I`）查看行详情，切换 Structure、Columns、Indexes、Foreign Keys 与 DDL 标签页，固定前导列（最多占视口宽度的 2/3），调整或隐藏列，并叠加 11 种参数化过滤操作符（`=`、`!=`、`Contains`、`StartsWith`、`EndsWith`、`&lt;`、`&lt;=`、`&gt;`、`&gt;=`、`IS NULL`、`IS NOT NULL`）。单元格修改、插入行（`Alt+Insert`）和删除行（`Ctrl+Shift+Backspace`）会先暂存为批次，待确认后再执行 `Commit`（`Ctrl+Shift+S`）或 `Rollback`（`Ctrl+Shift+R`）。
 
-é€šè¿‡ `Ctrl+Shift+E` å¯å°†æŸ¥è¯¢ç»“æžœæˆ–æ•°æ®è¡¨å¯¼å‡ºä¸º CSVï¼ˆ`.csv`ï¼‰ã€JSON Arrayï¼ˆ`.json`ï¼‰ã€JSON Linesï¼ˆ`.jsonl`ï¼‰æˆ– SQL `INSERT`ï¼ˆ`.sql`ï¼‰ï¼Œå†™å…¥è¿‡ç¨‹ç»ç”± `.part` ä¸´æ—¶æ–‡ä»¶åŽŸå­å®Œæˆã€‚`tablepro-core` åŒæ ·å†…ç½®äº† TSVã€XML ä¸Žæ’å®šå†…å­˜å ç”¨çš„ XLSX ç¼–ç å™¨ã€‚
+通过 `Ctrl+Shift+E` 可将查询结果或数据表导出为 CSV（`.csv`）、JSON Array（`.json`）、JSON Lines（`.jsonl`）或 SQL `INSERT`（`.sql`），写入过程经由 `.part` 临时文件原子完成。`tablepro-core` 同样内置了 TSV、XML 与恒定内存占用的 XLSX 编码器。
 
-### å®‰å…¨ä¸Žæœ¬åœ°å­˜å‚¨
+### 安全与本地存储
 
-æ•°æ®åº“å¯†ç ã€SSH å¯†é’¥ã€AI API å¯†é’¥ä»¥åŠ MCP Bearer Token å‡å­˜å‚¨åœ¨ Windows å‡­æ®ç®¡ç†å™¨ï¼ˆ`CredWriteW` / `CredReadW`ï¼‰ä¸­ï¼Œå¹¶åœ¨å†…å­˜ä½¿ç”¨åŽé€šè¿‡ `zeroize` æ“¦é™¤ï¼Œä¸ä¼šä»¥æ˜Žæ–‡å½¢å¼å†™å…¥ JSON é…ç½®æ–‡ä»¶æˆ–æ—¥å¿—ã€‚è¿žæŽ¥åœ¨å®‰å…¨æ¨¡å¼ä¸‹å¯è®¾ä¸º `ConfirmWrites` æˆ– `ReadOnly`ï¼Œç¡®ä¿ `UPDATE`ã€`DELETE`ã€`DROP` ç­‰è¯­å¥åœ¨æ‰§è¡Œå‰å¼¹å‡ºç¡®è®¤æˆ–ç›´æŽ¥æ‹¦æˆªã€‚
+数据库密码、SSH 密钥、AI API 密钥以及 MCP Bearer Token 均存储在 Windows 凭据管理器（`CredWriteW` / `CredReadW`）中，并在内存使用后通过 `zeroize` 擦除，不会以明文形式写入 JSON 配置文件或日志。连接在安全模式下可设为 `ConfirmWrites` 或 `ReadOnly`，确保 `UPDATE`、`DELETE`、`DROP` 等语句在执行前弹出确认或直接拦截。
 
-### AI åŠ©æ‰‹ä¸Ž MCP æœåŠ¡
+### AI 助手与 MCP 服务
 
-AI ä¾§è¾¹æŠ½å±‰ï¼ˆ`Ctrl+Shift+A`ï¼‰å¯è¿žæŽ¥æœ¬åœ° Ollamaï¼ˆ`http://127.0.0.1:11434/v1`ï¼‰ã€ä»»æ„å…¼å®¹ OpenAI æŽ¥å£çš„æœåŠ¡ã€OpenAI æˆ– Anthropicã€‚å‘é€ç»™æ¨¡åž‹çš„ä»…åŒ…å« Schema å…ƒæ•°æ®ï¼ˆè¡¨åã€åˆ—åã€æ•°æ®ç±»åž‹ä¸Ž SQL æ–¹è¨€ï¼‰ï¼Œè¡¨å†…çš„å®žé™…è¡Œæ•°æ®ä¸ä¼šç¦»å¼€æœ¬æœºã€‚
+AI 侧边抽屉（`Ctrl+Shift+A`）可连接本地 Ollama（`http://127.0.0.1:11434/v1`）、任意兼容 OpenAI 接口的服务、OpenAI 或 Anthropic。发送给模型的仅包含 Schema 元数据（表名、列名、数据类型与 SQL 方言），表内的实际行数据不会离开本机。
 
-é’ˆå¯¹å¤–éƒ¨ç¼–ç¨‹ä»£ç†ä¸Ž IDEï¼Œ`tablepro-mcp` åœ¨æœ¬åœ°å›žçŽ¯åœ°å€ `127.0.0.1` ä¸Šè¿è¡Œ HTTP MCP æœåŠ¡ï¼Œé€šè¿‡ Windows å‡­æ®ç®¡ç†å™¨ä¸­çš„ Bearer Token åŠå¯¹ç«¯æ ¡éªŒè¿›è¡Œä¿æŠ¤ï¼Œå¹¶æä¾› 11 ä¸ªå·¥å…·ï¼š
+针对外部编程代理与 IDE，`tablepro-mcp` 在本地回环地址 `127.0.0.1` 上运行 HTTP MCP 服务，通过 Windows 凭据管理器中的 Bearer Token 及对端校验进行保护，并提供 11 个工具：
 
-- `list_connections`ã€`connect`ã€`list_databases`ã€`list_schemas`ã€`list_tables`ã€`describe_table`ã€`get_table_ddl`ã€`browse_table`ã€`count_rows`ã€`execute_query`ã€`export_data`
+- `list_connections`、`connect`、`list_databases`、`list_schemas`、`list_tables`、`describe_table`、`get_table_ddl`、`browse_table`、`count_rows`、`execute_query`、`export_data`
 
-å…¶ä¸­ `execute_query` ä¼šä¸¥æ ¼éµå¾ªå„ä¸ªè¿žæŽ¥çš„ External Clients ä¸Žå®‰å…¨æ¨¡å¼é…ç½®ï¼Œä»»ä½•å†™å…¥è¯­å¥æ‰§è¡Œå‰éƒ½å¿…é¡»åœ¨ TableMinus ç•Œé¢å†…ç”±ç”¨æˆ·ç¡®è®¤ã€‚
+其中 `execute_query` 会严格遵循各个连接的 External Clients 与安全模式配置，任何写入语句执行前都必须在 TableMinus 界面内由用户确认。
 
-### ä¸»é¢˜ã€çª—å£æè´¨ä¸Žå¤šè¯­è¨€
+### 主题、窗口材质与多语言
 
-TableMinus å†…ç½® 14 å¥—ä¸»é¢˜ï¼ˆ`Dark`ã€`Light`ã€`High Contrast`ã€`Gaussian Glass Dark`ã€`Gaussian Glass Light`ã€`Tokyo Night`ã€`Dracula`ã€`Catppuccin Mocha`ã€`One Dark Pro`ã€`Nord`ã€`Monokai Pro`ã€`Gruvbox Dark`ã€`GitHub Light`ã€`Catppuccin Latte`ï¼‰ã€‚ç•Œé¢ä¸»é¢˜ä¸Žä»£ç è¯­æ³•é…è‰²å¯ç‹¬ç«‹æ­é…ï¼Œä¹Ÿæ”¯æŒå¯¼å…¥ VS Code çš„ `.json` é…è‰²ä¸»é¢˜ã€‚
+TableMinus 内置 14 套主题（`Dark`、`Light`、`High Contrast`、`Gaussian Glass Dark`、`Gaussian Glass Light`、`Tokyo Night`、`Dracula`、`Catppuccin Mocha`、`One Dark Pro`、`Nord`、`Monokai Pro`、`Gruvbox Dark`、`GitHub Light`、`Catppuccin Latte`）。界面主题与代码语法配色可独立搭配，也支持导入 VS Code 的 `.json` 配色主题。
 
-åœ¨ Windows 11 ä¸Šï¼Œä¸»çª—å£æ”¯æŒ DWM `Gaussian Blur`ã€`Mica`ã€`Mica Alt` ä¸Ž `Opaque` å››ç§èƒŒæ™¯æè´¨ï¼ŒåŒæ—¶æ‰€æœ‰æµ®åŠ¨æµ®å±‚ä¿æŒå®Œå…¨ä¸é€æ˜Žï¼ˆ`1.0` alphaï¼‰ä»¥ç¡®ä¿æ–‡å­—æ¸…æ™°å¯è¯»ã€‚å‡å¼±åŠ¨æ€æ•ˆæžœé€‰é¡¹ä¼šè¯»å–ç³»ç»Ÿçš„ `SPI_GETCLIENTAREAANIMATION` è®¾ç½®ï¼Œåœ¨ç³»ç»Ÿå…³é—­åŠ¨ç”»æ—¶è·³è¿‡æŠ½å±‰å’Œå¼¹çª—è¿‡æ¸¡ã€‚æ‰€æœ‰ç•Œé¢æ–‡æœ¬ã€èœå•ã€å¯¹è¯æ¡†ã€æç¤ºä¸Žé©±åŠ¨è¯Šæ–­ä¿¡æ¯å‡å·²æœ¬åœ°åŒ–ä¸º 6 ç§è¯­è¨€ï¼š`en-US`ã€`vi-VN`ã€`zh-CN`ã€`ja-JP`ã€`es-ES` ä¸Ž `fr-FR`ã€‚
+在 Windows 11 上，主窗口支持 DWM `Gaussian Blur`、`Mica`、`Mica Alt` 与 `Opaque` 四种背景材质，同时所有浮动浮层保持完全不透明（`1.0` alpha）以确保文字清晰可读。减弱动态效果选项会读取系统的 `SPI_GETCLIENTAREAANIMATION` 设置，在系统关闭动画时跳过抽屉和弹窗过渡。所有界面文本、菜单、对话框、提示与驱动诊断信息均已本地化为 6 种语言：`en-US`、`vi-VN`、`zh-CN`、`ja-JP`、`es-ES` 与 `fr-FR`。
 
-### å‘½ä»¤è¡Œç”¨æ³•
+### 命令行用法
 
-`tableminus.exe` åŒæ—¶æ‰¿æ‹…æ¡Œé¢å¯åŠ¨å™¨ä¸Žè„šæœ¬åŒ– CLIï¼ˆ`tablepro-cli`ï¼‰çš„è§’è‰²ã€‚ç›´æŽ¥ä¼ å…¥ `.sqlite`ã€`.db`ã€`.duckdb`ã€`.sql` æ–‡ä»¶è·¯å¾„æˆ–è¿žæŽ¥ URLï¼ˆ`postgresql://...`ï¼‰æ—¶ï¼Œä¼šé€šè¿‡ Named Pipe IPC åœ¨å½“å‰è¿è¡Œçª—å£ä¸­æ‰“å¼€ï¼ˆä¼ å…¥ `-n` / `--new-window` å¯æ–°å»ºçª—å£ï¼‰ã€‚
+`tableminus.exe` 同时承担桌面启动器与脚本化 CLI（`tablepro-cli`）的角色。直接传入 `.sqlite`、`.db`、`.duckdb`、`.sql` 文件路径或连接 URL（`postgresql://...`）时，会通过 Named Pipe IPC 在当前运行窗口中打开（传入 `-n` / `--new-window` 可新建窗口）。
 
-é¡¶å±‚å‚æ•°ï¼š
-- `--version`ï¼ˆ`-V`ï¼‰æ‰“å°ç‰ˆæœ¬å·å¹¶é€€å‡ºã€‚
-- `--help`ï¼ˆ`-h`ï¼‰æ‰“å° CLI ç”¨æ³•ä¸Žå‚æ•°è¯´æ˜Žã€‚
-- `--smoke-startup` è¿è¡Œæ— ç•Œé¢å¯åŠ¨è€—æ—¶æ£€æŸ¥å¹¶æ ¡éªŒå…¨éƒ¨ 9 ä¸ªé©±åŠ¨æ³¨å†ŒçŠ¶æ€ã€‚
+顶层参数：
+- `--version`（`-V`）打印版本号并退出。
+- `--help`（`-h`）打印 CLI 用法与参数说明。
+- `--smoke-startup` 运行无界面启动耗时检查并校验全部 9 个驱动注册状态。
 
-å­å‘½ä»¤åŒ…æ‹¬ï¼š`open`ã€`query`ã€`connections`ã€`databases`ã€`schemas`ã€`tables`ã€`describe`ã€`export`ã€`status` ä»¥åŠ `completion`ï¼ˆæ”¯æŒ `bash`ã€`zsh`ã€`fish`ï¼‰ï¼Œé…åˆ `--format`ã€`--read-only`ã€`--limit` ä¸Ž `--timeout` å‚æ•°ä½¿ç”¨ã€‚
+子命令包括：`open`、`query`、`connections`、`databases`、`schemas`、`tables`、`describe`、`export`、`status` 以及 `completion`（支持 `bash`、`zsh`、`fish`），配合 `--format`、`--read-only`、`--limit` 与 `--timeout` 参数使用。
 
 ```powershell
-# æ‰§è¡Œåªè¯»æŸ¥è¯¢å¹¶ä»¥ JSON Lines æ ¼å¼è¾“å‡º
+# 执行只读查询并以 JSON Lines 格式输出
 .\target\release\tableminus.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
 
-# æŸ¥çœ‹æ•°æ®è¡¨çš„ CREATE TABLE DDL
+# 查看数据表的 CREATE TABLE DDL
 .\target\release\tableminus.exe describe -c Staging --ddl users
 ```
 
 ---
 
-## ä¸‹è½½ä¸Žå®‰è£…
+## 下载与安装
 
-ç³»ç»Ÿè¦æ±‚ï¼š**Windows 10 æˆ– Windows 11ï¼ˆx64ï¼‰**ã€‚é¢„ç¼–è¯‘å®‰è£…åŒ…å‘å¸ƒåœ¨ [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases)ï¼š
+系统要求：**Windows 10 或 Windows 11（x64）**。预编译安装包发布在 [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases)：
 
-- **å®‰è£…ç¨‹åºï¼ˆ`TableMinus-win-Setup.exe`ï¼‰**ï¼šå®‰è£…åˆ° `%LocalAppData%` å¹¶åˆ›å»ºå¼€å§‹èœå•ä¸Žæ¡Œé¢å¿«æ·æ–¹å¼ï¼Œæ— éœ€ UAC ç®¡ç†å‘˜æƒé™ã€‚å†…ç½® Velopack åŽå°å¢žé‡æ›´æ–°ï¼Œå¯åœ¨ **Settings -> About** ä¸­é…ç½®ã€‚
-- **ä¾¿æºç‰ˆï¼ˆ`TableMinus-win-Portable.zip`ï¼‰**ï¼šè§£åŽ‹åˆ°ä»»æ„ç›®å½•å³å¯ç›´æŽ¥è¿è¡Œ `tableminus.exe`ï¼Œä¸ä¼šä¿®æ”¹å®‰è£…å™¨çŠ¶æ€ã€‚
+- **安装程序（`TableMinus-win-Setup.exe`）**：安装到 `%LocalAppData%` 并创建开始菜单与桌面快捷方式，无需 UAC 管理员权限。内置 Velopack 后台增量更新，可在 **Settings -> About** 中配置。
+- **便携版（`TableMinus-win-Portable.zip`）**：解压到任意目录即可直接运行 `tableminus.exe`，不会修改安装器状态。
 
-æ¯æ¬¡å‘å¸ƒå‡é™„å¸¦ `SHA256SUMS.txt`ï¼Œå¯åœ¨ PowerShell ä¸­æ ¡éªŒæ–‡ä»¶å“ˆå¸Œï¼š
+每次发布均附带 `SHA256SUMS.txt`，可在 PowerShell 中校验文件哈希：
 
 ```powershell
 Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
@@ -156,61 +156,61 @@ Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
 
 ---
 
-## å¿«æ·é”®
+## 快捷键
 
-| å¿«æ·é”® | åŠŸèƒ½ |
+| 快捷键 | 功能 |
 | :--- | :--- |
-| `Ctrl+K` / `Ctrl+Shift+K` / `Ctrl+P` | æ‰“å¼€å‘½ä»¤é¢æ¿ |
-| `Ctrl+Enter` / `F5` | æ‰§è¡Œå½“å‰ SQL æŸ¥è¯¢ |
-| `Ctrl+Shift+Enter` | æ‰§è¡Œé€‰ä¸­çš„ SQL æ–‡æœ¬ |
-| `Shift+Esc` | å–æ¶ˆæ­£åœ¨è¿è¡Œçš„æŸ¥è¯¢ |
-| `Ctrl+S` | ä¿å­˜æŸ¥è¯¢åˆ°æŸ¥è¯¢åº“ |
-| `Ctrl+T` / `Ctrl+W` / `Ctrl+Shift+T` | æ–°å»ºæ ‡ç­¾é¡µ / å…³é—­æ ‡ç­¾é¡µ / é‡æ–°æ‰“å¼€å·²å…³é—­æ ‡ç­¾é¡µ |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | ä¸‹ä¸€ä¸ª / ä¸Šä¸€ä¸ªæ ‡ç­¾é¡µ |
-| `Ctrl+F` | èšç„¦ä¾§è¾¹æ å¯¹è±¡è¿‡æ»¤æ¡† |
-| `Ctrl+B` | æ˜¾ç¤º/éšè—å¯¹è±¡ä¾§è¾¹æ  |
-| `Ctrl+I` | æ˜¾ç¤º/éšè— Row Inspector |
-| `Ctrl+Shift+A` | æ˜¾ç¤º/éšè— AI åŠ©æ‰‹æŠ½å±‰ |
-| `Ctrl+Shift+O` | æ‰“å¼€è¿žæŽ¥åº“ |
-| `Ctrl+,` | æ‰“å¼€è®¾ç½® |
-| `Ctrl+Shift+M` | åˆ‡æ¢ä¸»é¢˜ |
-| `Ctrl+Shift+S` / `Ctrl+Shift+R` | æäº¤ï¼ˆ`Commit`ï¼‰ / å›žæ»šï¼ˆ`Rollback`ï¼‰æš‚å­˜çš„ç½‘æ ¼ä¿®æ”¹ |
-| `Alt+Insert` / `Ctrl+Shift+Backspace` | æ–°å¢žè¡Œ / åˆ é™¤ç½‘æ ¼ä¸­é€‰ä¸­çš„è¡Œ |
-| `Ctrl+Shift+E` | å¯¼å‡ºæŸ¥è¯¢ç»“æžœæˆ–æ•°æ®è¡¨ |
-| `Esc` | å…³é—­å½“å‰å¼¹çª—æˆ–æµ®å±‚ |
+| `Ctrl+K` / `Ctrl+Shift+K` / `Ctrl+P` | 打开命令面板 |
+| `Ctrl+Enter` / `F5` | 执行当前 SQL 查询 |
+| `Ctrl+Shift+Enter` | 执行选中的 SQL 文本 |
+| `Shift+Esc` | 取消正在运行的查询 |
+| `Ctrl+S` | 保存查询到查询库 |
+| `Ctrl+T` / `Ctrl+W` / `Ctrl+Shift+T` | 新建标签页 / 关闭标签页 / 重新打开已关闭标签页 |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | 下一个 / 上一个标签页 |
+| `Ctrl+F` | 聚焦侧边栏对象过滤框 |
+| `Ctrl+B` | 显示/隐藏对象侧边栏 |
+| `Ctrl+I` | 显示/隐藏 Row Inspector |
+| `Ctrl+Shift+A` | 显示/隐藏 AI 助手抽屉 |
+| `Ctrl+Shift+O` | 打开连接库 |
+| `Ctrl+,` | 打开设置 |
+| `Ctrl+Shift+M` | 切换主题 |
+| `Ctrl+Shift+S` / `Ctrl+Shift+R` | 提交（`Commit`） / 回滚（`Rollback`）暂存的网格修改 |
+| `Alt+Insert` / `Ctrl+Shift+Backspace` | 新增行 / 删除网格中选中的行 |
+| `Ctrl+Shift+E` | 导出查询结果或数据表 |
+| `Esc` | 关闭当前弹窗或浮层 |
 
-å¯åœ¨ SQL ç¼–è¾‘å™¨å·¥å…·æ å¼€å¯ Vim å¯¼èˆªæ¨¡å¼ï¼ˆæ”¯æŒ `NORMAL`ã€`INSERT`ã€`VISUAL` åŠ `:` å‘½ä»¤ï¼‰ã€‚
+可在 SQL 编辑器工具栏开启 Vim 导航模式（支持 `NORMAL`、`INSERT`、`VISUAL` 及 `:` 命令）。
 
 ---
 
-## ä»Žæºç æž„å»º
+## 从源码构建
 
-### çŽ¯å¢ƒè¦æ±‚
+### 环境要求
 
-- Windows 10 æˆ– Windows 11ï¼ˆx64ï¼‰
-- é€šè¿‡ [rustup](https://rustup.rs/) å®‰è£…çš„ç¨³å®šç‰ˆ Rust MSVC å·¥å…·é“¾ï¼ˆ`x86_64-pc-windows-msvc`ï¼ŒRust `2024` Editionï¼‰
-- Visual Studio C++ Build Tools ä¸Ž Windows SDKï¼ˆç”¨äºŽ Win32ã€Direct3D 11 ä¸Žå†…åµŒ C é©±åŠ¨ç¼–è¯‘ï¼‰
-- Windows PowerShellï¼ˆä¸²è”å¤šæ¡å‘½ä»¤æ—¶è¯·ä½¿ç”¨ `;` è€Œéž `&&`ï¼‰
+- Windows 10 或 Windows 11（x64）
+- 通过 [rustup](https://rustup.rs/) 安装的稳定版 Rust MSVC 工具链（`x86_64-pc-windows-msvc`，Rust `2024` Edition）
+- Visual Studio C++ Build Tools 与 Windows SDK（用于 Win32、Direct3D 11 与内嵌 C 驱动编译）
+- Windows PowerShell（串联多条命令时请使用 `;` 而非 `&&`）
 
 > [!CAUTION]
-> è¯·å§‹ç»ˆä½¿ç”¨ `--release` è¿›è¡Œæž„å»ºå’Œæµ‹è¯•ã€‚é™¤éžä¸“é—¨è°ƒè¯•ç¬¦å·é—®é¢˜ï¼Œå¦åˆ™ä¸è¦å¯¹æ•´ä¸ªå·¥ä½œåŒºè¿è¡Œæœªé…ç½® profile çš„ debug ç‰ˆ `cargo build` æˆ– `cargo test`ï¼Œå› ä¸ºå…¨éƒ¨ crate ä¸Ž 9 ä¸ªé©±åŠ¨åœ¨ `target\debug` ä¸‹ç”Ÿæˆçš„ PDB æ–‡ä»¶ä¼šè¶…è¿‡ 140 GBã€‚å†…å­˜æœ‰é™çš„æœºå™¨è¯·é™„å¸¦ `-j 1`ã€‚
+> 请始终使用 `--release` 进行构建和测试。除非专门调试符号问题，否则不要对整个工作区运行未配置 profile 的 debug 版 `cargo build` 或 `cargo test`，因为全部 crate 与 9 个驱动在 `target\debug` 下生成的 PDB 文件会超过 140 GB。内存有限的机器请附带 `-j 1`。
 
-### æž„å»ºä¸Žæµ‹è¯•å‘½ä»¤
+### 构建与测试命令
 
 ```powershell
-# ç¡®è®¤æ²¡æœ‰æ­£åœ¨è¿è¡Œçš„ tableminus.exe å ç”¨ target\release\tableminus.exe
+# 确认没有正在运行的 tableminus.exe 占用 target\release\tableminus.exe
 Get-Process tableminus -ErrorAction SilentlyContinue
 
-# ä»¥ release æ¨¡å¼è¿›è¡Œç±»åž‹æ£€æŸ¥å’Œç¼–è¯‘
+# 以 release 模式进行类型检查和编译
 cargo check --release -j 1 -p tableminus-windows-app
 cargo build --release -j 1 -p tableminus-windows-app
 
-# è¿è¡Œæ— ç•Œé¢å¯åŠ¨æ£€æŸ¥å¹¶å¯åŠ¨åº”ç”¨
+# 运行无界面启动检查并启动应用
 .\target\release\tableminus.exe --smoke-startup
 .\target\release\tableminus.exe
 ```
 
-Release æµ‹è¯•å¥—ä»¶ï¼š
+Release 测试套件：
 
 ```powershell
 cargo test --release -j 1 -p tablepro-core filter
@@ -218,32 +218,32 @@ cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocaptu
 cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture
 ```
 
-### å·¥ä½œåŒºç»“æž„
+### 工作区结构
 
-| è·¯å¾„ | èŒè´£ |
+| 路径 | 职责 |
 | :--- | :--- |
-| `core/crates/core` | `tablepro-core`ï¼šæŸ¥è¯¢æ¨¡åž‹ã€è¿‡æ»¤æ¡ä»¶ã€SQL æ–¹è¨€ä¸Žå¯¼å‡ºç¼–ç å™¨ |
-| `core/crates/session` | `tablepro-session`ï¼šæ´»è·ƒä¼šè¯ã€è¿žæŽ¥æ± ä¸Žäº‹åŠ¡ç®¡ç† |
-| `core/crates/cli` | `tablepro-cli`ï¼šCLI å­å‘½ä»¤ä¸Žæ— ç•Œé¢è¿è¡Œå™¨ |
-| `core/crates/mcp` | `tablepro-mcp`ï¼šå¸¦ Token è®¤è¯çš„æœ¬åœ°å›žçŽ¯ MCP HTTP æœåŠ¡ |
-| `core/crates/ai` | `tablepro-ai`ï¼šä»…ä¼  Schema çš„ Ollamaã€OpenAI ä¸Ž Anthropic å®¢æˆ·ç«¯ |
-| `core/crates/ssh` | `tablepro-ssh`ï¼šåŸºäºŽ `russh` çš„è¿›ç¨‹å†… SSH éš§é“ |
-| `core/crates/net` | `tablepro-net`ï¼š`rustls` TLS ä¸Žç³»ç»Ÿè¯ä¹¦æ ¡éªŒ |
-| `core/crates/storage` | `tablepro-storage`ï¼šå·²ä¿å­˜è¿žæŽ¥ã€æŸ¥è¯¢åº“ä¸ŽåŽ†å²è®°å½• |
-| `core/crates/foreign-import` | `tablepro-foreign-import`ï¼šä»Žå…¶ä»–æ•°æ®åº“å®¢æˆ·ç«¯å¯¼å…¥è¿žæŽ¥ |
-| `core/crates/account` | `tablepro-account`ï¼šè´¦å·ä¸Žå‡­æ® trait |
-| `core/crates/drivers/*` | 9 ä¸ªæ•°æ®åº“é©±åŠ¨ï¼ˆ`postgres`ã€`mysql`ã€`sqlite`ã€`duckdb`ã€`mssql`ã€`clickhouse`ã€`cassandra`ã€`mongodb`ã€`redis`ï¼‰ |
-| `crates/tableminus-gfx` | çŸ¢é‡å›¾æ ‡ä¸Žæ•°æ®åº“å¼•æ“Žå›¾æ ‡ |
-| `crates/tableminus-state` | ç¼–è¾‘å™¨çŠ¶æ€ã€è‡ªåŠ¨è¡¥å…¨ã€ç½‘æ ¼æ¨¡åž‹ã€æ ‡ç­¾é¡µä¸Ž 14 å¥—å†…ç½®ä¸»é¢˜ |
-| `crates/tableminus-services` | å¼‚æ­¥ Tokio è¿è¡Œæ—¶ã€ä¼šè¯/AI/MCP è°ƒåº¦ä¸Žå¤šè¯­è¨€è¯Šæ–­ä¿¡æ¯ |
-| `crates/tableminus-windows-platform` | è®¾ç½® JSON æŒä¹…åŒ–ã€Win32 å‡­æ®ç®¡ç†å™¨ã€DWM ä¸Žå‡å¼±åŠ¨æ€è¾…åŠ© |
-| `crates/tableminus-windows-app` | HeroGPUIï¼ˆDirect3D 11ï¼‰æ¡Œé¢åº”ç”¨ã€Velopack æ›´æ–°å™¨ä¸Ž 6 ç§è¯­è¨€åŒ… |
-| `crates/tableminus-e2e` | SQLiteã€DuckDBã€å¯åŠ¨è€—æ—¶ä¸Žç½‘æ ¼æ¸²æŸ“ç«¯åˆ°ç«¯åŸºå‡†æµ‹è¯• |
+| `core/crates/core` | `tablepro-core`：查询模型、过滤条件、SQL 方言与导出编码器 |
+| `core/crates/session` | `tablepro-session`：活跃会话、连接池与事务管理 |
+| `core/crates/cli` | `tablepro-cli`：CLI 子命令与无界面运行器 |
+| `core/crates/mcp` | `tablepro-mcp`：带 Token 认证的本地回环 MCP HTTP 服务 |
+| `core/crates/ai` | `tablepro-ai`：仅传 Schema 的 Ollama、OpenAI 与 Anthropic 客户端 |
+| `core/crates/ssh` | `tablepro-ssh`：基于 `russh` 的进程内 SSH 隧道 |
+| `core/crates/net` | `tablepro-net`：`rustls` TLS 与系统证书校验 |
+| `core/crates/storage` | `tablepro-storage`：已保存连接、查询库与历史记录 |
+| `core/crates/foreign-import` | `tablepro-foreign-import`：从其他数据库客户端导入连接 |
+| `core/crates/account` | `tablepro-account`：账号与凭据 trait |
+| `core/crates/drivers/*` | 9 个数据库驱动（`postgres`、`mysql`、`sqlite`、`duckdb`、`mssql`、`clickhouse`、`cassandra`、`mongodb`、`redis`） |
+| `crates/tableminus-gfx` | 矢量图标与数据库引擎图标 |
+| `crates/tableminus-state` | 编辑器状态、自动补全、网格模型、标签页与 14 套内置主题 |
+| `crates/tableminus-services` | 异步 Tokio 运行时、会话/AI/MCP 调度与多语言诊断信息 |
+| `crates/tableminus-windows-platform` | 设置 JSON 持久化、Win32 凭据管理器、DWM 与减弱动态辅助 |
+| `crates/tableminus-windows-app` | HeroGPUI（Direct3D 11）桌面应用、Velopack 更新器与 6 种语言包 |
+| `crates/tableminus-e2e` | SQLite、DuckDB、启动耗时与网格渲染端到端基准测试 |
 
 ---
 
-## å‚ä¸Žè´¡çŒ®ä¸Žå¼€æºåè®®
+## 参与贡献与开源协议
 
-æ¬¢è¿Žæäº¤ Pull Requestã€é—®é¢˜åé¦ˆæˆ–ç¿»è¯‘ä¿®æ­£ã€‚æž„å»ºè§„èŒƒä¸Ž GPUI æ³¨æ„äº‹é¡¹è¯·å‚é˜… [CONTRIBUTING.md](CONTRIBUTING.md)ï¼Œç‰ˆæœ¬æ›´æ–°è®°å½•è§ [CHANGELOG.md](CHANGELOG.md)ï¼Œè¡Œä¸ºå‡†åˆ™è§ [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)ï¼Œå®‰å…¨æ¼æ´žè¯·æŒ‰ [SECURITY.md](SECURITY.md) æŒ‡å¼•ç§ä¸‹åé¦ˆã€‚
+欢迎提交 Pull Request、问题反馈或翻译修正。构建规范与 GPUI 注意事项请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)，版本更新记录见 [CHANGELOG.md](CHANGELOG.md)，行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)，安全漏洞请按 [SECURITY.md](SECURITY.md) 指引私下反馈。
 
-TableMinus é‡‡ç”¨ [LICENSE](LICENSE)ï¼ˆGNU Affero General Public License v3.0ï¼‰ä¸Ž [LICENSE-MIT](LICENSE-MIT)ï¼ˆMITï¼Œä¿ç•™å¯¹ä¸Šæ¸¸å†…æ ¸ [TableProApp/TablePro](https://github.com/TableProApp/TablePro) çš„ç½²åï¼‰åŒåè®®æŽˆæƒã€‚
+TableMinus 采用 [LICENSE](LICENSE)（GNU Affero General Public License v3.0）与 [LICENSE-MIT](LICENSE-MIT)（MIT，保留对上游内核 [TableProApp/TablePro](https://github.com/TableProApp/TablePro) 的署名）双协议授权。
