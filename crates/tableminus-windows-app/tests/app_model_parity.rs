@@ -7,16 +7,16 @@
 
 use std::collections::BTreeSet;
 
-use dataforge_state::connection_window::WorkspaceId;
-use dataforge_state::tabs::{CloseActionResult, TabItem, TabKind};
-use dataforge_windows_app::accessibility::KeyCommand;
-use dataforge_windows_app::app::AppController;
-use dataforge_windows_app::i18n::{Locale, Strings, diagnostics_locale_table};
-use dataforge_windows_app::updater::{
+use tableminus_state::connection_window::WorkspaceId;
+use tableminus_state::tabs::{CloseActionResult, TabItem, TabKind};
+use tableminus_windows_app::accessibility::KeyCommand;
+use tableminus_windows_app::app::AppController;
+use tableminus_windows_app::i18n::{Locale, Strings, diagnostics_locale_table};
+use tableminus_windows_app::updater::{
     InstallMode, UpdateEvent, UpdateState, UpdaterManager, VELOPACK_PACK_ID,
 };
-use dataforge_windows_app::views::library::ConnectionFormDraft;
-use dataforge_windows_platform::{
+use tableminus_windows_app::views::library::ConnectionFormDraft;
+use tableminus_windows_platform::{
     AppSettings, EnvironmentKind, SavedTabSnapshot, WORKSPACE_SESSION_SCHEMA_VERSION, WindowsTheme,
     WorkspaceSessionSnapshot, load_workspace_session, save_workspace_session,
 };
@@ -352,7 +352,7 @@ fn update_state_modal_lifecycle_transitions_without_panicking() {
         PackageId: VELOPACK_PACK_ID.to_owned(),
         Version: "0.2.0".to_owned(),
         Type: "Full".to_owned(),
-        FileName: "DataForge-0.2.0-full.nupkg".to_owned(),
+        FileName: "TableMinus-0.2.0-full.nupkg".to_owned(),
         NotesMarkdown: "- Added pure Rust tests".to_owned(),
         ..VelopackAsset::default()
     };
