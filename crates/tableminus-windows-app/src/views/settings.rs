@@ -1,21 +1,21 @@
 //! Settings view and VS Code Theme JSON importer.
 
-use dataforge_gfx::Result;
-use dataforge_gfx::context::{FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign};
-use dataforge_gfx::palette::ThemePalette;
-use dataforge_state::theme::{ThemeDefinition, VsCodeThemeImporter};
-use dataforge_windows_platform::{AppSettings, ThemePreference};
+use tableminus_gfx::Result;
+use tableminus_gfx::context::{FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign};
+use tableminus_gfx::palette::ThemePalette;
+use tableminus_state::theme::{ThemeDefinition, VsCodeThemeImporter};
+use tableminus_windows_platform::{AppSettings, ThemePreference};
 
 use crate::shell_layout::{Rect, ShellLayout};
 
-/// Result of importing a VS Code or DataForge theme JSON file.
+/// Result of importing a VS Code or TableMinus theme JSON file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThemeImportOutcome {
     pub theme_name: String,
     pub slot_count: usize,
 }
 
-/// Imports a VS Code or DataForge theme JSON payload using `dataforge-state`'s strict validator.
+/// Imports a VS Code or TableMinus theme JSON payload using `tableminus-state`'s strict validator.
 pub fn import_vscode_theme_bytes(
     bytes: &[u8],
 ) -> std::result::Result<(ThemeDefinition, ThemeImportOutcome), String> {
