@@ -1,7 +1,9 @@
 //! Connections Library and Connection Form (SSH/TLS/SSPI, URL parser, foreign import).
 
 use tableminus_gfx::Result;
-use tableminus_gfx::context::{FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign};
+use tableminus_gfx::context::{
+    FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign,
+};
 use tableminus_gfx::glyphs::EngineKind;
 use tableminus_gfx::palette::ThemePalette;
 use tableminus_state::library::{
