@@ -1,0 +1,182 @@
+---
+import { ArrowUpRight, Github } from 'lucide-astro';
+import SectionBand from './SectionBand.astro';
+import type { ReleaseInfo } from '../lib/release';
+
+interface Props {
+  release: ReleaseInfo;
+}
+
+const { release } = Astro.props;
+
+const engines = [
+  'PostgreSQL',
+  'MySQL / MariaDB',
+  'SQLite',
+  'DuckDB',
+  'SQL Server',
+  'ClickHouse',
+  'Cassandra',
+  'MongoDB',
+  'Redis',
+];
+---
+
+<SectionBand as="footer">
+  <div class="cell-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-[var(--rule)]">
+    <!-- Brand -->
+    <div class="p-6 sm:p-8">
+      <a
+        href="#"
+        class="inline-flex items-center gap-2.5 text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-[6px]"
+      >
+        <img
+          src="/images/dataforge_logo.png"
+          alt="DataForge logo"
+          width="22"
+          height="22"
+          class="h-[22px] w-[22px] rounded-[5px]"
+        />
+        <span class="text-sm font-semibold tracking-tight">DataForge</span>
+        <span
+          data-release-version
+          class="rounded-[6px] border border-[var(--rule)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] font-medium text-[var(--accent)] tabular-nums"
+        >
+          {release.tag}
+        </span>
+      </a>
+      <p
+        data-i18n="footer.tagline"
+        class="mt-3.5 text-[13px] leading-relaxed text-[var(--muted)]"
+      >
+        Native Windows SQL &amp; database workbench built in Rust with HeroGPUI (Direct3D 11) on TablePro core.
+      </p>
+      <p
+        data-i18n="footer.license"
+        class="mt-4 font-mono text-[11px] text-[var(--dim)]"
+      >
+        MIT / AGPL-3.0 · Windows 10 &amp; 11 x64
+      </p>
+    </div>
+
+    <!-- Navigation -->
+    <div class="p-6 sm:p-8">
+      <h3
+        data-i18n="footer.colProduct"
+        class="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--dim)]"
+      >
+        Workbench
+      </h3>
+      <ul class="mt-3.5 space-y-2 text-[13px]">
+        <li>
+          <a href="#workbench" data-i18n="nav.workbench" class="nav-link inline-block py-0.5">
+            Workbench
+          </a>
+        </li>
+        <li>
+          <a href="#drivers" data-i18n="nav.drivers" class="nav-link inline-block py-0.5">
+            Drivers
+          </a>
+        </li>
+        <li>
+          <a href="#benchmarks" data-i18n="nav.benchmarks" class="nav-link inline-block py-0.5">
+            Benchmarks
+          </a>
+        </li>
+        <li>
+          <a href="#cli" data-i18n="nav.cli" class="nav-link inline-block py-0.5">
+            CLI &amp; Shortcuts
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <!-- 9 Engines -->
+    <div class="p-6 sm:p-8">
+      <h3
+        data-i18n="footer.colEngines"
+        class="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--dim)]"
+      >
+        9 Compiled Engines
+      </h3>
+      <ul class="mt-3.5 grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono text-[12px]">
+        {engines.map((engine) => (
+          <li>
+            <a href="#drivers" class="nav-link inline-block truncate max-w-full py-0.5">
+              {engine}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    <!-- Resources -->
+    <div class="p-6 sm:p-8">
+      <h3
+        data-i18n="footer.colResources"
+        class="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--dim)]"
+      >
+        Resources
+      </h3>
+      <ul class="mt-3.5 space-y-2 text-[13px]">
+        <li>
+          <a
+            href={release.releaseUrl}
+            data-release-link
+            target="_blank"
+            rel="noopener noreferrer"
+            class="nav-link inline-flex items-center gap-1.5 py-0.5"
+          >
+            <span data-i18n="footer.links.releases">Release Notes</span>
+            <span data-release-version class="font-mono text-[11px] text-[var(--accent)] tabular-nums">
+              {release.tag}
+            </span>
+            <ArrowUpRight class="h-3.5 w-3.5 opacity-60" />
+          </a>
+        </li>
+        <li>
+          <a
+            href={release.repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="nav-link inline-flex items-center gap-1.5 py-0.5"
+          >
+            <Github class="h-3.5 w-3.5 opacity-80" />
+            <span data-i18n="footer.links.github">GitHub Repository</span>
+            <ArrowUpRight class="h-3.5 w-3.5 opacity-60" />
+          </a>
+        </li>
+        <li>
+          <a
+            href={`${release.repoUrl}/issues`}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="nav-link inline-flex items-center gap-1.5 py-0.5"
+          >
+            <span data-i18n="footer.links.issues">Issue Tracker</span>
+            <ArrowUpRight class="h-3.5 w-3.5 opacity-60" />
+          </a>
+        </li>
+        <li>
+          <a
+            href={release.releasesPageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="nav-link inline-flex items-center gap-1.5 py-0.5"
+          >
+            <span data-i18n="footer.links.checksums">SHA256 Checksums</span>
+            <ArrowUpRight class="h-3.5 w-3.5 opacity-60" />
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="px-6 py-5 sm:px-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-[var(--dim)]">
+    <span>DataForge · Built on TablePro core</span>
+    <span data-i18n="footer.bottomNote" class="font-mono text-[11px]">
+      Zero Electron · Zero JVM · Pure Rust binary
+    </span>
+  </div>
+</SectionBand>
+<div class="mx-auto max-w-6xl h-6 sm:h-10 border-x border-[var(--rule)]" aria-hidden="true"></div>
