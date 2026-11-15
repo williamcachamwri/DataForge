@@ -9,9 +9,9 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use dataforge_gfx::grid_renderer::{CellKind, GridRow, RowState};
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_state::data_grid::{
+use tableminus_gfx::grid_renderer::{CellKind, GridRow, RowState};
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::data_grid::{
     DataGridColumn, DataGridColumnID, GridCoord, GridSelectionAction, MAX_COLUMN_WIDTH,
     MIN_COLUMN_WIDTH, SortDirection as ModelSortDir,
 };
@@ -38,7 +38,7 @@ use tablepro_core::value::Value;
 use super::results_pane::format_core_value;
 use super::shell_state::{InlineCellEditState, ToastSeverity};
 use super::structure_view::StructureViewState;
-use super::{DataForgeWorkspace, theme};
+use super::{TableMinusWorkspace, theme};
 
 const ROW_HEIGHT_PX: f32 = 28.0;
 const HEADER_HEIGHT_PX: f32 = 32.0;
@@ -72,7 +72,7 @@ pub struct DataGridViewState {
 
 impl DataGridViewState {
     /// Creates initial Data Grid UI state with HeroGPUI input entities.
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let filter_value_input = cx.new(|cx| InputState::new(cx));
         let inline_input = cx.new(|cx| InputState::new(cx));
         Self {
@@ -100,9 +100,9 @@ impl DataGridViewState {
 
 /// Renders the interactive 2D-virtualized Data Grid.
 pub fn render_data_grid(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     if let Some(table) = ws.controller.active_table.clone() {
         StructureViewState::ensure_table_loaded(ws, &table, cx);
@@ -208,8 +208,8 @@ fn render_grid_empty_state(
 }
 
 fn render_grid_toolbar(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let border = theme::hairline_border_color(cx);
     let left = render_grid_toolbar_left(ws, cx);
@@ -232,7 +232,7 @@ fn render_grid_toolbar(
         .into_any_element()
 }
 
-fn render_grid_toolbar_left(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_grid_toolbar_left(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let has_pending = ws.controller.grid_model.edits.has_pending_edits();
     let pending_count = ws.controller.grid_model.edits.modified_cells.len()
         + ws.controller.grid_model.edits.inserted_rows.len()
@@ -287,8 +287,8 @@ fn render_grid_toolbar_left(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
 }
 
 fn render_grid_toolbar_right(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let has_table = ws.controller.active_table.is_some();
@@ -361,7 +361,7 @@ fn append_copy_paste_buttons(
     no_rows: bool,
     has_table: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> gpui::Div {
     row.child(
         Button::new("grid-copy-rows-btn")
@@ -393,7 +393,7 @@ fn append_pending_edit_buttons(
     row: gpui::Div,
     has_table: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> gpui::Div {
     row.child(
         Button::new("grid-rollback-edits")
@@ -443,8 +443,8 @@ fn append_pending_edit_buttons(
 }
 
 fn render_columns_popover(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let cols = ws.controller.grid_model.columns.columns().to_vec();
@@ -489,9 +489,9 @@ fn render_columns_popover(
 }
 
 fn build_column_visibility_list(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cols: Vec<DataGridColumn>,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let mut list = div()
         .flex()
@@ -587,7 +587,7 @@ fn build_column_visibility_list(
 
 fn render_columns_popover_footer(
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .pt(px(6.0))
@@ -621,8 +621,8 @@ fn render_columns_popover_footer(
 }
 
 fn render_filters_popover(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let active_count = ws.controller.grid_model.filter_bar.filter_set.rules.len();
@@ -663,9 +663,9 @@ fn render_filters_popover(
 }
 
 fn build_filters_popover_form(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     active_count: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let col_items: Vec<PickerItem> = ws
         .controller
@@ -738,9 +738,9 @@ fn build_filters_popover_form(
 }
 
 fn render_filters_form_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     active_count: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     div()
@@ -774,8 +774,8 @@ fn render_filters_form_actions(
 }
 
 fn render_active_filter_strip(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     let rules = &ws.controller.grid_model.filter_bar.filter_set.rules;
     if rules.is_empty() {
@@ -837,8 +837,8 @@ fn render_active_filter_strip(
 }
 
 fn render_grid_viewport(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let display_cols = ws.controller.grid_model.columns.columns().to_vec();
     let visible_cols: Vec<(usize, DataGridColumn)> = display_cols
@@ -871,7 +871,7 @@ fn render_grid_viewport(
         .partition(|(_, c)| c.is_frozen || ws.controller.is_column_pinned(&c.name));
 
     let frozen_width_sum: f32 = frozen_cols.iter().map(|(_, c)| c.width as f32).sum();
-    let max_frozen_px = view_w * dataforge_state::data_grid::MAXIMUM_FROZEN_SHARE as f32;
+    let max_frozen_px = view_w * tableminus_state::data_grid::MAXIMUM_FROZEN_SHARE as f32;
     let clamped_frozen_px = frozen_width_sum.min(max_frozen_px);
     let scrollable_vp_w = (view_w - ROW_GUTTER_WIDTH_PX - clamped_frozen_px).max(120.0);
 
@@ -918,14 +918,14 @@ fn render_grid_viewport(
     reason = "virtualized row slice builder needs vertical range plus frozen and horizontal slices"
 )]
 fn build_grid_viewport_rows(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_range: std::ops::Range<usize>,
     total_rows: usize,
     frozen_cols: &[(usize, DataGridColumn)],
     visible_scroll_cols: &[(usize, DataGridColumn)],
     left_pad_w: f32,
     right_pad_w: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let top_spacer = row_range.start as f32 * ROW_HEIGHT_PX;
     let bottom_spacer = total_rows.saturating_sub(row_range.end) as f32 * ROW_HEIGHT_PX;
@@ -954,12 +954,12 @@ fn build_grid_viewport_rows(
 }
 
 fn wrap_grid_viewport_container(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     scroll_handle: ScrollHandle,
     header: AnyElement,
     rows_col: AnyElement,
     max_h_scroll: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let font = theme::value_gpui_font(&ws.controller.settings);
     let font_size = ws.controller.settings.value_font.size.max(10.0);
@@ -1015,13 +1015,13 @@ fn wrap_grid_viewport_container(
 }
 
 fn render_grid_header_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     frozen_cols: &[(usize, DataGridColumn)],
     scroll_cols: &[(usize, DataGridColumn)],
     left_pad_w: f32,
     right_pad_w: f32,
     viewport_w: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let hdr_bg = ws.content_palette.data_grid_header_background;
     let hdr_fg = ws.content_palette.data_grid_header_text;
@@ -1097,13 +1097,13 @@ fn render_grid_header_row(
 }
 
 fn render_grid_header_cell(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     display_pos: usize,
     col: &DataGridColumn,
     hdr_fg: Hsla,
     border: Hsla,
     viewport_w: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let sort_dir = ws
         .controller
@@ -1201,7 +1201,7 @@ fn render_header_pin_button(
     col_name: &str,
     is_pinned: bool,
     tooltip: &'static str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let col_owned = col_name.to_owned();
     let icon_color = if is_pinned {
@@ -1236,7 +1236,7 @@ fn render_header_column_menu(
     col: &DataGridColumn,
     viewport_w: f32,
     s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let menu_items = vec![
         MenuItem::new("sort-asc", s.sort_ascending),
@@ -1303,7 +1303,7 @@ fn render_header_resize_handle(
     display_pos: usize,
     col_width: f32,
     is_resizing: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .id(("col-resize-handle", display_pos))
@@ -1344,14 +1344,14 @@ fn render_header_resize_handle(
     reason = "virtualized row renderer draws gutter, frozen slice, freeze divider, and scrollable slice"
 )]
 fn render_grid_data_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_idx: usize,
     grid_row: &GridRow,
     frozen_cols: &[(usize, DataGridColumn)],
     scroll_cols: &[(usize, DataGridColumn)],
     left_pad_w: f32,
     right_pad_w: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let border = theme::hairline_border_color(cx);
     let is_row_selected = ws.data_grid_ui.selected_rows.contains(&row_idx);
@@ -1426,11 +1426,11 @@ fn render_grid_data_row(
 }
 
 fn render_grid_row_gutter(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_idx: usize,
     grid_row: &GridRow,
     border: Hsla,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let gutter_badge = match grid_row.state {
         RowState::Inserted => Some("+"),
@@ -1484,13 +1484,13 @@ fn render_grid_row_gutter(
 }
 
 fn render_grid_cell(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_idx: usize,
     display_pos: usize,
     col: &DataGridColumn,
     grid_row: &GridRow,
-    row_id_opt: Option<dataforge_state::data_grid::RowID>,
-    cx: &mut Context<DataForgeWorkspace>,
+    row_id_opt: Option<tableminus_state::data_grid::RowID>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let col_id = col.id;
     let col_width = col.width as f32;
@@ -1570,13 +1570,13 @@ fn render_grid_cell(
 }
 
 fn build_grid_cell_content(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_idx: usize,
     display_pos: usize,
     col: &DataGridColumn,
     grid_row: &GridRow,
     is_selected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let raw_cell = grid_row.cells.get(col.data_index);
     let raw_val = resolve_raw_value(ws, row_idx, col.data_index);
@@ -1689,7 +1689,7 @@ fn wrap_grid_cell_context_menu(
     row_idx: usize,
     display_pos: usize,
     s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let ctx_items = vec![
         MenuItem::new("edit", s.edit_cell),
@@ -1713,11 +1713,11 @@ fn wrap_grid_cell_context_menu(
 }
 
 fn render_inline_edit_cell(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_idx: usize,
     col_idx: usize,
     width: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let entity_submit = cx.entity().clone();
     let entity_change = cx.entity().clone();
@@ -1771,7 +1771,7 @@ fn render_inline_edit_cell(
         .into_any_element()
 }
 
-fn render_grid_aggregates_bar(ws: &DataForgeWorkspace, cx: &App) -> Option<AnyElement> {
+fn render_grid_aggregates_bar(ws: &TableMinusWorkspace, cx: &App) -> Option<AnyElement> {
     if ws.controller.grid_rows.is_empty() {
         return None;
     }
@@ -1865,7 +1865,7 @@ fn format_agg_number(val: f64) -> String {
     }
 }
 
-fn copy_selected_rows_as_tsv(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn copy_selected_rows_as_tsv(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let rows: Vec<usize> = if !ws.data_grid_ui.selected_rows.is_empty() {
         ws.data_grid_ui.selected_rows.iter().copied().collect()
     } else if let Some((r, _)) = ws.controller.grid_selection.focused {
@@ -1886,8 +1886,8 @@ fn copy_selected_rows_as_tsv(ws: &mut DataForgeWorkspace, cx: &mut Context<DataF
 }
 
 fn paste_tsv_rows_from_clipboard(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(tsv) = cx.read_from_clipboard().and_then(|item| item.text()) else {
         return;
@@ -1909,7 +1909,7 @@ fn paste_tsv_rows_from_clipboard(
     }
 }
 
-fn render_grid_footer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_grid_footer(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let page = ws.controller.grid_model.page;
     let (current_page, total_pages_opt) = page.page_info();
@@ -1998,7 +1998,7 @@ fn render_grid_footer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
 }
 
 fn update_multi_row_selection(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     row_idx: usize,
     shift: bool,
     ctrl: bool,
@@ -2034,14 +2034,14 @@ fn update_multi_row_selection(
     reason = "cell click handles focus, shift selection, inspector sync, and double-click inline editor"
 )]
 fn handle_cell_click(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     row_idx: usize,
     display_pos: usize,
     col_id: DataGridColumnID,
-    row_id_opt: Option<dataforge_state::data_grid::RowID>,
+    row_id_opt: Option<tableminus_state::data_grid::RowID>,
     event: &gpui::MouseDownEvent,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     window.focus(&ws.data_grid_ui.focus_handle, cx);
     ws.data_grid_ui.dragging_selection = true;
@@ -2068,10 +2068,10 @@ fn handle_cell_click(
 }
 
 fn handle_grid_key_down(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     event: &gpui::KeyDownEvent,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if ws.workspace_pane.inline_edit.is_some() {
         if event.keystroke.key == "escape" {
@@ -2141,10 +2141,10 @@ fn handle_grid_key_down(
 }
 
 fn handle_grid_mouse_move(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     event: &gpui::MouseMoveEvent,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if let Some(col_idx) = ws.data_grid_ui.resizing_col_idx {
         let dx = f32::from(event.position.x) - ws.data_grid_ui.resize_start_x;
@@ -2156,10 +2156,10 @@ fn handle_grid_mouse_move(
 }
 
 fn handle_grid_mouse_up(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _event: &gpui::MouseUpEvent,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let changed = ws.data_grid_ui.resizing_col_idx.is_some() || ws.data_grid_ui.dragging_selection;
     ws.data_grid_ui.resizing_col_idx = None;
@@ -2174,14 +2174,14 @@ fn handle_grid_mouse_up(
     reason = "column dropdown handler covers sort, freeze, auto-fit, and visibility mutations"
 )]
 fn handle_column_menu_action(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: &str,
     display_pos: usize,
     data_idx: usize,
     col_id: DataGridColumnID,
     col_title: &str,
     viewport_w: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match action {
         "sort-asc" | "sort-desc" => {
@@ -2190,7 +2190,7 @@ fn handle_column_menu_action(
             } else {
                 ModelSortDir::Descending
             };
-            ws.controller.grid_model.sort.keys = vec![dataforge_state::data_grid::SortKey {
+            ws.controller.grid_model.sort.keys = vec![tableminus_state::data_grid::SortKey {
                 column_id: col_id,
                 direction: dir,
             }];
@@ -2256,12 +2256,12 @@ fn handle_column_menu_action(
 }
 
 fn handle_cell_context_action(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: &str,
     row_idx: usize,
     col_idx: usize,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match action {
         "edit" => open_inline_editor(ws, row_idx, col_idx, cx),
@@ -2295,10 +2295,10 @@ fn handle_cell_context_action(
 }
 
 fn open_inline_editor(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     row_idx: usize,
     col_idx: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let text = resolve_raw_value(ws, row_idx, col_idx)
         .filter(|v| !v.is_null())
@@ -2319,7 +2319,7 @@ fn open_inline_editor(
     ws.data_grid_ui.inline_focus_requested = Some((row_idx, col_idx));
 }
 
-fn commit_inline_edit(ws: &mut DataForgeWorkspace, draft: String, set_null: bool) {
+fn commit_inline_edit(ws: &mut TableMinusWorkspace, draft: String, set_null: bool) {
     let Some(edit) = ws.workspace_pane.inline_edit.take() else {
         return;
     };
@@ -2332,7 +2332,7 @@ fn commit_inline_edit(ws: &mut DataForgeWorkspace, draft: String, set_null: bool
 }
 
 fn set_edited_cell_value(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     row_idx: usize,
     display_pos: usize,
     val: Value,
@@ -2361,7 +2361,7 @@ fn set_edited_cell_value(
     }
 }
 
-fn delete_row_at_index(ws: &mut DataForgeWorkspace, row_idx: usize) {
+fn delete_row_at_index(ws: &mut TableMinusWorkspace, row_idx: usize) {
     let raw_count = ws.controller.grid_raw_rows.len();
     if row_idx < raw_count {
         ws.controller.delete_grid_row(row_idx);
@@ -2379,7 +2379,7 @@ fn delete_row_at_index(ws: &mut DataForgeWorkspace, row_idx: usize) {
     }
 }
 
-fn apply_pending_filter(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn apply_pending_filter(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let col_name = ws
         .controller
         .grid_columns
@@ -2425,10 +2425,10 @@ fn apply_pending_filter(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeW
 }
 
 fn navigate_to_foreign_key(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     fk: &ForeignKeyInfo,
     key_value: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let target = TableRef {
         schema: fk.ref_schema.clone(),
@@ -2454,7 +2454,7 @@ fn navigate_to_foreign_key(
     cx.notify();
 }
 
-fn resolve_raw_value(ws: &DataForgeWorkspace, row_idx: usize, data_idx: usize) -> Option<Value> {
+fn resolve_raw_value(ws: &TableMinusWorkspace, row_idx: usize, data_idx: usize) -> Option<Value> {
     let raw_count = ws.controller.grid_raw_rows.len();
     if row_idx < raw_count {
         let rid = ws.controller.grid_model.row_order.row_id(row_idx);
@@ -2488,7 +2488,7 @@ fn resolve_raw_value(ws: &DataForgeWorkspace, row_idx: usize, data_idx: usize) -
         .cloned()
 }
 
-fn resolve_cell_text(ws: &DataForgeWorkspace, row_idx: usize, display_pos: usize) -> String {
+fn resolve_cell_text(ws: &TableMinusWorkspace, row_idx: usize, display_pos: usize) -> String {
     let data_idx = ws
         .controller
         .grid_model
@@ -2509,10 +2509,10 @@ fn resolve_cell_text(ws: &DataForgeWorkspace, row_idx: usize, display_pos: usize
 }
 
 fn is_cell_selected(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_idx: usize,
     display_pos: usize,
-    row_id_opt: Option<dataforge_state::data_grid::RowID>,
+    row_id_opt: Option<tableminus_state::data_grid::RowID>,
     col_id: DataGridColumnID,
 ) -> bool {
     if let Some(rid) = row_id_opt {
