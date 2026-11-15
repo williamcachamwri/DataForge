@@ -1,4 +1,4 @@
-use dataforge_windows_platform::{
+use tableminus_windows_platform::{
     ForwardPayload, NamedPipeServer, SingleInstanceLock, is_forwardable_target,
     send_to_existing_instance,
 };
@@ -8,7 +8,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
 fn single_instance_lock_blocks_second_acquire_until_dropped() -> TestResult {
-    let mutex_name = format!(r"Local\DataForge-Test-{}", Uuid::new_v4());
+    let mutex_name = format!(r"Local\TableMinus-Test-{}", Uuid::new_v4());
 
     let primary = SingleInstanceLock::try_acquire(&mutex_name)?;
     assert!(primary.is_some());
@@ -25,7 +25,7 @@ fn single_instance_lock_blocks_second_acquire_until_dropped() -> TestResult {
 
 #[test]
 fn named_pipe_forwards_database_files_and_connection_urls() -> TestResult {
-    let pipe_name = format!(r"\\.\pipe\DataForge-Test-{}", Uuid::new_v4());
+    let pipe_name = format!(r"\\.\pipe\TableMinus-Test-{}", Uuid::new_v4());
     let mut server = NamedPipeServer::bind(&pipe_name)?;
 
     let expected = ForwardPayload {
@@ -58,7 +58,7 @@ fn is_forwardable_target_recognizes_db_files_and_urls() {
     assert!(is_forwardable_target(r"C:\tmp\warehouse.duckdb"));
     assert!(is_forwardable_target("postgres://localhost/db"));
     assert!(is_forwardable_target("mysql://user@127.0.0.1:3306/test"));
-    assert!(is_forwardable_target("dataforge://open?conn=1"));
+    assert!(is_forwardable_target("tableminus://open?conn=1"));
 
     assert!(!is_forwardable_target("--help"));
     assert!(!is_forwardable_target(r"C:\tmp\notes.txt"));
