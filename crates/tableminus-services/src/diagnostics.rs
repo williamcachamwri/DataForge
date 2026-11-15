@@ -40,7 +40,7 @@ pub struct CrashReport {
 pub fn write_crash_report(crash_dir: &Path, report: &CrashReport) -> Result<PathBuf, ServiceError> {
     fs::create_dir_all(crash_dir)?;
     let timestamp = Utc::now().format("%Y%m%dT%H%M%SZ");
-    let file_name = format!("dataforge-crash-{timestamp}.txt");
+    let file_name = format!("tableminus-crash-{timestamp}.txt");
     let target = crash_dir.join(&file_name);
     let part = crash_dir.join(format!("{file_name}.part"));
 
@@ -57,7 +57,7 @@ fn format_crash_report(report: &CrashReport) -> String {
     let location = report.location.as_deref().unwrap_or("unknown");
     let backtrace = report.backtrace.as_deref().unwrap_or("(unavailable)");
     format!(
-        "DataForge Crash Report\n\
+        "TableMinus Crash Report\n\
          Timestamp: {}\n\
          Version: {}\n\
          OS: {}\n\
@@ -87,7 +87,7 @@ impl LocaleTable {
         Self::from_pairs(
             "en-US",
             [
-                ("app.name", "DataForge"),
+                ("app.name", "TableMinus"),
                 ("connection.connect", "Connect"),
                 ("connection.disconnect", "Disconnect"),
                 ("connection.test", "Test Connection"),
@@ -112,7 +112,7 @@ impl LocaleTable {
             Self::from_pairs(
                 "vi-VN",
                 [
-                    ("app.name", "DataForge"),
+                    ("app.name", "TableMinus"),
                     ("connection.connect", "Kết nối"),
                     ("connection.disconnect", "Ngắt kết nối"),
                     ("connection.test", "Kiểm tra kết nối"),
@@ -130,7 +130,7 @@ impl LocaleTable {
             Self::from_pairs(
                 "zh-CN",
                 [
-                    ("app.name", "DataForge"),
+                    ("app.name", "TableMinus"),
                     ("connection.connect", "连接"),
                     ("connection.disconnect", "断开连接"),
                     ("connection.test", "测试连接"),
@@ -148,7 +148,7 @@ impl LocaleTable {
             Self::from_pairs(
                 "ja-JP",
                 [
-                    ("app.name", "DataForge"),
+                    ("app.name", "TableMinus"),
                     ("connection.connect", "接続"),
                     ("connection.disconnect", "切断"),
                     ("connection.test", "接続テスト"),
@@ -166,7 +166,7 @@ impl LocaleTable {
             Self::from_pairs(
                 "es-ES",
                 [
-                    ("app.name", "DataForge"),
+                    ("app.name", "TableMinus"),
                     ("connection.connect", "Conectar"),
                     ("connection.disconnect", "Desconectar"),
                     ("connection.test", "Probar conexión"),
@@ -184,7 +184,7 @@ impl LocaleTable {
             Self::from_pairs(
                 "fr-FR",
                 [
-                    ("app.name", "DataForge"),
+                    ("app.name", "TableMinus"),
                     ("connection.connect", "Connecter"),
                     ("connection.disconnect", "Déconnecter"),
                     ("connection.test", "Tester la connexion"),
@@ -268,7 +268,7 @@ mod tests {
         let path = write_crash_report(dir.path(), &report)?;
         assert!(path.exists());
         let contents = fs::read_to_string(&path)?;
-        assert!(contents.contains("DataForge Crash Report"));
+        assert!(contents.contains("TableMinus Crash Report"));
         assert!(contents.contains("test panic"));
         assert!(contents.contains("src/main.rs:10"));
         Ok(())
@@ -279,7 +279,7 @@ mod tests {
         let table = LocaleTable::en_us();
         assert_eq!(table.locale(), "en-US");
         assert!(!table.is_empty());
-        assert_eq!(table.get("app.name"), "DataForge");
+        assert_eq!(table.get("app.name"), "TableMinus");
         assert_eq!(table.get("missing.key"), "missing.key");
     }
 
@@ -290,7 +290,7 @@ mod tests {
             let table = LocaleTable::for_locale_tag(tag);
             assert_eq!(table.locale(), tag);
             assert_eq!(table.len(), en.len());
-            assert_eq!(table.get("app.name"), "DataForge");
+            assert_eq!(table.get("app.name"), "TableMinus");
             assert!(!table.get("grid.commit").is_empty());
             assert!(!table.get("settings.title").is_empty());
         }
