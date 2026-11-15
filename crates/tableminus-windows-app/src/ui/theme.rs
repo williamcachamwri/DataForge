@@ -10,11 +10,11 @@
 
 use std::time::Duration;
 
-use dataforge_gfx::palette::{Color as GfxColor, ThemeMode, ThemePalette};
-use dataforge_state::theme::{
+use tableminus_gfx::palette::{Color as GfxColor, ThemeMode, ThemePalette};
+use tableminus_state::theme::{
     ResolvedTheme, Rgba as StateRgba, ThemeAppearance, ThemeDefinition, ThemeSlot,
 };
-use dataforge_windows_platform::{
+use tableminus_windows_platform::{
     AppSettings, EditorFont, FontSpec, WindowBackdropPreference, detect_reduced_motion,
 };
 use herogpui::core::{readable_color, with_alpha};
@@ -25,13 +25,13 @@ use herogpui::gpui::{
 use herogpui::theme::{ActiveTheme, Appearance, Theme, set_reduce_motion, set_theme};
 
 /// Theme id registered in HeroGPUI when Light mode is active.
-pub const LIGHT_THEME_ID: &str = "dataforge-light";
+pub const LIGHT_THEME_ID: &str = "tableminus-light";
 
 /// Theme id registered in HeroGPUI when Dark mode is active.
-pub const DARK_THEME_ID: &str = "dataforge-dark";
+pub const DARK_THEME_ID: &str = "tableminus-dark";
 
 /// Theme id registered in HeroGPUI when Windows High Contrast mode is active.
-pub const HIGH_CONTRAST_THEME_ID: &str = "dataforge-high-contrast";
+pub const HIGH_CONTRAST_THEME_ID: &str = "tableminus-high-contrast";
 
 /// Crisp hairline border width (`1.0` DIP) for dense developer tool surfaces.
 pub const HAIRLINE_BORDER_PX: f32 = 1.0;
@@ -84,7 +84,7 @@ const fn rgba_hsla(r: u8, g: u8, b: u8, a: f32) -> GpuiRgba {
     }
 }
 
-/// Converts a `dataforge-state` 8-bit [`StateRgba`] color into GPUI [`GpuiRgba`].
+/// Converts a `tableminus-state` 8-bit [`StateRgba`] color into GPUI [`GpuiRgba`].
 #[must_use]
 pub fn state_rgba_to_gpui(rgba: StateRgba) -> GpuiRgba {
     GpuiRgba {
@@ -95,7 +95,7 @@ pub fn state_rgba_to_gpui(rgba: StateRgba) -> GpuiRgba {
     }
 }
 
-/// Converts a `dataforge-state` 8-bit [`StateRgba`] color into GPUI [`Hsla`].
+/// Converts a `tableminus-state` 8-bit [`StateRgba`] color into GPUI [`Hsla`].
 #[must_use]
 pub fn state_rgba_to_hsla(rgba: StateRgba) -> Hsla {
     Hsla::from(state_rgba_to_gpui(rgba))
