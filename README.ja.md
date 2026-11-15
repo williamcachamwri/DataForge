@@ -44,6 +44,10 @@ Windows 11 のリリースビルドでは、コールドスタートが約 `10 m
 
 ![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
+### インタラクティブ ER 図、外部キーリレーション、SVG エクスポート
+
+![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+
 ---
 
 ## 対応データベース
