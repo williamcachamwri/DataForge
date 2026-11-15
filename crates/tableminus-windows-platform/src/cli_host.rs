@@ -27,7 +27,7 @@ pub struct WindowsCliHost {
 }
 
 impl WindowsCliHost {
-    /// Creates a [`WindowsCliHost`] using the given [`StoragePaths`] and default DataForge identifiers.
+    /// Creates a [`WindowsCliHost`] using the given [`StoragePaths`] and default TableMinus identifiers.
     pub fn new(paths: StoragePaths) -> Self {
         Self {
             paths,
