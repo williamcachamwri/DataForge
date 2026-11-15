@@ -7,12 +7,12 @@
 use std::collections::{BTreeSet, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use dataforge_services::DatabaseEngine;
-use dataforge_services::mock_generator::{
+use tableminus_services::DatabaseEngine;
+use tableminus_services::mock_generator::{
     MockColumnRule, MockGenerationPlan, MockGenerationReport, MockValueKind, SeededRng,
     build_mock_insert_batches, execute_mock_generation, infer_plan_from_table,
 };
-use dataforge_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::connection_window::ConnectionWindowPhase;
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, FieldVariant, Icon, IconName, IconSize, Input,
     InputState, InputType, PickerItem, Select, Variant,
@@ -30,7 +30,7 @@ use tablepro_core::meta::{ObjectInfo, ObjectKind};
 use tablepro_core::value::Value;
 
 use super::shell_state::{push_error_toast, push_success_toast};
-use super::{DataForgeWorkspace, syntax_bridge, theme};
+use super::{TableMinusWorkspace, syntax_bridge, theme};
 
 const DEFAULT_ROW_COUNT: usize = 100;
 const DEFAULT_BATCH_SIZE: usize = 50;
@@ -261,9 +261,9 @@ pub struct MockGeneratorViewState {
 }
 
 impl MockGeneratorViewState {
-    /// Creates initial Mock Data Generator state owned by [`DataForgeWorkspace`].
+    /// Creates initial Mock Data Generator state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let row_count_input =
             cx.new(|cx| InputState::with_value(cx, DEFAULT_ROW_COUNT.to_string()));
         let batch_size_input =
@@ -318,9 +318,9 @@ impl MockGeneratorViewState {
 /// Renders the Mock Data Generator workbench tool view.
 #[must_use]
 pub fn render_mock_generator_view(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_connected = is_workspace_connected(ws);
     if is_connected {
@@ -341,7 +341,7 @@ pub fn render_mock_generator_view(
         .into_any_element()
 }
 
-fn is_workspace_connected(ws: &DataForgeWorkspace) -> bool {
+fn is_workspace_connected(ws: &TableMinusWorkspace) -> bool {
     matches!(
         ws.controller
             .connections
@@ -350,7 +350,7 @@ fn is_workspace_connected(ws: &DataForgeWorkspace) -> bool {
     )
 }
 
-fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
     let engine = ws.controller.active_database_engine();
@@ -418,10 +418,10 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
 }
 
 fn render_toolbar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     tables: &[&ObjectInfo],
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let can_act = is_connected && !ws.mock_generator_ui.rules.is_empty();
@@ -444,10 +444,10 @@ fn render_toolbar(
 }
 
 fn render_toolbar_inputs(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     tables: &[&ObjectInfo],
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let items: Vec<PickerItem> = tables
@@ -505,7 +505,7 @@ fn render_table_picker_group(
     current: Option<String>,
     is_connected: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors();
     let empty_tables = items.is_empty();
@@ -595,7 +595,7 @@ fn render_numeric_field(
         .into_any_element()
 }
 
-fn render_seed_field(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_seed_field(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
     div()
@@ -650,11 +650,11 @@ fn render_seed_field(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
 }
 
 fn render_toolbar_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     can_act: bool,
     can_run: bool,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let run_label = if ws.mock_generator_ui.running {
         s.status_running_label
@@ -692,7 +692,7 @@ fn render_toolbar_actions(
         .into_any_element()
 }
 
-fn render_error_alerts(ws: &DataForgeWorkspace) -> Option<AnyElement> {
+fn render_error_alerts(ws: &TableMinusWorkspace) -> Option<AnyElement> {
     let s = &ws.controller.strings;
     let err = ws
         .mock_generator_ui
@@ -713,9 +713,9 @@ fn render_error_alerts(ws: &DataForgeWorkspace) -> Option<AnyElement> {
 }
 
 fn render_main_body(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     if !is_connected {
@@ -764,7 +764,7 @@ fn render_empty_state(title: &str, subtitle: &str, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn render_rules_pane(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_rules_pane(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let border = theme::hairline_border_color(cx);
     let mut rows = div()
         .id("mock-gen-rules-scroll")
@@ -781,7 +781,7 @@ fn render_rules_pane(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
     div()
         .id("mock-gen-rules-pane")
         .flex_1()
-        .min_w(px(320.0))
+        .min_w(px(240.0))
         .min_h_0()
         .overflow_x_scroll()
         .border_r_1()
@@ -793,7 +793,7 @@ fn render_rules_pane(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         .into_any_element()
 }
 
-fn render_rules_table_header(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_rules_table_header(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
     let border = theme::hairline_border_color(cx);
@@ -828,10 +828,10 @@ fn header_cell(label: &str, color: herogpui::gpui::Hsla) -> herogpui::gpui::Div 
 }
 
 fn render_rule_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     idx: usize,
     rule: &RuleDraft,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -912,7 +912,7 @@ fn render_rule_kind_cell(
     rule: &RuleDraft,
     choice: RuleKindChoice,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let rule_id = rule.id;
     let items: Vec<PickerItem> = RuleKindChoice::ALL
@@ -975,7 +975,7 @@ fn render_null_ratio_cell(
     rule: &RuleDraft,
     colors: &herogpui::theme::ThemeColors,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let rule_id = rule.id;
     div()
@@ -1049,15 +1049,16 @@ fn render_fk_parent_cell(
 }
 
 fn render_preview_pane(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let border = theme::hairline_border_color(cx);
 
     div()
-        .w(px(360.0))
-        .min_w(px(260.0))
+        .w(px(320.0))
+        .min_w(px(220.0))
         .max_w(px(440.0))
+        .flex_shrink(1.0)
         .min_h_0()
         .flex()
         .flex_col()
@@ -1071,8 +1072,8 @@ fn render_preview_pane(
 }
 
 fn render_execution_status_bar(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
@@ -1141,8 +1142,8 @@ fn render_execution_status_bar(
 }
 
 fn render_sample_rows_section(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
@@ -1250,8 +1251,8 @@ fn render_sample_rows_section(
 }
 
 fn render_sql_preview_section(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -1322,7 +1323,7 @@ fn render_sql_preview_section(
         .into_any_element()
 }
 
-fn ensure_initial_table_loaded(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn ensure_initial_table_loaded(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     if ws.mock_generator_ui.loaded_table_key.is_some() {
         return;
     }
@@ -1349,10 +1350,10 @@ fn ensure_initial_table_loaded(ws: &mut DataForgeWorkspace, cx: &mut Context<Dat
 }
 
 fn load_table_rules(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     schema: Option<String>,
     table: String,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let key = encode_table_key(schema.as_deref(), &table);
     ws.mock_generator_ui.selected_table_key = Some(key.clone());
@@ -1393,10 +1394,10 @@ fn populate_rules_from_definition(
 }
 
 fn apply_rule_kind_choice(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     rule_id: u64,
     choice: RuleKindChoice,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(rule) = ws
         .mock_generator_ui
@@ -1416,7 +1417,7 @@ fn apply_rule_kind_choice(
     cx.notify();
 }
 
-fn update_rule_param(ws: &mut DataForgeWorkspace, rule_id: u64, raw: &str) {
+fn update_rule_param(ws: &mut TableMinusWorkspace, rule_id: u64, raw: &str) {
     let Some(rule) = ws
         .mock_generator_ui
         .rules
@@ -1482,7 +1483,7 @@ fn build_plan_from_state(
     }
 }
 
-fn run_preview_generation(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn run_preview_generation(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     ws.mock_generator_ui.exec_error = None;
     let engine = ws.controller.active_database_engine();
     let preview_count = ws.mock_generator_ui.row_count.clamp(1, PREVIEW_ROW_LIMIT);
@@ -1519,7 +1520,7 @@ fn run_preview_generation(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForg
 }
 
 fn fetch_preview_fk_pools(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     engine: DatabaseEngine,
     plan: &MockGenerationPlan,
 ) -> Result<HashMap<(String, String), Vec<Value>>, String> {
@@ -1566,7 +1567,7 @@ fn fetch_preview_fk_pools(
     Ok(pools)
 }
 
-fn run_execute_generation(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn run_execute_generation(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     if ws.mock_generator_ui.running {
         return;
     }
