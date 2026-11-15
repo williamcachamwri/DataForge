@@ -3,11 +3,11 @@
 
 use std::ops::Range;
 
-use tableminus_gfx::glyphs::EngineKind;
-use tableminus_state::editor::{IncrementalLineHighlighter, Rope, Utf16SyntaxSpan, lex_line_utf16};
 use herogpui::gpui::{
     Font, FontStyle, FontWeight, HighlightStyle, Hsla, SharedString, StyledText, TextRun,
 };
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_state::editor::{IncrementalLineHighlighter, Rope, Utf16SyntaxSpan, lex_line_utf16};
 use tablepro_core::sql_syntax::{SqlGrammar, SyntaxKind};
 
 use super::theme::ContentThemePalette;
@@ -228,8 +228,8 @@ pub fn styled_sql_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tableminus_state::theme::ThemeDefinition;
     use herogpui::gpui::font;
+    use tableminus_state::theme::ThemeDefinition;
 
     #[test]
     fn grammar_for_engine_covers_all_eleven_engines() {
