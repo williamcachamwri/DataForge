@@ -1,28 +1,28 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in `d:\DataForge`.
+Guidance for AI coding agents working in `d:\TableMinus`.
 
 ## Workspace Overview
 
-DataForge is a native Windows SQL & database workbench written in Rust:
+TableMinus is a native Windows SQL & database workbench written in Rust:
 - `core/`: Upstream TablePro core workspace (`tablepro-core`, `tablepro-session`, `tablepro-cli`, `tablepro-mcp`, `tablepro-ai`, and 9 database drivers under `core/crates/drivers/*`).
-- `crates/dataforge-gfx`: Vector glyphs and database engine icons.
-- `crates/dataforge-state`: Editor state, SQL grammar/autocomplete, tab state, and 14+ built-in UI/syntax themes.
-- `crates/dataforge-services`: Async Tokio runtime and session orchestration.
-- `crates/dataforge-windows-platform`: Settings persistence, Windows DWM backdrop (`GaussianBlur`, `Mica`, `MicaAlt`, `Opaque`), and reduced-motion detection.
-- `crates/dataforge-windows-app`: HeroGPUI (Direct3D 11) desktop application (`dataforge.exe`).
-- `crates/dataforge-e2e`: End-to-end SQLite & grid performance benchmarks.
+- `crates/tableminus-gfx`: Vector glyphs and database engine icons.
+- `crates/tableminus-state`: Editor state, SQL grammar/autocomplete, tab state, and 14+ built-in UI/syntax themes.
+- `crates/tableminus-services`: Async Tokio runtime and session orchestration.
+- `crates/tableminus-windows-platform`: Settings persistence, Windows DWM backdrop (`GaussianBlur`, `Mica`, `MicaAlt`, `Opaque`), and reduced-motion detection.
+- `crates/tableminus-windows-app`: HeroGPUI (Direct3D 11) desktop application (`tableminus.exe`).
+- `crates/tableminus-e2e`: End-to-end SQLite & grid performance benchmarks.
 
 ## Build, Test & Verification Rules
 
 - **Shell**: Windows PowerShell — use `;` instead of `&&` to chain commands.
 - **Avoid Debug PDB Bloat**: Never run unprofiled debug `cargo build` or `cargo test` unless explicitly requested; debug PDBs in `target\debug` grow beyond 140 GB. Always use `--release` (and `-j 1` on memory-constrained builds):
-  - Check: `cargo check --release -j 1 -p dataforge-windows-app`
-  - Build: `cargo build --release -j 1 -p dataforge-windows-app`
-  - Smoke test: `.\target\release\dataforge.exe --smoke-startup`
+  - Check: `cargo check --release -j 1 -p tableminus-windows-app`
+  - Build: `cargo build --release -j 1 -p tableminus-windows-app`
+  - Smoke test: `.\target\release\tableminus.exe --smoke-startup`
   - Filter tests: `cargo test --release -j 1 -p tablepro-core filter`
-  - 100k E2E benchmark: `cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture`
-- **Locked Binary**: Before running `cargo build --release -p dataforge-windows-app`, check if `dataforge.exe` is running (`Get-Process dataforge`).
+  - 100k E2E benchmark: `cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture`
+- **Locked Binary**: Before running `cargo build --release -p tableminus-windows-app`, check if `tableminus.exe` is running (`Get-Process tableminus`).
 
 ## UI & GPUI Constraints
 
