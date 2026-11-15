@@ -2,14 +2,6 @@
 
 use std::time::Duration;
 
-use tableminus_services::server_monitor::{
-    self, LiveSessionRow, ServerLockRow, ServerMonitorSnapshot,
-};
-use tableminus_services::{
-    DatabaseEngine, active_sessions_query, kill_session_sql, users_roles_query,
-};
-use tableminus_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
-use tableminus_windows_platform::{ScheduledTaskRecord, ScheduledTaskRunEntry};
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input, InputState,
     PickerItem, Select, Separator, Switch, TabItem, Tabs, TabsSize, TabsVariant,
@@ -21,6 +13,14 @@ use herogpui::gpui::{
     Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::server_monitor::{
+    self, LiveSessionRow, ServerLockRow, ServerMonitorSnapshot,
+};
+use tableminus_services::{
+    DatabaseEngine, active_sessions_query, kill_session_sql, users_roles_query,
+};
+use tableminus_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
+use tableminus_windows_platform::{ScheduledTaskRecord, ScheduledTaskRunEntry};
 
 use super::TableMinusWorkspace;
 use super::results_pane::format_core_value;
@@ -268,7 +268,10 @@ fn render_admin_header(
         .into_any_element()
 }
 
-fn render_admin_tabs(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_admin_tabs(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let live_session_count = ws
         .admin_ui
@@ -2187,7 +2190,10 @@ fn toggle_monitor_auto_refresh(
     cx.notify();
 }
 
-fn execute_confirm_kill_session(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
+fn execute_confirm_kill_session(
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
     if ws.admin_ui.monitor_killing {
         return;
     }
