@@ -27,7 +27,7 @@ pub(crate) struct Stored {
     pub(crate) layout: Option<Layout>,
 }
 
-/// Layout metadata stored in the `DataForge_Parts` credential attribute on every part.
+/// Layout metadata stored in the `TableMinus_Parts` credential attribute on every part.
 ///
 /// Sharing the same `write_id` across all parts ensures a torn write reads as `None`
 /// rather than mixing bytes from two different writes.
