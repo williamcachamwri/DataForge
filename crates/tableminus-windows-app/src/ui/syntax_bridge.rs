@@ -1,10 +1,10 @@
-//! Shared SQL syntax highlighting adapter bridging `dataforge-state` / `tablepro-core`
+//! Shared SQL syntax highlighting adapter bridging `tableminus-state` / `tablepro-core`
 //! into GPUI [`HighlightStyle`], [`TextRun`], and [`StyledText`] spans.
 
 use std::ops::Range;
 
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_state::editor::{IncrementalLineHighlighter, Rope, Utf16SyntaxSpan, lex_line_utf16};
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_state::editor::{IncrementalLineHighlighter, Rope, Utf16SyntaxSpan, lex_line_utf16};
 use herogpui::gpui::{
     Font, FontStyle, FontWeight, HighlightStyle, Hsla, SharedString, StyledText, TextRun,
 };
@@ -12,7 +12,7 @@ use tablepro_core::sql_syntax::{SqlGrammar, SyntaxKind};
 
 use super::theme::ContentThemePalette;
 
-/// Maps DataForge's [`EngineKind`] to `tablepro-core`'s [`SqlGrammar`].
+/// Maps TableMinus's [`EngineKind`] to `tablepro-core`'s [`SqlGrammar`].
 #[must_use]
 pub const fn grammar_for_engine(engine: EngineKind) -> SqlGrammar {
     match engine {
@@ -228,7 +228,7 @@ pub fn styled_sql_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dataforge_state::theme::ThemeDefinition;
+    use tableminus_state::theme::ThemeDefinition;
     use herogpui::gpui::font;
 
     #[test]
