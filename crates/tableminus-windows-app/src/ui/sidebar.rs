@@ -4,9 +4,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_state::tabs::TabConnectionId;
-use dataforge_windows_platform::EnvironmentKind;
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::tabs::TabConnectionId;
+use tableminus_windows_platform::EnvironmentKind;
 use herogpui::components::{
     Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant, Chip,
     ChipLabel, ChipVariant, Color, ContextMenu, Dropdown, DropdownPlacement, Filter, Icon,
@@ -26,7 +26,7 @@ use tablepro_core::column::ColumnInfo;
 use tablepro_core::meta::{IndexInfo, ObjectInfo, ObjectKind, ObjectScope, TableRef};
 use tablepro_session::{OperationError, OperationKind};
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{
@@ -71,9 +71,9 @@ pub struct SidebarPanelState {
 }
 
 impl SidebarPanelState {
-    /// Initializes sidebar state owned by [`DataForgeWorkspace`].
+    /// Initializes sidebar state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let filter_input = cx.new(|cx| InputState::new(cx));
         let mut expanded_keys = HashSet::new();
         expanded_keys.insert(SharedString::from(SECTION_TABLES));
@@ -94,7 +94,7 @@ impl SidebarPanelState {
     }
 
     /// Requests focus on the sidebar filter input (`Ctrl+F`).
-    pub fn focus_filter(&mut self, window: &mut Window, cx: &mut Context<DataForgeWorkspace>) {
+    pub fn focus_filter(&mut self, window: &mut Window, cx: &mut Context<TableMinusWorkspace>) {
         let handle = self.filter_input.read(cx).focus_handle(cx);
         window.focus(&handle, cx);
         self.filter_focused = true;
@@ -124,9 +124,9 @@ impl SidebarPanelState {
 /// Renders the database object explorer sidebar.
 #[must_use]
 pub fn render_sidebar(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let controller_filter = ws.controller.sidebar_filter.clone();
     ws.sidebar_ui.sync_filter_input(&controller_filter, cx);
@@ -182,9 +182,9 @@ pub fn render_sidebar(
 }
 
 fn render_sidebar_header(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     phase: &ConnectionWindowPhase,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let is_connected = matches!(phase, ConnectionWindowPhase::Connected);
@@ -312,7 +312,7 @@ fn render_refresh_button(
     refresh_tooltip: &'static str,
     is_connected: bool,
     is_loading: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let reduced_motion = is_reduced_motion(cx);
@@ -344,8 +344,8 @@ fn render_refresh_button(
 }
 
 fn render_database_and_schema_controls(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let engine = ws.controller.connection_form.engine;
@@ -423,8 +423,8 @@ fn render_database_and_schema_controls(
 }
 
 fn render_filter_controls(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let fav_count = ws
         .controller
@@ -493,8 +493,8 @@ fn render_filter_controls(
 }
 
 fn render_connected_body(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     if ws.sidebar_ui.schema_loading && ws.controller.cached_objects.is_empty() {
         return render_schema_skeletons(cx);
@@ -623,7 +623,7 @@ impl SectionCounts {
 fn render_count_badges_strip(
     s: &crate::i18n::Strings,
     counts: SectionCounts,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     div()
@@ -666,7 +666,7 @@ fn summary_chip(label: &str, count: usize, muted: herogpui::gpui::Hsla) -> AnyEl
         .into_any_element()
 }
 
-fn build_tree_items(ws: &DataForgeWorkspace, objects: &[&ObjectInfo]) -> Vec<TreeItem> {
+fn build_tree_items(ws: &TableMinusWorkspace, objects: &[&ObjectInfo]) -> Vec<TreeItem> {
     let mut tables = Vec::new();
     let mut views = Vec::new();
     let mut routines = Vec::new();
@@ -727,7 +727,7 @@ fn build_tree_items(ws: &DataForgeWorkspace, objects: &[&ObjectInfo]) -> Vec<Tre
     roots
 }
 
-fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem {
+fn build_object_tree_item(ws: &TableMinusWorkspace, obj: &ObjectInfo) -> TreeItem {
     let key = object_node_key(obj);
     let is_fav = ws.controller.favorite_objects.contains(&obj.name);
     let display = truncate_middle(&obj.name, 24);
@@ -827,9 +827,9 @@ fn build_object_tree_item(ws: &DataForgeWorkspace, obj: &ObjectInfo) -> TreeItem
 }
 
 fn render_selected_node_dropdown(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     obj: &ObjectInfo,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let muted = cx.colors().muted;
     Dropdown::uncontrolled(
@@ -855,10 +855,10 @@ fn render_selected_node_dropdown(
 }
 
 fn render_selected_node_actions(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     obj: &ObjectInfo,
     qualified: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let is_fav = ws.controller.favorite_objects.contains(&obj.name);
@@ -932,9 +932,9 @@ fn render_selected_node_actions(
 }
 
 fn render_selected_node_bar(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     obj: &ObjectInfo,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let qualified = qualified_name(obj);
@@ -1013,7 +1013,7 @@ fn render_selected_node_bar(
 
 fn build_object_menu_items(
     selected: Option<&ObjectInfo>,
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
 ) -> Vec<MenuItem> {
     let has_table = selected.is_some_and(|obj| is_tabular_object(obj.kind));
     let has_any = selected.is_some();
@@ -1055,9 +1055,9 @@ fn build_object_menu_items(
 }
 
 fn execute_node_action(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let selected = resolve_selected_object(ws).cloned();
     match action {
@@ -1139,17 +1139,17 @@ fn execute_node_action(
 /// Refreshes the active schema and object list asynchronously, then reloads details
 /// for any tables/views that are currently expanded in the sidebar tree.
 pub(crate) fn refresh_active_schema(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let schema = resolve_active_schema(ws);
     spawn_schema_refresh(ws, schema, cx);
 }
 
 fn spawn_schema_refresh(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     schema_override: Option<String>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
         let title = ws.controller.strings.unavailable;
@@ -1163,7 +1163,7 @@ fn spawn_schema_refresh(
     cx.notify();
 
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let svc = services.clone();
             drop(services.runtime.spawn(async move {
@@ -1234,9 +1234,9 @@ fn spawn_schema_refresh(
 }
 
 fn maybe_load_expanded_table_details(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     node_key: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(obj) = ws
         .controller
@@ -1270,7 +1270,7 @@ fn maybe_load_expanded_table_details(
     let table_ref = TableRef::new(obj.schema, obj.name);
 
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let svc = services.clone();
             drop(services.runtime.spawn(async move {
@@ -1316,7 +1316,7 @@ fn maybe_load_expanded_table_details(
     .detach();
 }
 
-fn render_schema_skeletons(cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_schema_skeletons(cx: &Context<TableMinusWorkspace>) -> AnyElement {
     let anim = if is_reduced_motion(cx) {
         SkeletonAnimation::None
     } else {
@@ -1341,7 +1341,7 @@ fn render_schema_skeletons(cx: &Context<DataForgeWorkspace>) -> AnyElement {
 
 fn render_disconnected_card(
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     div()
@@ -1385,7 +1385,7 @@ fn render_disconnected_card(
 fn render_unavailable_sidebar_card(
     s: &crate::i18n::Strings,
     summary: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     div()
@@ -1428,7 +1428,7 @@ fn render_unavailable_sidebar_card(
 
 fn render_empty_schema_card(
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .p(px(12.0))
@@ -1458,8 +1458,8 @@ fn render_empty_schema_card(
 }
 
 fn render_empty_filtered_card(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let reason = if ws.controller.sidebar_favorites_only {
@@ -1501,7 +1501,7 @@ fn render_empty_filtered_card(
         .into_any_element()
 }
 
-fn filtered_objects(ws: &DataForgeWorkspace) -> Vec<&ObjectInfo> {
+fn filtered_objects(ws: &TableMinusWorkspace) -> Vec<&ObjectInfo> {
     let filter = Filter::new(Sensitivity::Base);
     let query = ws.controller.sidebar_filter.trim();
     ws.controller
@@ -1525,7 +1525,7 @@ fn filtered_objects(ws: &DataForgeWorkspace) -> Vec<&ObjectInfo> {
         .collect()
 }
 
-fn resolve_active_schema(ws: &DataForgeWorkspace) -> Option<String> {
+fn resolve_active_schema(ws: &TableMinusWorkspace) -> Option<String> {
     if let Some(ref selected) = ws.sidebar_ui.selected_schema
         && ws
             .controller
@@ -1543,7 +1543,7 @@ fn resolve_active_schema(ws: &DataForgeWorkspace) -> Option<String> {
         .map(|s| s.name.clone())
 }
 
-fn resolve_selected_object(ws: &DataForgeWorkspace) -> Option<&ObjectInfo> {
+fn resolve_selected_object(ws: &TableMinusWorkspace) -> Option<&ObjectInfo> {
     let key = ws.sidebar_ui.selected_node_key.as_deref()?;
     ws.controller
         .cached_objects
