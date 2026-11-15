@@ -1,12 +1,12 @@
 //! Collapsible Connection Rail view (Connections Library, open connections with
-//! 11 engine glyphs from `dataforge-gfx`, collapse toggle, and Settings).
+//! 11 engine glyphs from `tableminus-gfx`, collapse toggle, and Settings).
 
-use dataforge_gfx::Result;
-use dataforge_gfx::context::{
+use tableminus_gfx::Result;
+use tableminus_gfx::context::{
     D2dContext, FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign, point_f,
 };
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_gfx::palette::ThemePalette;
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_gfx::palette::ThemePalette;
 use windows_numerics::Matrix3x2;
 
 use crate::shell_layout::{Rect, ShellLayout};
@@ -21,7 +21,7 @@ pub struct RailConnectionItem {
     pub connected: bool,
 }
 
-/// Renders the Connection Rail using Direct2D and `dataforge-gfx` engine glyphs.
+/// Renders the Connection Rail using Direct2D and `tableminus-gfx` engine glyphs.
 pub fn render_rail(
     ctx: &D2dContext,
     surface: &mut RenderSurface,
