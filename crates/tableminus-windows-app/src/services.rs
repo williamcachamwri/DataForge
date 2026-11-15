@@ -7,19 +7,19 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+use futures::future::BoxFuture;
+use secrecy::SecretString;
 use tableminus_gfx::glyphs::EngineKind;
 use tableminus_services::session_bridge::TableQueryOutcome;
 use tableminus_services::{
-    AiAssistantService, AiEndpointConfig, AppRuntime, TableMinusMcpHost, McpServerController,
-    ServiceError, SessionManager,
+    AiAssistantService, AiEndpointConfig, AppRuntime, McpServerController, ServiceError,
+    SessionManager, TableMinusMcpHost,
 };
 use tableminus_state::connection_window::{AttemptToken, WorkspaceId};
 use tableminus_state::library::LibraryConnection;
 use tableminus_windows_platform::{
     AppSettings, DEFAULT_CREDENTIAL_PREFIX, WindowsCredentialStore, storage_paths,
 };
-use futures::future::BoxFuture;
-use secrecy::SecretString;
 use tablepro_ai::ReplyEvent;
 use tablepro_core::column::ColumnInfo;
 use tablepro_core::credentials::{CredentialPrompt, CredentialPrompter, PromptReply};
