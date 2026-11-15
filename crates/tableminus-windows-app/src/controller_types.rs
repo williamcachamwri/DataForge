@@ -119,7 +119,10 @@ impl crate::app::AppController {
     }
 
     /// Inserts or updates a scheduled task by ID and persists the task list.
-    pub fn upsert_scheduled_task(&mut self, task: tableminus_windows_platform::ScheduledTaskRecord) {
+    pub fn upsert_scheduled_task(
+        &mut self,
+        task: tableminus_windows_platform::ScheduledTaskRecord,
+    ) {
         if let Some(existing) = self.scheduled_tasks.iter_mut().find(|t| t.id == task.id) {
             *existing = task;
         } else {
