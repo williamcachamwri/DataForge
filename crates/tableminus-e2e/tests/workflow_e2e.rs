@@ -5,25 +5,25 @@
 
 use std::collections::BTreeMap;
 
-use dataforge_e2e::E2eResult;
-use dataforge_gfx::editor_renderer::{
+use tableminus_e2e::E2eResult;
+use tableminus_gfx::editor_renderer::{
     AutocompleteItem, AutocompletePopup, CompletionKind, EditorLayout, EditorLine,
     SqlEditorRenderer, SqlTokenKind, tokenize_sql_line,
 };
-use dataforge_gfx::grid_renderer::{DataGridRenderer, GridColumn, GridHitTest, GridLayout};
-use dataforge_gfx::palette::{Color, ThemePalette};
-use dataforge_state::connection_window::{
+use tableminus_gfx::grid_renderer::{DataGridRenderer, GridColumn, GridHitTest, GridLayout};
+use tableminus_gfx::palette::{Color, ThemePalette};
+use tableminus_state::connection_window::{
     ConnectionUnavailableView, ConnectionWindowPhase, ConnectionWindowPhaseMachine, WorkspaceId,
 };
-use dataforge_state::tabs::{
+use tableminus_state::tabs::{
     CrashSafeTabPersistence, RestoredTabMerge, SessionRestorePlanner, TabConnectionId,
     TabStripModel,
 };
-use dataforge_state::theme::{
+use tableminus_state::theme::{
     Rgba, ThemeAppearance, ThemeFileFormat, ThemeResolver, ThemeScope, ThemeSlot,
     VsCodeThemeImporter,
 };
-use dataforge_windows_platform::{WindowsCredentialStore, storage_paths_for};
+use tableminus_windows_platform::{WindowsCredentialStore, storage_paths_for};
 use secrecy::{ExposeSecret, SecretString};
 use tablepro_core::credentials::{SecretKind, SecretLookup, SecretVault};
 use uuid::Uuid;
@@ -31,7 +31,7 @@ use uuid::Uuid;
 #[test]
 fn theme_import_resolve_and_gfx_renderer_layout() -> E2eResult<()> {
     let vscode_json = br##"{
-        "name": "DataForge One Dark",
+        "name": "TableMinus One Dark",
         "type": "dark",
         "colors": {
             "editor.background": "#1E222A",
@@ -220,7 +220,7 @@ fn connection_window_phase_and_tab_strip_crash_recovery() -> E2eResult<()> {
 
 #[tokio::test]
 async fn windows_credential_store_and_storage_paths_integration() -> E2eResult<()> {
-    let app_dir = format!("DataForge-E2E-{}", Uuid::new_v4());
+    let app_dir = format!("TableMinus-E2E-{}", Uuid::new_v4());
     let paths = storage_paths_for(&app_dir)?;
     assert_ne!(paths.connections_file(), paths.filter_settings_file());
 
