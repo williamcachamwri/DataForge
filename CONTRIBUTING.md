@@ -1,6 +1,6 @@
-# Contributing to DataForge
+# Contributing to TableMinus
 
-Thank you for your interest in contributing to **DataForge**! Whether you are fixing a bug, adding support for a SQL dialect quirk, refining the Direct3D 11 UI, or improving translations, contributions of all kinds are welcome.
+Thank you for your interest in contributing to **TableMinus**! Whether you are fixing a bug, adding support for a SQL dialect quirk, refining the Direct3D 11 UI, or improving translations, contributions of all kinds are welcome.
 
 By participating in this repository, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md). Please take a moment to review it before opening issues or pull requests.
 
@@ -8,7 +8,7 @@ By participating in this repository, you agree to abide by our [Code of Conduct]
 
 ## Prerequisites
 
-DataForge is a native Windows desktop application built in Rust (`2024` Edition). Before building from source, make sure you have:
+TableMinus is a native Windows desktop application built in Rust (`2024` Edition). Before building from source, make sure you have:
 
 - **Operating System**: Windows 10 or Windows 11 (x64)
 - **Rust Toolchain**: Stable MSVC toolchain (`x86_64-pc-windows-msvc`) via [rustup](https://rustup.rs/)
@@ -19,10 +19,10 @@ DataForge is a native Windows desktop application built in Rust (`2024` Edition)
 
 ## Workspace Architecture
 
-DataForge is organized as a Cargo workspace combining upstream database core crates with a native Windows UI stack:
+TableMinus is organized as a Cargo workspace combining upstream database core crates with a native Windows UI stack:
 
 ```text
-DataForge/
+TableMinus/
 ├── core/                           # Upstream TablePro core workspace & 9 database drivers
 │   └── crates/
 │       ├── core/                   # tablepro-core: query models, filters, dialect helpers, schema types
@@ -41,12 +41,12 @@ DataForge/
 │           ├── mongodb/            # tablepro-driver-mongodb (MongoDB)
 │           └── redis/              # tablepro-driver-redis (Redis)
 └── crates/
-    ├── dataforge-gfx/              # Vector glyphs and database engine icons
-    ├── dataforge-state/            # Editor state, SQL grammar/autocomplete, tab state, 14+ UI/syntax themes
-    ├── dataforge-services/         # Async Tokio runtime, session orchestration, and localized diagnostics
-    ├── dataforge-windows-platform/ # Settings persistence, Windows DWM backdrop (GaussianBlur, Mica, MicaAlt, Opaque), reduced-motion detection
-    ├── dataforge-windows-app/      # HeroGPUI (Direct3D 11) desktop application (dataforge.exe)
-    └── dataforge-e2e/              # End-to-end SQLite, startup, and grid performance benchmarks
+    ├── tableminus-gfx/              # Vector glyphs and database engine icons
+    ├── tableminus-state/            # Editor state, SQL grammar/autocomplete, tab state, 14+ UI/syntax themes
+    ├── tableminus-services/         # Async Tokio runtime, session orchestration, and localized diagnostics
+    ├── tableminus-windows-platform/ # Settings persistence, Windows DWM backdrop (GaussianBlur, Mica, MicaAlt, Opaque), reduced-motion detection
+    ├── tableminus-windows-app/      # HeroGPUI (Direct3D 11) desktop application (tableminus.exe)
+    └── tableminus-e2e/              # End-to-end SQLite, startup, and grid performance benchmarks
 ```
 
 ---
@@ -58,20 +58,20 @@ DataForge/
 
 ### 1. Check for a Running Binary Before Building
 
-Windows locks the executable while it is running. Before compiling `dataforge-windows-app`, verify that no existing `dataforge.exe` instance is holding a lock on `target\release\dataforge.exe`:
+Windows locks the executable while it is running. Before compiling `tableminus-windows-app`, verify that no existing `tableminus.exe` instance is holding a lock on `target\release\tableminus.exe`:
 
 ```powershell
-Get-Process dataforge -ErrorAction SilentlyContinue
+Get-Process tableminus -ErrorAction SilentlyContinue
 ```
 
 ### 2. Check & Build (`--release`)
 
 ```powershell
 # Type-check the desktop application in release mode
-cargo check --release -j 1 -p dataforge-windows-app
+cargo check --release -j 1 -p tableminus-windows-app
 
 # Build the release binary
-cargo build --release -j 1 -p dataforge-windows-app
+cargo build --release -j 1 -p tableminus-windows-app
 ```
 
 ### 3. Smoke Test & Verification Suites
@@ -80,23 +80,23 @@ Every change affecting application startup, drivers, query filters, or localizat
 
 ```powershell
 # Verify cold startup (~10 ms) & registration of all 9 database drivers
-.\target\release\dataforge.exe --smoke-startup
+.\target\release\tableminus.exe --smoke-startup
 
 # Run core SQL filter & dialect unit tests
 cargo test --release -j 1 -p tablepro-core filter
 
 # Run startup performance & localization E2E assertions
-cargo test --release -j 1 -p dataforge-e2e --test startup_perf_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocapture
 
 # Run the 100k-row SQLite load & 10k-frame scroll benchmark
-cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture
 ```
 
 ---
 
 ## UI & HeroGPUI Guidelines
 
-DataForge renders its interface through `gpui-pre-windows 0.3.11` over Direct3D 11 paired with Windows 11 DWM backdrops (`GaussianBlur`, `Mica`, `MicaAlt`, `Opaque`). When modifying UI components in `crates/dataforge-windows-app` or themes in `crates/dataforge-state`, keep these constraints in mind:
+TableMinus renders its interface through `gpui-pre-windows 0.3.11` over Direct3D 11 paired with Windows 11 DWM backdrops (`GaussianBlur`, `Mica`, `MicaAlt`, `Opaque`). When modifying UI components in `crates/tableminus-windows-app` or themes in `crates/tableminus-state`, keep these constraints in mind:
 
 1. **Backdrop Blur vs. Overlays**:
    - Windows DWM `WindowBackgroundAppearance::Blurred` blurs desktop pixels behind the top-level window—GPUI does not provide an in-app `backdrop-filter: blur()` shader for floating elements drawn over in-app text.
@@ -111,7 +111,7 @@ DataForge renders its interface through `gpui-pre-windows 0.3.11` over Direct3D 
 
 ## Localization (L10n) Guidelines
 
-DataForge ships with first-class support for **6 locales** out of the box:
+TableMinus ships with first-class support for **6 locales** out of the box:
 
 - `en-US` (English)
 - `vi-VN` (Tiếng Việt)
@@ -122,12 +122,12 @@ DataForge ships with first-class support for **6 locales** out of the box:
 
 When adding or changing user-facing strings or diagnostic messages:
 
-1. Update **all 6 locales** in `crates/dataforge-windows-app/src/i18n.rs` for UI labels, menus, modals, tooltips, and status bar text.
-2. Update **all 6 locales** in `crates/dataforge-services/src/diagnostics.rs` when adding or modifying connection/query diagnostic messages and remediation hints.
+1. Update **all 6 locales** in `crates/tableminus-windows-app/src/i18n.rs` for UI labels, menus, modals, tooltips, and status bar text.
+2. Update **all 6 locales** in `crates/tableminus-services/src/diagnostics.rs` when adding or modifying connection/query diagnostic messages and remediation hints.
 3. Run the startup and localization test suite to verify there are no missing keys or fallback regressions:
 
 ```powershell
-cargo test --release -j 1 -p dataforge-e2e --test startup_perf_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocapture
 ```
 
 ---
@@ -143,8 +143,8 @@ We keep the Git history clean, bisectable, and easy to review:
   - `docs(contributing): document release-only build rules and L10n workflow`
   - `test(e2e): add locale coverage check in startup_perf_e2e`
 - **Pull Request Checklist**:
-  - `cargo check --release -j 1 -p dataforge-windows-app` compiles cleanly without new warnings.
-  - `.\target\release\dataforge.exe --smoke-startup` succeeds with `9/9` drivers registered.
+  - `cargo check --release -j 1 -p tableminus-windows-app` compiles cleanly without new warnings.
+  - `.\target\release\tableminus.exe --smoke-startup` succeeds with `9/9` drivers registered.
   - Any UI changes respect opaque overlays (`1.0` alpha) and single-layer translucent surfaces under `GaussianBlur` and `Mica`.
   - Any new user-facing text is translated across all 6 locales (`en-US`, `vi-VN`, `zh-CN`, `ja-JP`, `es-ES`, `fr-FR`).
 
@@ -152,7 +152,7 @@ We keep the Git history clean, bisectable, and easy to review:
 
 ## Release & Versioning Workflow
 
-DataForge follows [Semantic Versioning](https://semver.org/) and keeps all `crates/dataforge-*/Cargo.toml` crate versions synchronized.
+TableMinus follows [Semantic Versioning](https://semver.org/) and keeps all `crates/tableminus-*/Cargo.toml` crate versions synchronized.
 
 ### 1. Maintain `CHANGELOG.md`
 
@@ -185,11 +185,11 @@ git push origin main
 git push origin vX.Y.Z
 ```
 
-The release workflow validates that the `vX.Y.Z` tag matches `crates/dataforge-windows-app/Cargo.toml`, runs release tests and `--smoke-startup`, packages `DataForge-win-Setup.exe`, `DataForge-win-Portable.zip`, and Velopack delta/full `.nupkg` assets, generates `SHA256SUMS.txt` and `git-cliff` notes, and publishes the GitHub Release. Maintainers can also run a non-publishing dry run from GitHub Actions (`workflow_dispatch` with `dry_run: true`).
+The release workflow validates that the `vX.Y.Z` tag matches `crates/tableminus-windows-app/Cargo.toml`, runs release tests and `--smoke-startup`, packages `TableMinus-win-Setup.exe`, `TableMinus-win-Portable.zip`, and Velopack delta/full `.nupkg` assets, generates `SHA256SUMS.txt` and `git-cliff` notes, and publishes the GitHub Release. Maintainers can also run a non-publishing dry run from GitHub Actions (`workflow_dispatch` with `dry_run: true`).
 
 ---
 
 ## Security & Licensing
 
 - **Reporting Security Vulnerabilities**: Please **do not** report security vulnerabilities in public GitHub issues. Follow the private disclosure instructions in [SECURITY.md](SECURITY.md).
-- **License**: By contributing to DataForge, you agree that your contributions will be licensed under the repository's licenses—see [LICENSE-MIT](LICENSE-MIT) (with upstream core attribution to [TableProApp/TablePro](https://github.com/TableProApp/TablePro)) and [LICENSE](LICENSE) (GNU Affero General Public License v3.0).
+- **License**: By contributing to TableMinus, you agree that your contributions will be licensed under the repository's licenses—see [LICENSE-MIT](LICENSE-MIT) (with upstream core attribution to [TableProApp/TablePro](https://github.com/TableProApp/TablePro)) and [LICENSE](LICENSE) (GNU Affero General Public License v3.0).
