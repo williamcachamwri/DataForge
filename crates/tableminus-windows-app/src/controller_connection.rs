@@ -4,10 +4,10 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_services::DatabaseEngine;
-use dataforge_services::import_bridge::test_connection;
-use dataforge_state::connection_window::{AttemptToken, ConnectionUnavailableView};
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_services::DatabaseEngine;
+use tableminus_services::import_bridge::test_connection;
+use tableminus_state::connection_window::{AttemptToken, ConnectionUnavailableView};
 use secrecy::SecretString;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::column::ResultColumn;
@@ -105,7 +105,7 @@ impl AppController {
     fn start_connect_task(
         &mut self,
         services: Arc<crate::services::ServiceHub>,
-        ws: dataforge_state::connection_window::WorkspaceId,
+        ws: tableminus_state::connection_window::WorkspaceId,
         request: ConnectRequest,
         label: String,
         engine: EngineKind,
@@ -155,7 +155,7 @@ impl AppController {
     fn connect_blocking_inner(
         &mut self,
         services: Arc<crate::services::ServiceHub>,
-        ws: dataforge_state::connection_window::WorkspaceId,
+        ws: tableminus_state::connection_window::WorkspaceId,
         request: ConnectRequest,
         label: String,
         engine: EngineKind,
@@ -167,7 +167,7 @@ impl AppController {
     pub(crate) fn connect_blocking_inner_with_creds(
         &mut self,
         services: Arc<crate::services::ServiceHub>,
-        ws: dataforge_state::connection_window::WorkspaceId,
+        ws: tableminus_state::connection_window::WorkspaceId,
         request: ConnectRequest,
         label: String,
         engine: EngineKind,
@@ -298,22 +298,22 @@ impl AppController {
                 let guard = services.sessions.read().await;
                 if let Some(session) = guard.session(ws) {
                     let schemas = session.refresh_schemas().await.map_err(|err| {
-                        dataforge_services::ServiceError::Session(err.to_string())
+                        tableminus_services::ServiceError::Session(err.to_string())
                     })?;
                     let scope = schemas.first().map_or(ObjectScope::DefaultSchema, |s| {
                         ObjectScope::Schema(s.name.clone())
                     });
                     let objects = session.refresh_objects(scope).await.map_err(|err| {
-                        dataforge_services::ServiceError::Session(err.to_string())
+                        tableminus_services::ServiceError::Session(err.to_string())
                     })?;
-                    Ok::<_, dataforge_services::ServiceError>((schemas, objects))
+                    Ok::<_, tableminus_services::ServiceError>((schemas, objects))
                 } else {
                     let schemas = guard.list_schemas(ws).await?;
                     let scope = schemas.first().map_or(ObjectScope::DefaultSchema, |s| {
                         ObjectScope::Schema(s.name.clone())
                     });
                     let objects = guard.list_objects(ws, scope).await?;
-                    Ok::<_, dataforge_services::ServiceError>((schemas, objects))
+                    Ok::<_, tableminus_services::ServiceError>((schemas, objects))
                 }
             })?;
 
@@ -396,12 +396,12 @@ impl AppController {
         let columns = services.runtime.block_on(async {
             let guard = services.sessions.read().await;
             let session = guard.session(ws).ok_or_else(|| {
-                dataforge_services::ServiceError::Session("no active session".to_owned())
+                tableminus_services::ServiceError::Session("no active session".to_owned())
             })?;
             session
                 .columns(table.clone())
                 .await
-                .map_err(|err| dataforge_services::ServiceError::Session(err.to_string()))
+                .map_err(|err| tableminus_services::ServiceError::Session(err.to_string()))
         })?;
 
         self.structure_columns = columns
@@ -513,7 +513,7 @@ impl AppController {
 
     fn apply_connected(
         &mut self,
-        ws: dataforge_state::connection_window::WorkspaceId,
+        ws: tableminus_state::connection_window::WorkspaceId,
         token: AttemptToken,
         label: &str,
         engine: EngineKind,
@@ -538,7 +538,7 @@ impl AppController {
 
     fn apply_connect_failed(
         &mut self,
-        ws: dataforge_state::connection_window::WorkspaceId,
+        ws: tableminus_state::connection_window::WorkspaceId,
         token: AttemptToken,
         summary: String,
         is_auth_failure: bool,
@@ -626,7 +626,7 @@ impl AppController {
         match summary.end {
             RunEnd::Completed => Ok((cols, rows, affected)),
             RunEnd::Failed(err) => Err(AppError::Service(
-                dataforge_services::ServiceError::Session(err.to_string()),
+                tableminus_services::ServiceError::Session(err.to_string()),
             )),
             RunEnd::Cancelled => Err(AppError::InvalidState("query cancelled".to_owned())),
             RunEnd::TimedOut { .. } => Err(AppError::InvalidState("query timed out".to_owned())),
@@ -646,7 +646,7 @@ impl AppController {
         services.runtime.block_on(async {
             let guard = services.sessions.read().await;
             let session = guard.session(ws).ok_or_else(|| {
-                dataforge_services::ServiceError::Session("no active session".to_owned())
+                tableminus_services::ServiceError::Session("no active session".to_owned())
             })?;
             let tref = table_ref.clone();
             if let Ok(def) = session
@@ -667,7 +667,7 @@ impl AppController {
             let col_infos = session
                 .columns(table_ref.clone())
                 .await
-                .map_err(|e| dataforge_services::ServiceError::Session(e.to_string()))?;
+                .map_err(|e| tableminus_services::ServiceError::Session(e.to_string()))?;
             let columns = col_infos
                 .iter()
                 .cloned()
@@ -745,7 +745,7 @@ impl AppController {
 
     /// Splits a SQL script into individual statements, runs them sequentially, and refreshes schema.
     pub fn execute_sql_script_blocking(&mut self, script: &str) -> Result<(usize, u64)> {
-        let statements = dataforge_services::split_sql_script_statements(script);
+        let statements = tableminus_services::split_sql_script_statements(script);
         let mut executed = 0_usize;
         let mut total_rows = 0_u64;
         for stmt in statements {
@@ -817,7 +817,7 @@ fn push_sidebar_section(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dataforge_windows_platform::AppSettings;
+    use tableminus_windows_platform::AppSettings;
 
     #[test]
     fn sqlite_script_and_table_definition_introspection()
