@@ -5,11 +5,6 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use tableminus_state::theme::{ThemeAppearance, ThemeDefinition, ThemeSlot, VsCodeThemeImporter};
-use tableminus_windows_platform::{
-    AppSettings, ThemePreference, WindowBackdropPreference, WindowControlsStyle,
-    detect_reduced_motion, storage_paths,
-};
 use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
     Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Chip, ChipLabel,
@@ -25,6 +20,11 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 use secrecy::ExposeSecret;
+use tableminus_state::theme::{ThemeAppearance, ThemeDefinition, ThemeSlot, VsCodeThemeImporter};
+use tableminus_windows_platform::{
+    AppSettings, ThemePreference, WindowBackdropPreference, WindowControlsStyle,
+    detect_reduced_motion, storage_paths,
+};
 use tablepro_mcp::{DEFAULT_PORT, MCP_PATH, obtain_token, replace_token};
 
 use super::TableMinusWorkspace;
@@ -390,7 +390,10 @@ pub fn render_settings_screen(
         .into_any_element()
 }
 
-fn render_top_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_top_header(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let notice = ws.settings_view.status_notice.clone();
