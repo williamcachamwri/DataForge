@@ -50,7 +50,7 @@ pub fn build_driver_registry() -> DriverRegistry {
     registry
 }
 
-/// Central Tokio runtime and shared driver/SSH services for DataForge.
+/// Central Tokio runtime and shared driver/SSH services for TableMinus.
 pub struct AppRuntime {
     runtime: Runtime,
     tasks: Tasks,
@@ -69,7 +69,7 @@ impl AppRuntime {
     /// Returns [`ServiceError::Runtime`] if the Tokio runtime cannot be built.
     pub fn new(worker_threads: Option<usize>) -> Result<Self, ServiceError> {
         let mut builder = Builder::new_multi_thread();
-        builder.thread_name("dataforge-tokio").enable_all();
+        builder.thread_name("tableminus-tokio").enable_all();
         if let Some(threads) = worker_threads {
             builder.worker_threads(threads.max(1));
         }
