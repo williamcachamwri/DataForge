@@ -1,4 +1,4 @@
-//! Shell layout geometry and pixel-to-target hit-testing for DataForge.
+//! Shell layout geometry and pixel-to-target hit-testing for TableMinus.
 //!
 //! Computes exact DIP coordinates for the 6-region desktop shell matching
 //! `.github/assets/app-light.png` and `.github/assets/app-dark.png`:
