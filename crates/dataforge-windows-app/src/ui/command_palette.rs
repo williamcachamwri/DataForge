@@ -156,14 +156,22 @@ fn append_workbench_tool_items(s: &Strings, is_connected: bool, items: &mut Vec<
             .keywords(["visual", "query", "builder", "select", "join"]),
         CommandItem::new("act:compare", s.compare_title)
             .group(s.cmd_group_actions)
-            .icon(IconName::ArrowLeftRight)
+            .icon(WorkspaceToolView::Compare.icon())
             .keywords(["compare", "diff", "schema", "data", "sync"]),
+        CommandItem::new("act:mock-generator", s.mock_generator_title)
+            .group(s.cmd_group_actions)
+            .icon(WorkspaceToolView::MockGenerator.icon())
+            .keywords(["mock", "fake", "seed", "generate", "synthetic", "data"]),
+        CommandItem::new("act:data-transfer", s.data_transfer_title)
+            .group(s.cmd_group_actions)
+            .icon(WorkspaceToolView::DataTransfer.icon())
+            .keywords(["transfer", "migrate", "copy", "cross-engine", "etl", "sync"]),
         CommandItem::new(
             "act:admin",
             format!("{} & {}", s.admin_title, s.admin_scheduled_tasks),
         )
         .group(s.cmd_group_navigation)
-        .icon(IconName::ShieldCheck)
+        .icon(WorkspaceToolView::Admin.icon())
         .keywords(["admin", "server", "sessions", "users", "scheduled", "tasks"]),
     ]);
 }
@@ -518,6 +526,8 @@ fn execute_workbench_action(
         "import-wizard" => open_workbench_tool(ws, WorkspaceToolView::ImportWizard),
         "query-builder" => open_workbench_tool(ws, WorkspaceToolView::QueryBuilder),
         "compare" => open_workbench_tool(ws, WorkspaceToolView::Compare),
+        "mock-generator" => open_workbench_tool(ws, WorkspaceToolView::MockGenerator),
+        "data-transfer" => open_workbench_tool(ws, WorkspaceToolView::DataTransfer),
         "admin" => open_workbench_tool(ws, WorkspaceToolView::Admin),
         "metadata-search" => ws.metadata_search_ui.open_modal(window, cx),
         "format-sql" => {
