@@ -1119,6 +1119,67 @@ pub struct Strings {
     pub schema_no_changes: &'static str,
     pub qb_select_table_hint: &'static str,
     pub import_unknown_format: &'static str,
+
+    // Window Controls
+    pub window_controls_label: &'static str,
+    pub window_controls_desc: &'static str,
+    pub window_controls_macos: &'static str,
+    pub window_controls_windows: &'static str,
+
+    // Rich Value Viewer (Inspector)
+    pub inspector_tab_text: &'static str,
+    pub inspector_tab_json: &'static str,
+    pub inspector_tab_hex: &'static str,
+    pub inspector_tab_image: &'static str,
+    pub inspector_apply_json: &'static str,
+    pub inspector_copy_path: &'static str,
+    pub inspector_export_binary: &'static str,
+    pub inspector_invalid_json: &'static str,
+    pub inspector_image_dimensions: &'static str,
+
+    // Mock Data Generator
+    pub mock_generator_title: &'static str,
+    pub mock_generator_desc: &'static str,
+    pub mock_row_count: &'static str,
+    pub mock_batch_size: &'static str,
+    pub mock_seed: &'static str,
+    pub mock_null_ratio: &'static str,
+    pub mock_rule_kind: &'static str,
+    pub mock_generate_btn: &'static str,
+    pub mock_preview_btn: &'static str,
+    pub mock_inserted_rows: &'static str,
+    pub mock_fk_parent: &'static str,
+
+    // Cross-Engine Data Transfer
+    pub data_transfer_title: &'static str,
+    pub data_transfer_desc: &'static str,
+    pub transfer_source_section: &'static str,
+    pub transfer_target_section: &'static str,
+    pub transfer_mode_label: &'static str,
+    pub transfer_mode_create: &'static str,
+    pub transfer_mode_append: &'static str,
+    pub transfer_mode_truncate: &'static str,
+    pub transfer_batch_size: &'static str,
+    pub transfer_column_mapping: &'static str,
+    pub transfer_start_btn: &'static str,
+    pub transfer_rows_written: &'static str,
+
+    // Live Server Monitor
+    pub monitor_live_sessions: &'static str,
+    pub monitor_locks_tab: &'static str,
+    pub monitor_auto_refresh: &'static str,
+    pub monitor_kill_session: &'static str,
+    pub monitor_confirm_kill: &'static str,
+    pub monitor_pid_col: &'static str,
+    pub monitor_user_col: &'static str,
+    pub monitor_state_col: &'static str,
+    pub monitor_duration_col: &'static str,
+    pub monitor_query_col: &'static str,
+    pub monitor_relation_col: &'static str,
+    pub monitor_granted_col: &'static str,
+    pub monitor_blocked_by_col: &'static str,
+    pub monitor_no_sessions: &'static str,
+    pub monitor_no_locks: &'static str,
 }
 
 impl Strings {
@@ -2119,6 +2180,67 @@ const EN_US: Strings = Strings {
     schema_no_changes: "-- No DDL changes",
     qb_select_table_hint: "-- Select a table to compose SQL",
     import_unknown_format: "Unknown",
+
+    // Window Controls
+    window_controls_label: "Window Controls",
+    window_controls_desc: "Choose between macOS-style traffic lights on the left or native Windows 11 caption buttons on the right.",
+    window_controls_macos: "macOS (Left)",
+    window_controls_windows: "Windows 11 (Right)",
+
+    // Rich Value Viewer (Inspector)
+    inspector_tab_text: "Text",
+    inspector_tab_json: "JSON",
+    inspector_tab_hex: "Hex",
+    inspector_tab_image: "Image",
+    inspector_apply_json: "Apply JSON",
+    inspector_copy_path: "Copy Path",
+    inspector_export_binary: "Export Binary",
+    inspector_invalid_json: "Invalid JSON",
+    inspector_image_dimensions: "Dimensions",
+
+    // Mock Data Generator
+    mock_generator_title: "Mock Data Generator",
+    mock_generator_desc: "Generate realistic synthetic rows with deterministic seeds, NULL ratios, and foreign-key sampling.",
+    mock_row_count: "Row Count",
+    mock_batch_size: "Batch Size",
+    mock_seed: "Seed",
+    mock_null_ratio: "NULL Ratio",
+    mock_rule_kind: "Generator Rule",
+    mock_generate_btn: "Generate & Insert",
+    mock_preview_btn: "Preview Sample",
+    mock_inserted_rows: "Inserted Rows",
+    mock_fk_parent: "FK Parent",
+
+    // Cross-Engine Data Transfer
+    data_transfer_title: "Cross-Engine Data Transfer",
+    data_transfer_desc: "Stream rows directly between any two connected databases with automatic column mapping.",
+    transfer_source_section: "Source Connection & Table",
+    transfer_target_section: "Target Connection & Table",
+    transfer_mode_label: "Transfer Mode",
+    transfer_mode_create: "Create Table & Insert",
+    transfer_mode_append: "Append Rows",
+    transfer_mode_truncate: "Truncate & Replace",
+    transfer_batch_size: "Batch Size",
+    transfer_column_mapping: "Column Mapping",
+    transfer_start_btn: "Start Transfer",
+    transfer_rows_written: "Rows Written",
+
+    // Live Server Monitor
+    monitor_live_sessions: "Live Sessions",
+    monitor_locks_tab: "Locks & Blocking",
+    monitor_auto_refresh: "Auto-Refresh (2s)",
+    monitor_kill_session: "Kill Session",
+    monitor_confirm_kill: "Confirm terminating this server session?",
+    monitor_pid_col: "PID / ID",
+    monitor_user_col: "User",
+    monitor_state_col: "State",
+    monitor_duration_col: "Duration",
+    monitor_query_col: "Query / Command",
+    monitor_relation_col: "Relation",
+    monitor_granted_col: "Granted",
+    monitor_blocked_by_col: "Blocked By",
+    monitor_no_sessions: "No active sessions reported.",
+    monitor_no_locks: "No active locks or blocking chains.",
 };
 
 const VI_VN: Strings = Strings {
@@ -3104,6 +3226,67 @@ const VI_VN: Strings = Strings {
     schema_no_changes: "-- Không có thay đổi DDL",
     qb_select_table_hint: "-- Chọn một bảng để tạo câu lệnh SQL",
     import_unknown_format: "Không xác định",
+
+    // Window Controls
+    window_controls_label: "Nút điều khiển cửa sổ",
+    window_controls_desc: "Chọn kiểu nút đèn giao thông macOS bên trái hoặc nút cửa sổ Windows 11 gốc bên phải.",
+    window_controls_macos: "macOS (Trái)",
+    window_controls_windows: "Windows 11 (Phải)",
+
+    // Rich Value Viewer (Inspector)
+    inspector_tab_text: "Văn bản",
+    inspector_tab_json: "JSON",
+    inspector_tab_hex: "Hex",
+    inspector_tab_image: "Hình ảnh",
+    inspector_apply_json: "Áp dụng JSON",
+    inspector_copy_path: "Sao chép đường dẫn",
+    inspector_export_binary: "Xuất nhị phân",
+    inspector_invalid_json: "JSON không hợp lệ",
+    inspector_image_dimensions: "Kích thước",
+
+    // Mock Data Generator
+    mock_generator_title: "Trình tạo dữ liệu giả lập",
+    mock_generator_desc: "Tạo các dòng dữ liệu giả lập thực tế với seed cố định, tỷ lệ NULL và lấy mẫu khóa ngoại.",
+    mock_row_count: "Số dòng",
+    mock_batch_size: "Kích thước lô",
+    mock_seed: "Seed",
+    mock_null_ratio: "Tỷ lệ NULL",
+    mock_rule_kind: "Quy tắc sinh dữ liệu",
+    mock_generate_btn: "Tạo & Chèn",
+    mock_preview_btn: "Xem trước mẫu",
+    mock_inserted_rows: "Số dòng đã chèn",
+    mock_fk_parent: "Bảng cha FK",
+
+    // Cross-Engine Data Transfer
+    data_transfer_title: "Chuyển dữ liệu đa hệ quản trị",
+    data_transfer_desc: "Truyền trực tiếp dữ liệu giữa hai kết nối cơ sở dữ liệu bất kỳ với ánh xạ cột tự động.",
+    transfer_source_section: "Kết nối & Bảng nguồn",
+    transfer_target_section: "Kết nối & Bảng đích",
+    transfer_mode_label: "Chế độ truyền",
+    transfer_mode_create: "Tạo bảng & Chèn",
+    transfer_mode_append: "Nối thêm dòng",
+    transfer_mode_truncate: "Xóa sạch & Thay thế",
+    transfer_batch_size: "Kích thước lô",
+    transfer_column_mapping: "Ánh xạ cột",
+    transfer_start_btn: "Bắt đầu truyền",
+    transfer_rows_written: "Số dòng đã ghi",
+
+    // Live Server Monitor
+    monitor_live_sessions: "Phiên trực tiếp",
+    monitor_locks_tab: "Khóa & Chặn",
+    monitor_auto_refresh: "Tự động làm mới (2s)",
+    monitor_kill_session: "Ngắt phiên",
+    monitor_confirm_kill: "Xác nhận ngắt phiên máy chủ này?",
+    monitor_pid_col: "PID / ID",
+    monitor_user_col: "Người dùng",
+    monitor_state_col: "Trạng thái",
+    monitor_duration_col: "Thời lượng",
+    monitor_query_col: "Truy vấn / Lệnh",
+    monitor_relation_col: "Quan hệ / Bảng",
+    monitor_granted_col: "Đã cấp",
+    monitor_blocked_by_col: "Bị chặn bởi",
+    monitor_no_sessions: "Không có phiên hoạt động nào.",
+    monitor_no_locks: "Không có khóa hoặc chuỗi chặn nào.",
 };
 
 const ZH_CN: Strings = Strings {
@@ -4089,6 +4272,67 @@ const ZH_CN: Strings = Strings {
     schema_no_changes: "-- 无 DDL 变更",
     qb_select_table_hint: "-- 请选择一张表以构建 SQL",
     import_unknown_format: "未知格式",
+
+    // Window Controls
+    window_controls_label: "窗口控制按钮",
+    window_controls_desc: "选择左侧 macOS 风格红绿灯按钮或右侧原生 Windows 11 标题栏按钮。",
+    window_controls_macos: "macOS（左侧）",
+    window_controls_windows: "Windows 11（右侧）",
+
+    // Rich Value Viewer (Inspector)
+    inspector_tab_text: "文本",
+    inspector_tab_json: "JSON",
+    inspector_tab_hex: "十六进制",
+    inspector_tab_image: "图像",
+    inspector_apply_json: "应用 JSON",
+    inspector_copy_path: "复制路径",
+    inspector_export_binary: "导出二进制",
+    inspector_invalid_json: "无效的 JSON",
+    inspector_image_dimensions: "尺寸",
+
+    // Mock Data Generator
+    mock_generator_title: "模拟数据生成器",
+    mock_generator_desc: "使用固定种子、NULL 比例和外键采样生成逼真的测试数据行。",
+    mock_row_count: "行数",
+    mock_batch_size: "批处理大小",
+    mock_seed: "随机种子",
+    mock_null_ratio: "NULL 比例",
+    mock_rule_kind: "生成规则",
+    mock_generate_btn: "生成并插入",
+    mock_preview_btn: "预览样本",
+    mock_inserted_rows: "已插入行数",
+    mock_fk_parent: "外键父表",
+
+    // Cross-Engine Data Transfer
+    data_transfer_title: "跨引擎数据传输",
+    data_transfer_desc: "在任意两个已连接的数据库之间直接流式传输数据行，支持自动列映射。",
+    transfer_source_section: "源连接与源表",
+    transfer_target_section: "目标连接与目标表",
+    transfer_mode_label: "传输模式",
+    transfer_mode_create: "建表并插入",
+    transfer_mode_append: "追加数据行",
+    transfer_mode_truncate: "清空并替换",
+    transfer_batch_size: "批处理大小",
+    transfer_column_mapping: "列映射",
+    transfer_start_btn: "开始传输",
+    transfer_rows_written: "已写入行数",
+
+    // Live Server Monitor
+    monitor_live_sessions: "实时会话",
+    monitor_locks_tab: "锁与阻塞",
+    monitor_auto_refresh: "自动刷新 (2秒)",
+    monitor_kill_session: "终止会话",
+    monitor_confirm_kill: "确认终止此服务器会话？",
+    monitor_pid_col: "PID / ID",
+    monitor_user_col: "用户",
+    monitor_state_col: "状态",
+    monitor_duration_col: "持续时间",
+    monitor_query_col: "查询 / 命令",
+    monitor_relation_col: "关联对象",
+    monitor_granted_col: "已授予",
+    monitor_blocked_by_col: "阻塞源",
+    monitor_no_sessions: "暂无活动会话。",
+    monitor_no_locks: "暂无活动锁或阻塞链。",
 };
 
 const JA_JP: Strings = Strings {
@@ -5074,6 +5318,67 @@ const JA_JP: Strings = Strings {
     schema_no_changes: "-- DDL の変更はありません",
     qb_select_table_hint: "-- テーブルを選択して SQL を作成してください",
     import_unknown_format: "不明",
+
+    // Window Controls
+    window_controls_label: "ウィンドウ操作ボタン",
+    window_controls_desc: "左側の macOS 風トラフィックライトまたは右側のネイティブ Windows 11 キャプションボタンを選択します。",
+    window_controls_macos: "macOS（左）",
+    window_controls_windows: "Windows 11（右）",
+
+    // Rich Value Viewer (Inspector)
+    inspector_tab_text: "テキスト",
+    inspector_tab_json: "JSON",
+    inspector_tab_hex: "16進数",
+    inspector_tab_image: "画像",
+    inspector_apply_json: "JSON を適用",
+    inspector_copy_path: "パスをコピー",
+    inspector_export_binary: "バイナリを書き出す",
+    inspector_invalid_json: "無効な JSON",
+    inspector_image_dimensions: "サイズ",
+
+    // Mock Data Generator
+    mock_generator_title: "モックデータ生成",
+    mock_generator_desc: "決定的シード、NULL 比率、外部キーサンプリングを用いてリアルなテスト行を生成します。",
+    mock_row_count: "行数",
+    mock_batch_size: "バッチサイズ",
+    mock_seed: "シード値",
+    mock_null_ratio: "NULL 比率",
+    mock_rule_kind: "生成ルール",
+    mock_generate_btn: "生成して挿入",
+    mock_preview_btn: "サンプルをプレビュー",
+    mock_inserted_rows: "挿入済み行数",
+    mock_fk_parent: "FK 親テーブル",
+
+    // Cross-Engine Data Transfer
+    data_transfer_title: "クロスエンジン データ転送",
+    data_transfer_desc: "接続済みの任意の 2 つのデータベース間で、自動列マッピング付きで行を直接ストリーミング転送します。",
+    transfer_source_section: "転送元接続・テーブル",
+    transfer_target_section: "転送先接続・テーブル",
+    transfer_mode_label: "転送モード",
+    transfer_mode_create: "テーブル作成して挿入",
+    transfer_mode_append: "行を追加",
+    transfer_mode_truncate: "切り捨てて置換",
+    transfer_batch_size: "バッチサイズ",
+    transfer_column_mapping: "列マッピング",
+    transfer_start_btn: "転送を開始",
+    transfer_rows_written: "書き込み済み行数",
+
+    // Live Server Monitor
+    monitor_live_sessions: "ライブセッション",
+    monitor_locks_tab: "ロックとブロッキング",
+    monitor_auto_refresh: "自動更新 (2秒)",
+    monitor_kill_session: "セッションを終了",
+    monitor_confirm_kill: "このサーバーセッションを終了してもよろしいですか？",
+    monitor_pid_col: "PID / ID",
+    monitor_user_col: "ユーザー",
+    monitor_state_col: "状態",
+    monitor_duration_col: "経過時間",
+    monitor_query_col: "クエリ / コマンド",
+    monitor_relation_col: "リレーション",
+    monitor_granted_col: "許可済み",
+    monitor_blocked_by_col: "ブロック元",
+    monitor_no_sessions: "アクティブなセッションはありません。",
+    monitor_no_locks: "アクティブなロックやブロッキングはありません。",
 };
 
 const ES_ES: Strings = Strings {
@@ -6059,6 +6364,67 @@ const ES_ES: Strings = Strings {
     schema_no_changes: "-- Sin cambios DDL",
     qb_select_table_hint: "-- Seleccione una tabla para componer SQL",
     import_unknown_format: "Desconocido",
+
+    // Window Controls
+    window_controls_label: "Controles de ventana",
+    window_controls_desc: "Elija entre semáforos estilo macOS a la izquierda o botones nativos de Windows 11 a la derecha.",
+    window_controls_macos: "macOS (Izquierda)",
+    window_controls_windows: "Windows 11 (Derecha)",
+
+    // Rich Value Viewer (Inspector)
+    inspector_tab_text: "Texto",
+    inspector_tab_json: "JSON",
+    inspector_tab_hex: "Hex",
+    inspector_tab_image: "Imagen",
+    inspector_apply_json: "Aplicar JSON",
+    inspector_copy_path: "Copiar ruta",
+    inspector_export_binary: "Exportar binario",
+    inspector_invalid_json: "JSON no válido",
+    inspector_image_dimensions: "Dimensiones",
+
+    // Mock Data Generator
+    mock_generator_title: "Generador de datos de prueba",
+    mock_generator_desc: "Genere filas sintéticas realistas con semillas deterministas, proporción de NULL y muestreo de claves foráneas.",
+    mock_row_count: "Cantidad de filas",
+    mock_batch_size: "Tamaño de lote",
+    mock_seed: "Semilla",
+    mock_null_ratio: "Proporción NULL",
+    mock_rule_kind: "Regla de generación",
+    mock_generate_btn: "Generar e insertar",
+    mock_preview_btn: "Vista previa",
+    mock_inserted_rows: "Filas insertadas",
+    mock_fk_parent: "Tabla padre FK",
+
+    // Cross-Engine Data Transfer
+    data_transfer_title: "Transferencia de datos entre motores",
+    data_transfer_desc: "Transfiera filas directamente entre dos bases de datos conectadas con mapeo automático de columnas.",
+    transfer_source_section: "Conexión y tabla de origen",
+    transfer_target_section: "Conexión y tabla de destino",
+    transfer_mode_label: "Modo de transferencia",
+    transfer_mode_create: "Crear tabla e insertar",
+    transfer_mode_append: "Anexar filas",
+    transfer_mode_truncate: "Truncar y reemplazar",
+    transfer_batch_size: "Tamaño de lote",
+    transfer_column_mapping: "Mapeo de columnas",
+    transfer_start_btn: "Iniciar transferencia",
+    transfer_rows_written: "Filas escritas",
+
+    // Live Server Monitor
+    monitor_live_sessions: "Sesiones en vivo",
+    monitor_locks_tab: "Bloqueos",
+    monitor_auto_refresh: "Autoactualizar (2s)",
+    monitor_kill_session: "Terminar sesión",
+    monitor_confirm_kill: "¿Confirmar la terminación de esta sesión del servidor?",
+    monitor_pid_col: "PID / ID",
+    monitor_user_col: "Usuario",
+    monitor_state_col: "Estado",
+    monitor_duration_col: "Duración",
+    monitor_query_col: "Consulta / Comando",
+    monitor_relation_col: "Relación",
+    monitor_granted_col: "Concedido",
+    monitor_blocked_by_col: "Bloqueado por",
+    monitor_no_sessions: "No hay sesiones activas.",
+    monitor_no_locks: "No hay bloqueos ni cadenas de espera activas.",
 };
 
 const FR_FR: Strings = Strings {
@@ -7044,6 +7410,67 @@ const FR_FR: Strings = Strings {
     schema_no_changes: "-- Aucune modification DDL",
     qb_select_table_hint: "-- Sélectionnez une table pour composer du SQL",
     import_unknown_format: "Inconnu",
+
+    // Window Controls
+    window_controls_label: "Boutons de fenêtre",
+    window_controls_desc: "Choisissez entre les feux tricolores style macOS à gauche ou les boutons Windows 11 natifs à droite.",
+    window_controls_macos: "macOS (Gauche)",
+    window_controls_windows: "Windows 11 (Droite)",
+
+    // Rich Value Viewer (Inspector)
+    inspector_tab_text: "Texte",
+    inspector_tab_json: "JSON",
+    inspector_tab_hex: "Hex",
+    inspector_tab_image: "Image",
+    inspector_apply_json: "Appliquer JSON",
+    inspector_copy_path: "Copier le chemin",
+    inspector_export_binary: "Exporter binaire",
+    inspector_invalid_json: "JSON invalide",
+    inspector_image_dimensions: "Dimensions",
+
+    // Mock Data Generator
+    mock_generator_title: "Générateur de données factices",
+    mock_generator_desc: "Générez des lignes synthétiques réalistes avec graine déterministe, taux de NULL et échantillonnage de clés étrangères.",
+    mock_row_count: "Nombre de lignes",
+    mock_batch_size: "Taille du lot",
+    mock_seed: "Graine",
+    mock_null_ratio: "Taux de NULL",
+    mock_rule_kind: "Règle de génération",
+    mock_generate_btn: "Générer et insérer",
+    mock_preview_btn: "Aperçu de l'échantillon",
+    mock_inserted_rows: "Lignes insérées",
+    mock_fk_parent: "Table parente FK",
+
+    // Cross-Engine Data Transfer
+    data_transfer_title: "Transfert de données inter-moteurs",
+    data_transfer_desc: "Transférez des lignes directement entre deux bases connectées avec mappage automatique des colonnes.",
+    transfer_source_section: "Connexion et table source",
+    transfer_target_section: "Connexion et table cible",
+    transfer_mode_label: "Mode de transfert",
+    transfer_mode_create: "Créer la table et insérer",
+    transfer_mode_append: "Ajouter des lignes",
+    transfer_mode_truncate: "Vider et remplacer",
+    transfer_batch_size: "Taille du lot",
+    transfer_column_mapping: "Mappage des colonnes",
+    transfer_start_btn: "Démarrer le transfert",
+    transfer_rows_written: "Lignes écrites",
+
+    // Live Server Monitor
+    monitor_live_sessions: "Sessions actives",
+    monitor_locks_tab: "Verrous et blocages",
+    monitor_auto_refresh: "Actualisation auto (2s)",
+    monitor_kill_session: "Terminer la session",
+    monitor_confirm_kill: "Confirmer l'arrêt de cette session serveur ?",
+    monitor_pid_col: "PID / ID",
+    monitor_user_col: "Utilisateur",
+    monitor_state_col: "État",
+    monitor_duration_col: "Durée",
+    monitor_query_col: "Requête / Commande",
+    monitor_relation_col: "Relation",
+    monitor_granted_col: "Accordé",
+    monitor_blocked_by_col: "Bloqué par",
+    monitor_no_sessions: "Aucune session active signalée.",
+    monitor_no_locks: "Aucun verrou ni blocage actif.",
 };
 
 /// Initializes i18n locale selection from saved preference or OS environment variables.
@@ -7180,6 +7607,84 @@ mod tests {
                 assert_ne!(s.admin_title, en.admin_title);
                 assert_ne!(s.er_diagram, en.er_diagram);
                 assert_ne!(s.charts_tab, en.charts_tab);
+            }
+        }
+    }
+
+    #[test]
+    fn wave3_feature_keys_are_translated_across_all_locales() {
+        let en = Strings::for_locale(Locale::EnUs);
+        for locale in Locale::ALL {
+            let s = Strings::for_locale(locale);
+            let samples = [
+                s.window_controls_label,
+                s.window_controls_desc,
+                s.window_controls_macos,
+                s.window_controls_windows,
+                s.inspector_tab_text,
+                s.inspector_tab_json,
+                s.inspector_tab_hex,
+                s.inspector_tab_image,
+                s.inspector_apply_json,
+                s.inspector_copy_path,
+                s.inspector_export_binary,
+                s.inspector_invalid_json,
+                s.inspector_image_dimensions,
+                s.mock_generator_title,
+                s.mock_generator_desc,
+                s.mock_row_count,
+                s.mock_batch_size,
+                s.mock_seed,
+                s.mock_null_ratio,
+                s.mock_rule_kind,
+                s.mock_generate_btn,
+                s.mock_preview_btn,
+                s.mock_inserted_rows,
+                s.mock_fk_parent,
+                s.data_transfer_title,
+                s.data_transfer_desc,
+                s.transfer_source_section,
+                s.transfer_target_section,
+                s.transfer_mode_label,
+                s.transfer_mode_create,
+                s.transfer_mode_append,
+                s.transfer_mode_truncate,
+                s.transfer_batch_size,
+                s.transfer_column_mapping,
+                s.transfer_start_btn,
+                s.transfer_rows_written,
+                s.monitor_live_sessions,
+                s.monitor_locks_tab,
+                s.monitor_auto_refresh,
+                s.monitor_kill_session,
+                s.monitor_confirm_kill,
+                s.monitor_pid_col,
+                s.monitor_user_col,
+                s.monitor_state_col,
+                s.monitor_duration_col,
+                s.monitor_query_col,
+                s.monitor_relation_col,
+                s.monitor_granted_col,
+                s.monitor_blocked_by_col,
+                s.monitor_no_sessions,
+                s.monitor_no_locks,
+            ];
+            for item in samples {
+                assert!(!item.trim().is_empty(), "empty string in {locale:?}");
+            }
+            if locale != Locale::EnUs {
+                assert_ne!(s.window_controls_label, en.window_controls_label);
+                assert_ne!(s.window_controls_desc, en.window_controls_desc);
+                assert_ne!(s.inspector_apply_json, en.inspector_apply_json);
+                assert_ne!(s.inspector_invalid_json, en.inspector_invalid_json);
+                assert_ne!(s.mock_generator_title, en.mock_generator_title);
+                assert_ne!(s.mock_generator_desc, en.mock_generator_desc);
+                assert_ne!(s.data_transfer_title, en.data_transfer_title);
+                assert_ne!(s.data_transfer_desc, en.data_transfer_desc);
+                assert_ne!(s.monitor_live_sessions, en.monitor_live_sessions);
+                assert_ne!(s.monitor_confirm_kill, en.monitor_confirm_kill);
+                assert_ne!(s.monitor_no_sessions, en.monitor_no_sessions);
+                assert_ne!(s.monitor_no_locks, en.monitor_no_locks);
             }
         }
     }
