@@ -9,24 +9,24 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use dataforge_e2e::{E2eResult, open_file_session, run_sql, shutdown_session};
-use dataforge_services::ServiceError;
-use dataforge_services::data_transfer::{
+use tableminus_e2e::{E2eResult, open_file_session, run_sql, shutdown_session};
+use tableminus_services::ServiceError;
+use tableminus_services::data_transfer::{
     ColumnTypeMapping, TransferConfig, TransferMode, build_target_create_table_ddl,
     format_sql_literal, map_sql_type, transfer_table, transfer_table_cancellable,
 };
-use dataforge_services::ddl_builder::DatabaseEngine;
-use dataforge_services::mock_generator::{
+use tableminus_services::ddl_builder::DatabaseEngine;
+use tableminus_services::mock_generator::{
     MockColumnRule, MockGenerationPlan, MockValueKind, SeededRng, build_mock_insert_batches,
     escape_sql_literal, execute_mock_generation, format_value_as_sql_literal,
     infer_plan_from_table, infer_rule_from_column,
 };
-use dataforge_services::server_monitor::{
+use tableminus_services::server_monitor::{
     ServerLockRow, fetch_server_monitor_snapshot, format_snapshot_summary, kill_session_sql,
     locks_query, parse_locks_result, parse_sessions_result, sessions_query,
     terminate_server_session, validate_session_id,
 };
-use dataforge_windows_platform::{AppSettings, WindowControlsStyle};
+use tableminus_windows_platform::{AppSettings, WindowControlsStyle};
 use tablepro_core::column::{
     BoolStorage, CatalogType, ColumnDefault, ColumnInfo, ColumnKind, ColumnType, IntegerKind,
     IntegerWidth, ReadForm, ResultColumn, SqlTypeExpr, TemporalZone, TextLength,
