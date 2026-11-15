@@ -1,5 +1,5 @@
 //! Service layer wiring TablePro core crates, Windows platform adapters,
-//! and headless application state for DataForge.
+//! and headless application state for TableMinus.
 
 pub mod admin_tasks;
 pub mod ai_bridge;
@@ -50,7 +50,7 @@ pub use import_bridge::{
     import_from_app_with_dirs, parse_connection_url, test_connection,
 };
 pub use mcp_host::{
-    DataForgeMcpHost, McpServerController, OpenConnectionHandler, QueryHistoryRecorder,
+    TableMinusMcpHost, McpServerController, OpenConnectionHandler, QueryHistoryRecorder,
     WriteApprovalHandler, classify_cli_args,
 };
 pub use runtime::{AppRuntime, REGISTERED_ENGINE_IDS, build_driver_registry};
