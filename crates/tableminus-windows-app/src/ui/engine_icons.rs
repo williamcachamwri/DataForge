@@ -1,10 +1,10 @@
 //! Normalized TablePro vector icons for all 11 database engines rendered cleanly
 //! via GPUI `canvas` + `PathBuilder` (zero Direct2D dependency).
 
-use tableminus_gfx::glyphs::{EngineKind, PathSegment, parse_svg_path};
 use herogpui::gpui::{
     AnyElement, Hsla, IntoElement, Path, PathBuilder, Pixels, Point, Styled, canvas, point, px,
 };
+use tableminus_gfx::glyphs::{EngineKind, PathSegment, parse_svg_path};
 
 /// Canonical normalized extent (`16x16` DIPs) returned by [`parse_svg_path`].
 pub const NORMALIZED_ICON_EXTENT: f32 = 16.0;
