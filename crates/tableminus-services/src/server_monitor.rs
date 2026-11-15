@@ -1077,7 +1077,7 @@ mod tests {
         let db_path = dir.join("server_monitor_test.sqlite");
         let connector = Arc::new(DriverConnector::new(
             ConnectServices {
-                environment: ConnectEnvironment::new("dataforge-services-test"),
+                environment: ConnectEnvironment::new("tableminus-services-test"),
                 ssh: Arc::new(InProcessSsh::system()),
                 liveness: LivenessPolicy::DESKTOP,
             },
