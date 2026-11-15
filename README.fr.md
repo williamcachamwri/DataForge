@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="crates/dataforge-windows-app/assets/dataforge_logo.png" alt="DataForge Logo" width="112" height="112" />
+<img src="crates/tableminus-windows-app/assets/tableminus_logo.png" alt="TableMinus Logo" width="112" height="112" />
 
-# DataForge
+# TableMinus
 
 **Atelier SQL et bases de données natif en Rust pour Windows.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/release.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#présentation)
 [![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#bases-de-données-prises-en-charge)
@@ -24,9 +24,9 @@
 
 ## Présentation
 
-DataForge est un atelier SQL et gestionnaire de bases de données natif pour Windows écrit en Rust. L'interface s'appuie sur [HeroGPUI](https://github.com/williamcachamwri/DataForge) directement au-dessus de Direct3D 11 et réutilise le cœur Rust open source de [TablePro](https://github.com/TableProApp/TablePro), sans Electron ni JVM.
+TableMinus est un atelier SQL et gestionnaire de bases de données natif pour Windows écrit en Rust. L'interface s'appuie sur [HeroGPUI](https://github.com/williamcachamwri/TableMinus) directement au-dessus de Direct3D 11 et réutilise le cœur Rust open source de [TablePro](https://github.com/TableProApp/TablePro), sans Electron ni JVM.
 
-Sur Windows 11 avec une compilation release, le démarrage à froid prend environ `10 ms` (mesuré entre `9.21` et `10.11 ms` via `--smoke-startup` avec les 9 pilotes enregistrés) et la mémoire du processus reste autour de `~55 Mo` lors de requêtes intensives sur `100k`, `500k` et `1M` lignes. Dans la suite SQLite `dataforge-e2e`, le chargement de `100k` lignes dans la grille prend `24.43 ms` et le défilement sur `10k` images prend `0.432 ms`.
+Sur Windows 11 avec une compilation release, le démarrage à froid prend environ `10 ms` (mesuré entre `9.21` et `10.11 ms` via `--smoke-startup` avec les 9 pilotes enregistrés) et la mémoire du processus reste autour de `~55 Mo` lors de requêtes intensives sur `100k`, `500k` et `1M` lignes. Dans la suite SQLite `tableminus-e2e`, le chargement de `100k` lignes dans la grille prend `24.43 ms` et le défilement sur `10k` images prend `0.432 ms`.
 
 ---
 
@@ -34,25 +34,25 @@ Sur Windows 11 avec une compilation release, le démarrage à froid prend enviro
 
 ### Éditeur SQL, mode Vim et panneau de résultats partagé (requête indexée en `15 ms` sur 10M lignes)
 
-![DataForge SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
 
 ### Grille de données virtualisée, inspecteur de structure et filtres paramétrés
 
-![DataForge Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
 
 ### Volet IA limité au schéma (`Ctrl+Shift+A`)
 
-![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
+![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
 ### Diagramme ER interactif, relations de clés étrangères et export SVG
 
-![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
 ## Bases de données prises en charge
 
-DataForge compile 9 pilotes directement dans `dataforge.exe`, sans pilote ODBC externe ni extension à installer :
+TableMinus compile 9 pilotes directement dans `tableminus.exe`, sans pilote ODBC externe ni extension à installer :
 
 | Base de données | Crate du pilote | Notes |
 | :--- | :--- | :--- |
@@ -92,17 +92,17 @@ Pour les agents de code et IDE externes, `tablepro-mcp` démarre un serveur MCP 
 
 - `list_connections`, `connect`, `list_databases`, `list_schemas`, `list_tables`, `describe_table`, `get_table_ddl`, `browse_table`, `count_rows`, `execute_query` et `export_data`
 
-`execute_query` respecte les règles External Clients et Safe Mode de chaque connexion et demande une confirmation explicite dans DataForge avant d'exécuter une requête d'écriture.
+`execute_query` respecte les règles External Clients et Safe Mode de chaque connexion et demande une confirmation explicite dans TableMinus avant d'exécuter une requête d'écriture.
 
 ### Thèmes, matériaux de fenêtre et langues
 
-DataForge inclut 14 thèmes intégrés (`Dark`, `Light`, `High Contrast`, `Gaussian Glass Dark`, `Gaussian Glass Light`, `Tokyo Night`, `Dracula`, `Catppuccin Mocha`, `One Dark Pro`, `Nord`, `Monokai Pro`, `Gruvbox Dark`, `GitHub Light` et `Catppuccin Latte`). Le thème de l'interface et la palette syntaxique peuvent être choisis séparément, et vous pouvez importer un thème couleur VS Code au format `.json`.
+TableMinus inclut 14 thèmes intégrés (`Dark`, `Light`, `High Contrast`, `Gaussian Glass Dark`, `Gaussian Glass Light`, `Tokyo Night`, `Dracula`, `Catppuccin Mocha`, `One Dark Pro`, `Nord`, `Monokai Pro`, `Gruvbox Dark`, `GitHub Light` et `Catppuccin Latte`). Le thème de l'interface et la palette syntaxique peuvent être choisis séparément, et vous pouvez importer un thème couleur VS Code au format `.json`.
 
 Sous Windows 11, la fenêtre principale prend en charge les matériaux DWM `Gaussian Blur`, `Mica`, `Mica Alt` et `Opaque`, tout en gardant les fenêtres superposées opaques (`1.0` alpha) pour préserver la lisibilité. Le mode animations réduites suit `SPI_GETCLIENTAREAANIMATION` de Windows pour désactiver les transitions des panneaux lorsque les animations système sont coupées. Tous les libellés, menus, dialogues, infobulles et diagnostics des pilotes sont traduits en 6 langues : `en-US`, `vi-VN`, `zh-CN`, `ja-JP`, `es-ES` et `fr-FR`.
 
 ### Utilisation en ligne de commande
 
-`dataforge.exe` sert à la fois de lanceur graphique et d'outil CLI (`tablepro-cli`). Passer des chemins `.sqlite`, `.db`, `.duckdb`, `.sql` ou des URL de connexion (`postgresql://...`) les ouvre dans l'instance en cours via Named Pipe IPC (ajoutez `-n` / `--new-window` pour ouvrir une nouvelle fenêtre).
+`tableminus.exe` sert à la fois de lanceur graphique et d'outil CLI (`tablepro-cli`). Passer des chemins `.sqlite`, `.db`, `.duckdb`, `.sql` ou des URL de connexion (`postgresql://...`) les ouvre dans l'instance en cours via Named Pipe IPC (ajoutez `-n` / `--new-window` pour ouvrir une nouvelle fenêtre).
 
 Options principales :
 - `--version` (`-V`) affiche la version et quitte.
@@ -113,25 +113,25 @@ Sous-commandes : `open`, `query`, `connections`, `databases`, `schemas`, `tables
 
 ```powershell
 # Exécuter une requête en lecture seule au format JSON Lines
-.\target\release\dataforge.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
+.\target\release\tableminus.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
 
 # Afficher le DDL CREATE TABLE d'une table
-.\target\release\dataforge.exe describe -c Staging --ddl users
+.\target\release\tableminus.exe describe -c Staging --ddl users
 ```
 
 ---
 
 ## Téléchargement et installation
 
-Nécessite **Windows 10 ou Windows 11 (x64)**. Les binaires compilés sont disponibles sur [GitHub Releases](https://github.com/williamcachamwri/DataForge/releases) :
+Nécessite **Windows 10 ou Windows 11 (x64)**. Les binaires compilés sont disponibles sur [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases) :
 
-- **Installateur (`DataForge-win-Setup.exe`)** : s'installe dans `%LocalAppData%` avec raccourcis Menu Démarrer et Bureau, sans élévation UAC. Utilise Velopack pour les mises à jour différentielles en arrière-plan, configurables dans **Settings -> About**.
-- **Archive portable (`DataForge-win-Portable.zip`)** : à extraire dans n'importe quel dossier pour lancer `dataforge.exe` directement sans modifier l'état de l'installateur.
+- **Installateur (`TableMinus-win-Setup.exe`)** : s'installe dans `%LocalAppData%` avec raccourcis Menu Démarrer et Bureau, sans élévation UAC. Utilise Velopack pour les mises à jour différentielles en arrière-plan, configurables dans **Settings -> About**.
+- **Archive portable (`TableMinus-win-Portable.zip`)** : à extraire dans n'importe quel dossier pour lancer `tableminus.exe` directement sans modifier l'état de l'installateur.
 
 Chaque version publie un fichier `SHA256SUMS.txt` vérifiable dans PowerShell :
 
 ```powershell
-Get-FileHash .\DataForge-win-Setup.exe -Algorithm SHA256
+Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
 ```
 
 ---
@@ -178,24 +178,24 @@ La navigation Vim (`NORMAL`, `INSERT`, `VISUAL` et commandes `:`) s'active depui
 ### Commandes de compilation et de test
 
 ```powershell
-# Vérifier qu'aucun processus dataforge.exe ne verrouille target\release\dataforge.exe
-Get-Process dataforge -ErrorAction SilentlyContinue
+# Vérifier qu'aucun processus tableminus.exe ne verrouille target\release\tableminus.exe
+Get-Process tableminus -ErrorAction SilentlyContinue
 
 # Vérification des types et compilation release
-cargo check --release -j 1 -p dataforge-windows-app
-cargo build --release -j 1 -p dataforge-windows-app
+cargo check --release -j 1 -p tableminus-windows-app
+cargo build --release -j 1 -p tableminus-windows-app
 
 # Vérification de démarrage sans interface et lancement
-.\target\release\dataforge.exe --smoke-startup
-.\target\release\dataforge.exe
+.\target\release\tableminus.exe --smoke-startup
+.\target\release\tableminus.exe
 ```
 
 Suites de tests release :
 
 ```powershell
 cargo test --release -j 1 -p tablepro-core filter
-cargo test --release -j 1 -p dataforge-e2e --test startup_perf_e2e -- --nocapture
-cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture
 ```
 
 ### Structure de l'espace de travail
@@ -213,12 +213,12 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 | `core/crates/foreign-import` | `tablepro-foreign-import` : import depuis d'autres clients de bases de données |
 | `core/crates/account` | `tablepro-account` : traits de comptes et jetons |
 | `core/crates/drivers/*` | 9 pilotes (`postgres`, `mysql`, `sqlite`, `duckdb`, `mssql`, `clickhouse`, `cassandra`, `mongodb`, `redis`) |
-| `crates/dataforge-gfx` | Glyphes vectoriels et icônes des moteurs |
-| `crates/dataforge-state` | État de l'éditeur, autocomplétion, modèle de grille, onglets, 14 thèmes |
-| `crates/dataforge-services` | Runtime Tokio asynchrone, orchestration session/IA/MCP, diagnostics |
-| `crates/dataforge-windows-platform` | Paramètres JSON, Gestionnaire d'informations d'identification Win32, DWM, animations réduites |
-| `crates/dataforge-windows-app` | Application bureau HeroGPUI (Direct3D 11), mise à jour Velopack, 6 langues |
-| `crates/dataforge-e2e` | Benchmarks SQLite, DuckDB, démarrage et grille |
+| `crates/tableminus-gfx` | Glyphes vectoriels et icônes des moteurs |
+| `crates/tableminus-state` | État de l'éditeur, autocomplétion, modèle de grille, onglets, 14 thèmes |
+| `crates/tableminus-services` | Runtime Tokio asynchrone, orchestration session/IA/MCP, diagnostics |
+| `crates/tableminus-windows-platform` | Paramètres JSON, Gestionnaire d'informations d'identification Win32, DWM, animations réduites |
+| `crates/tableminus-windows-app` | Application bureau HeroGPUI (Direct3D 11), mise à jour Velopack, 6 langues |
+| `crates/tableminus-e2e` | Benchmarks SQLite, DuckDB, démarrage et grille |
 
 ---
 
@@ -226,4 +226,4 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 
 Les contributions, signalements de bogues et corrections de traductions sont les bienvenus. Consultez [CONTRIBUTING.md](CONTRIBUTING.md) pour les règles de compilation et GPUI, [CHANGELOG.md](CHANGELOG.md) pour les notes de version, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) et [SECURITY.md](SECURITY.md) pour signaler une vulnérabilité en privé.
 
-DataForge est distribué sous [LICENSE](LICENSE) (GNU Affero General Public License v3.0) et [LICENSE-MIT](LICENSE-MIT) (MIT, avec attribution du cœur amont à [TableProApp/TablePro](https://github.com/TableProApp/TablePro)).
+TableMinus est distribué sous [LICENSE](LICENSE) (GNU Affero General Public License v3.0) et [LICENSE-MIT](LICENSE-MIT) (MIT, avec attribution du cœur amont à [TableProApp/TablePro](https://github.com/TableProApp/TablePro)).
