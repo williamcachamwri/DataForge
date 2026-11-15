@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use dataforge_state::connection_window::ConnectionWindowPhase;
 use dataforge_state::tabs::TabConnectionId;
+use dataforge_windows_platform::EnvironmentKind;
 use herogpui::components::{
     Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant, Chip,
     ChipLabel, ChipVariant, Color, ContextMenu, Dropdown, DropdownPlacement, Filter, Icon,
@@ -14,6 +15,7 @@ use herogpui::components::{
     TreeItem, TreeView, Variant,
 };
 use herogpui::core::SelectionMode;
+use herogpui::gpui::prelude::FluentBuilder as _;
 use herogpui::gpui::{
     Animation, AnimationExt as _, AnyElement, App, AppContext as _, AsyncApp, ClipboardItem,
     Context, Entity, Focusable as _, FontFeatures, InteractiveElement, IntoElement, ParentElement,
@@ -147,6 +149,12 @@ pub fn render_sidebar(
         }
     };
 
+    let env_accent = matches!(phase, ConnectionWindowPhase::Connected)
+        .then(|| ws.controller.active_connection_id())
+        .flatten()
+        .map(|id| ws.controller.connection_environment(id))
+        .filter(|env| matches!(env, EnvironmentKind::Production | EnvironmentKind::Staging));
+
     div()
         .id("workspace-sidebar")
         .w(px(SIDEBAR_WIDTH_PX))
@@ -158,6 +166,15 @@ pub fn render_sidebar(
         .border_r(px(HAIRLINE_BORDER_PX))
         .border_color(hairline_border_color(cx))
         .overflow_hidden()
+        .when_some(env_accent, |el, env| {
+            el.child(
+                div()
+                    .w_full()
+                    .h(px(2.0))
+                    .flex_shrink_0()
+                    .bg(super::library::env_color_hsla(env)),
+            )
+        })
         .child(render_sidebar_header(ws, &phase, cx))
         .child(Separator::new())
         .child(div().flex_1().min_h_0().flex().flex_col().child(body))
@@ -200,6 +217,12 @@ fn render_sidebar_header(
         cx,
     );
 
+    let active_env = is_connected
+        .then(|| ws.controller.active_connection_id())
+        .flatten()
+        .map(|id| ws.controller.connection_environment(id));
+    let is_restoring = ws.controller.restoring_connection_id.is_some();
+
     let mut header = div()
         .flex()
         .flex_col()
@@ -226,8 +249,26 @@ fn render_sidebar_header(
                         )
                         .child(count_pill),
                 )
-                .child(refresh_btn),
-        );
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(MICRO_GAP_PX))
+                        .when_some(active_env, |el, env| {
+                            el.child(super::library::render_env_badge(
+                                env,
+                                &ws.controller.strings,
+                            ))
+                        })
+                        .child(refresh_btn),
+                ),
+        )
+        .when(is_restoring, |el| {
+            el.child(render_sidebar_restoring_banner(
+                ws.controller.strings.session_restoring_connection,
+                &colors,
+            ))
+        });
 
     if is_connected {
         header = header
@@ -236,6 +277,35 @@ fn render_sidebar_header(
     }
 
     header.into_any_element()
+}
+
+fn render_sidebar_restoring_banner(
+    label: &'static str,
+    colors: &herogpui::theme::ThemeColors,
+) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(6.0))
+        .px(px(6.0))
+        .py(px(4.0))
+        .rounded(px(6.0))
+        .bg(herogpui::core::with_alpha(colors.accent.color, 0.12))
+        .child(
+            Spinner::new("sidebar-restoring-spin")
+                .size(SpinnerSize::Sm)
+                .color(Color::Accent),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .flex_1()
+                .truncate()
+                .text_xs()
+                .text_color(colors.foreground)
+                .child(label),
+        )
+        .into_any_element()
 }
 
 fn render_refresh_button(
