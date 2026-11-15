@@ -1,15 +1,15 @@
-//! Top-level error types for the DataForge Windows desktop application.
+//! Top-level error types for the TableMinus Windows desktop application.
 
 use std::fmt;
 
-use dataforge_gfx::GfxError;
-use dataforge_services::ServiceError;
-use dataforge_windows_platform::PlatformError;
+use tableminus_gfx::GfxError;
+use tableminus_services::ServiceError;
+use tableminus_windows_platform::PlatformError;
 
-/// Unified result type for `dataforge-windows-app`.
+/// Unified result type for `tableminus-windows-app`.
 pub type Result<T> = std::result::Result<T, AppError>;
 
-/// Errors returned by DataForge application initialization, IPC, or UI rendering.
+/// Errors returned by TableMinus application initialization, IPC, or UI rendering.
 #[derive(Debug)]
 pub enum AppError {
     /// Platform integration error (paths, credentials, settings, single-instance).
