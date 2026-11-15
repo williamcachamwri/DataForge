@@ -9,22 +9,26 @@ use dataforge_services::export::{ExportFormat, ExportOptions, export_rows_atomic
 use futures::channel::oneshot;
 use herogpui::components::{
     AlertDialog, AlertDialogSize, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize,
-    Input, InputState, InputType, Modal, ModalSize, PickerItem, Select, Separator, Variant,
+    Input, InputState, InputType, Modal, ModalSize, PickerItem, ProgressBar, Select, Separator,
+    Spinner, SpinnerSize, Variant,
 };
 use herogpui::core::{Backdrop, Color as HeroColor, Size as HeroSize, with_alpha};
 use herogpui::gpui::{
-    AnyElement, App, AppContext as _, AsyncApp, Context, Entity, IntoElement, ParentElement,
-    SharedString, Styled, Task, WeakEntity, Window, div, px,
+    AnyElement, App, AppContext as _, AsyncApp, Context, Entity, FontWeight, InteractiveElement,
+    IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled, Task, WeakEntity,
+    Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
 
 use super::DataForgeWorkspace;
 use super::shell_state::{WorkspaceSubView, push_error_toast, push_success_toast};
 use super::theme::{
-    COMPACT_GAP_PX, CONTROL_RADIUS_PX, editor_gpui_font, hairline_border_color, muted_surface_bg,
+    COMPACT_GAP_PX, CONTROL_RADIUS_PX, editor_gpui_font, hairline_border_color, is_reduced_motion,
+    muted_surface_bg,
 };
 use crate::dialogs::DialogOutcome;
 use crate::i18n::Strings;
+use crate::updater::UpdateState;
 
 /// Blocking modal interaction queued for native HeroGPUI resolution.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +68,7 @@ pub enum ExportSource {
 /// Persistent UI state for modal dialogs and confirmation sheets.
 pub struct ModalLayerState {
     pub export_modal_open: bool,
+    pub update_modal_open: bool,
     export_format: ExportFormat,
     export_source: ExportSource,
     export_path_input: Entity<InputState>,
@@ -79,6 +84,7 @@ impl std::fmt::Debug for ModalLayerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ModalLayerState")
             .field("export_modal_open", &self.export_modal_open)
+            .field("update_modal_open", &self.update_modal_open)
             .field("export_format", &self.export_format)
             .field("queued_prompts", &self.prompt_queue.len())
             .finish_non_exhaustive()
@@ -93,6 +99,7 @@ impl ModalLayerState {
         let prompt_input = cx.new(|cx| InputState::new(cx));
         Self {
             export_modal_open: false,
+            update_modal_open: false,
             export_format: ExportFormat::Csv,
             export_source: ExportSource::Auto,
             export_path_input,
@@ -103,6 +110,16 @@ impl ModalLayerState {
             next_prompt_id: 1,
             active_prompt_id: None,
         }
+    }
+
+    /// Opens the software update modal dialog.
+    pub fn open_update_modal(&mut self) {
+        self.update_modal_open = true;
+    }
+
+    /// Closes the software update modal dialog.
+    pub fn close_update_modal(&mut self) {
+        self.update_modal_open = false;
     }
 
     /// Opens the result/grid export modal and pre-populates a suggested filename.
@@ -149,6 +166,7 @@ impl ModalLayerState {
     /// Closes dismissible modals and cancels any queued prompts.
     pub fn close_all(&mut self) {
         self.export_modal_open = false;
+        self.update_modal_open = false;
         self.export_error = None;
         while let Some(mut item) = self.prompt_queue.pop_front() {
             if let Some(resolver) = item.resolver.take() {
@@ -162,6 +180,7 @@ impl ModalLayerState {
     #[must_use]
     pub fn has_open_modal(&self, ws: &DataForgeWorkspace) -> bool {
         self.export_modal_open
+            || self.update_modal_open
             || ws.workspace_pane.close_guard_open
             || ws.workspace_pane.confirm_commit_open
             || !self.prompt_queue.is_empty()
@@ -218,6 +237,10 @@ pub fn render_modals(
 
     if ws.modals_ui.export_modal_open {
         return Some(render_export_modal(ws, cx));
+    }
+
+    if ws.modals_ui.update_modal_open {
+        return Some(render_update_modal(ws, cx));
     }
 
     None
@@ -1140,5 +1163,445 @@ fn parse_export_source(key: &str) -> Option<ExportSource> {
         "grid" => Some(ExportSource::DataGrid),
         "query" => Some(ExportSource::QueryResult),
         _ => None,
+    }
+}
+
+fn render_update_modal(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let state = ws.controller.updater.state().clone();
+    let s = &ws.controller.strings;
+    let (icon, icon_color) = match &state {
+        UpdateState::Available { .. } => (IconName::CloudDownload, HeroColor::Accent),
+        UpdateState::Downloading { .. } => (IconName::Download, HeroColor::Accent),
+        UpdateState::ReadyToRestart { .. } => (IconName::CircleCheck, HeroColor::Success),
+        UpdateState::Checking => (IconName::RefreshCw, HeroColor::Accent),
+        UpdateState::Error(_) => (IconName::TriangleAlert, HeroColor::Danger),
+        UpdateState::Idle | UpdateState::UpToDate | UpdateState::StandaloneMode => {
+            (IconName::Info, HeroColor::Default)
+        }
+    };
+
+    let modal = Modal::new()
+        .id("modal-software-update")
+        .is_open(true)
+        .size(ModalSize::Md)
+        .backdrop(Backdrop::Blur)
+        .is_dismissible(true)
+        .title(s.update_modal_title)
+        .icon(icon)
+        .icon_color(icon_color)
+        .on_open_change(cx.listener(|ws, &open: &bool, _w, cx| {
+            if !open {
+                ws.modals_ui.close_update_modal();
+                cx.notify();
+            }
+        }))
+        .child(render_update_modal_body(ws, &state, cx));
+
+    append_update_modal_footer(modal, ws, &state, cx).into_any_element()
+}
+
+fn render_update_modal_body(ws: &DataForgeWorkspace, state: &UpdateState, cx: &App) -> AnyElement {
+    match state {
+        UpdateState::Available { version, notes } => {
+            render_update_available_body(ws, version, notes, cx)
+        }
+        UpdateState::Downloading { percent } => render_update_downloading_body(ws, *percent, cx),
+        UpdateState::ReadyToRestart { version } => render_update_ready_body(ws, version, cx),
+        UpdateState::Checking => render_update_checking_body(ws, cx),
+        UpdateState::Error(msg) => render_update_error_body(ws, msg, cx),
+        UpdateState::Idle | UpdateState::UpToDate | UpdateState::StandaloneMode => {
+            render_update_idle_body(ws, state, cx)
+        }
+    }
+}
+
+fn render_update_available_body(
+    ws: &DataForgeWorkspace,
+    version: &str,
+    notes: &str,
+    cx: &App,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let current_ver = env!("CARGO_PKG_VERSION");
+
+    let mut body = div()
+        .flex()
+        .flex_col()
+        .gap(px(12.0))
+        .child(
+            div()
+                .text_xs()
+                .text_color(colors.muted)
+                .child(s.update_available_subtitle),
+        )
+        .child(
+            div()
+                .w_full()
+                .p(px(12.0))
+                .rounded(px(CONTROL_RADIUS_PX))
+                .bg(muted_surface_bg(cx))
+                .border_1()
+                .border_color(hairline_border_color(cx))
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(12.0))
+                .child(render_version_column(
+                    s.update_current_version,
+                    &format!("v{current_ver}"),
+                    HeroColor::Default,
+                    cx,
+                ))
+                .child(
+                    Icon::new(IconName::ArrowRight)
+                        .size(IconSize::Sm)
+                        .color(colors.muted),
+                )
+                .child(render_version_column(
+                    s.update_new_version,
+                    &format!("v{version}"),
+                    HeroColor::Accent,
+                    cx,
+                )),
+        );
+
+    if !notes.trim().is_empty() {
+        body = body.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(colors.muted)
+                        .child(s.update_release_notes),
+                )
+                .child(
+                    div()
+                        .id("update-modal-release-notes")
+                        .w_full()
+                        .max_h(px(180.0))
+                        .overflow_y_scroll()
+                        .p(px(10.0))
+                        .rounded(px(CONTROL_RADIUS_PX))
+                        .bg(muted_surface_bg(cx))
+                        .border_1()
+                        .border_color(hairline_border_color(cx))
+                        .text_xs()
+                        .text_color(colors.foreground)
+                        .child(notes.to_owned()),
+                ),
+        );
+    }
+
+    body.into_any_element()
+}
+
+fn render_version_column(
+    label: &str,
+    version_badge: &str,
+    chip_color: HeroColor,
+    cx: &App,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(4.0))
+        .child(
+            div()
+                .text_xs()
+                .text_color(colors.muted)
+                .child(label.to_owned()),
+        )
+        .child(
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .color(chip_color)
+                .size(HeroSize::Sm)
+                .child(ChipLabel::new().child(version_badge.to_owned())),
+        )
+        .into_any_element()
+}
+
+fn render_update_downloading_body(ws: &DataForgeWorkspace, percent: u8, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let status_line = s
+        .updates_status_downloading_tpl
+        .replace("{percent}", &percent.to_string());
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(10.0))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(px(8.0))
+                .child(
+                    div()
+                        .text_xs()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(colors.foreground)
+                        .child(s.update_downloading_progress),
+                )
+                .child(
+                    Chip::new()
+                        .variant(ChipVariant::Soft)
+                        .color(HeroColor::Accent)
+                        .size(HeroSize::Sm)
+                        .child(ChipLabel::new().child(format!("{percent}%"))),
+                ),
+        )
+        .child(
+            ProgressBar::new("update-modal-download-progress")
+                .value(f32::from(percent))
+                .min_value(0.0)
+                .max_value(100.0)
+                .size(HeroSize::Md)
+                .color(HeroColor::Accent),
+        )
+        .child(div().text_xs().text_color(colors.muted).child(status_line))
+        .into_any_element()
+}
+
+fn render_update_ready_body(ws: &DataForgeWorkspace, version: &str, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(10.0))
+        .child(
+            div().flex().items_center().gap(px(8.0)).child(
+                Chip::new()
+                    .variant(ChipVariant::Soft)
+                    .color(HeroColor::Success)
+                    .size(HeroSize::Sm)
+                    .child(
+                        ChipLabel::new().child(format!("{} · v{version}", s.update_ready_title)),
+                    ),
+            ),
+        )
+        .child(
+            div()
+                .p(px(12.0))
+                .rounded(px(CONTROL_RADIUS_PX))
+                .bg(muted_surface_bg(cx))
+                .border_1()
+                .border_color(hairline_border_color(cx))
+                .text_xs()
+                .text_color(colors.foreground)
+                .child(s.update_ready_desc),
+        )
+        .into_any_element()
+}
+
+fn render_update_checking_body(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let indicator = if is_reduced_motion(cx) {
+        Icon::new(IconName::LoaderCircle)
+            .size(IconSize::Sm)
+            .color(colors.accent.color)
+            .into_any_element()
+    } else {
+        Spinner::new("update-modal-checking-spinner")
+            .size(SpinnerSize::Sm)
+            .into_any_element()
+    };
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(10.0))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .child(indicator)
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(colors.foreground)
+                        .child(s.updates_status_checking),
+                ),
+        )
+        .child(
+            ProgressBar::new("update-modal-checking-progress")
+                .is_indeterminate(true)
+                .size(HeroSize::Sm)
+                .color(HeroColor::Accent),
+        )
+        .into_any_element()
+}
+
+fn render_update_error_body(ws: &DataForgeWorkspace, msg: &str, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let err_text = s.updates_status_error_tpl.replace("{error}", msg);
+
+    div()
+        .p(px(12.0))
+        .rounded(px(CONTROL_RADIUS_PX))
+        .bg(with_alpha(colors.danger.color, 0.12))
+        .border_1()
+        .border_color(with_alpha(colors.danger.color, 0.35))
+        .text_xs()
+        .text_color(colors.danger.color)
+        .child(err_text)
+        .into_any_element()
+}
+
+fn render_update_idle_body(ws: &DataForgeWorkspace, state: &UpdateState, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let current_ver = env!("CARGO_PKG_VERSION");
+    let status_text = match state {
+        UpdateState::UpToDate => s.updates_status_up_to_date,
+        UpdateState::StandaloneMode => s.updates_status_standalone,
+        _ => s.updates_status_idle,
+    };
+
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(10.0))
+        .child(render_version_column(
+            s.update_current_version,
+            &format!("v{current_ver}"),
+            HeroColor::Default,
+            cx,
+        ))
+        .child(div().text_xs().text_color(colors.muted).child(status_text))
+        .into_any_element()
+}
+
+fn update_dismiss_button(
+    id: &'static str,
+    variant: Variant,
+    label: &'static str,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> Button {
+    Button::new(id)
+        .variant(variant)
+        .size(HeroSize::Sm)
+        .on_press(cx.listener(|ws, _, _w, cx| {
+            ws.modals_ui.close_update_modal();
+            cx.notify();
+        }))
+        .child(label)
+}
+
+fn append_update_modal_footer(
+    modal: Modal,
+    ws: &DataForgeWorkspace,
+    state: &UpdateState,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> Modal {
+    let s = &ws.controller.strings;
+    match state {
+        UpdateState::Available { .. } => modal
+            .footer_child(update_dismiss_button(
+                "update-modal-later",
+                Variant::Secondary,
+                s.update_later,
+                cx,
+            ))
+            .footer_child(
+                Button::new("update-modal-download")
+                    .variant(Variant::Primary)
+                    .size(HeroSize::Sm)
+                    .on_press(cx.listener(|ws, _, _w, cx| {
+                        ws.controller.download_update();
+                        cx.notify();
+                    }))
+                    .child(s.update_download_install),
+            ),
+        UpdateState::Downloading { .. } => modal
+            .footer_child(update_dismiss_button(
+                "update-modal-bg-later",
+                Variant::Ghost,
+                s.update_later,
+                cx,
+            ))
+            .footer_child(
+                Button::new("update-modal-downloading")
+                    .variant(Variant::Primary)
+                    .size(HeroSize::Sm)
+                    .is_disabled(true)
+                    .child(s.updates_btn_downloading),
+            ),
+        UpdateState::ReadyToRestart { .. } => modal
+            .footer_child(update_dismiss_button(
+                "update-modal-restart-later",
+                Variant::Secondary,
+                s.update_later,
+                cx,
+            ))
+            .footer_child(
+                Button::new("update-modal-apply-restart")
+                    .variant(Variant::Primary)
+                    .size(HeroSize::Sm)
+                    .on_press(cx.listener(|ws, _, _w, cx| {
+                        if let Err(err) = ws.controller.apply_update_and_restart() {
+                            push_error_toast(
+                                ws.controller.strings.updates_toast_apply_failed,
+                                Some(SharedString::from(err)),
+                                cx,
+                            );
+                            cx.notify();
+                        }
+                    }))
+                    .child(s.update_apply_restart),
+            ),
+        UpdateState::Checking | UpdateState::StandaloneMode => modal.footer_child(
+            update_dismiss_button("update-modal-close", Variant::Ghost, s.close_label, cx),
+        ),
+        UpdateState::Error(_) => modal
+            .footer_child(update_dismiss_button(
+                "update-modal-err-close",
+                Variant::Ghost,
+                s.close_label,
+                cx,
+            ))
+            .footer_child(
+                Button::new("update-modal-retry")
+                    .variant(Variant::Primary)
+                    .size(HeroSize::Sm)
+                    .on_press(cx.listener(|ws, _, _w, cx| {
+                        ws.controller.check_for_updates();
+                        cx.notify();
+                    }))
+                    .child(s.update_retry),
+            ),
+        UpdateState::Idle | UpdateState::UpToDate => modal
+            .footer_child(update_dismiss_button(
+                "update-modal-idle-close",
+                Variant::Ghost,
+                s.close_label,
+                cx,
+            ))
+            .footer_child(
+                Button::new("update-modal-check")
+                    .variant(Variant::Primary)
+                    .size(HeroSize::Sm)
+                    .on_press(cx.listener(|ws, _, _w, cx| {
+                        ws.controller.check_for_updates();
+                        cx.notify();
+                    }))
+                    .child(s.updates_btn_check),
+            ),
     }
 }
