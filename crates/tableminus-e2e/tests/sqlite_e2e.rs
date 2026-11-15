@@ -3,8 +3,8 @@
 
 use std::sync::Arc;
 
-use dataforge_e2e::{E2eResult, open_file_session, run_sql, shutdown_session};
-use dataforge_state::data_grid::{
+use tableminus_e2e::{E2eResult, open_file_session, run_sql, shutdown_session};
+use tableminus_state::data_grid::{
     DataGridCellEdit, DataGridColumnID, DataGridLayoutScope, DataGridModel, RowID, TableEdits,
 };
 use tablepro_core::browse::{PageRequest, build_count, read_page};
