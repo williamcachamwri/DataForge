@@ -1,21 +1,21 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
-//! DataForge Windows desktop application entrypoint (`dataforge.exe`).
+//! TableMinus Windows desktop application entrypoint (`tableminus.exe`).
 
 use std::ffi::OsString;
 use std::io::Write;
 use std::process::ExitCode;
 
-use dataforge_windows_app::app::AppController;
-use dataforge_windows_app::cli_flags::{AppFlagOutcome, handle_app_flags};
-use dataforge_windows_app::crash::init_logging_and_crash_reports;
-use dataforge_windows_app::error::Result;
-use dataforge_windows_app::i18n::init_locale;
-use dataforge_windows_app::ipc::{
+use tableminus_windows_app::app::AppController;
+use tableminus_windows_app::cli_flags::{AppFlagOutcome, handle_app_flags};
+use tableminus_windows_app::crash::init_logging_and_crash_reports;
+use tableminus_windows_app::error::Result;
+use tableminus_windows_app::i18n::init_locale;
+use tableminus_windows_app::ipc::{
     IpcInbox, acquire_or_forward, extract_forward_targets, spawn_ipc_listener,
 };
-use dataforge_windows_app::ui::launch_gpui_app;
-use dataforge_windows_platform::{
+use tableminus_windows_app::ui::launch_gpui_app;
+use tableminus_windows_platform::{
     AppSettings, DEFAULT_MUTEX_NAME, DEFAULT_PIPE_NAME, SETTINGS_FILENAME, WindowsCliHost,
     storage_paths,
 };
@@ -47,7 +47,7 @@ fn main() -> ExitCode {
             Err(err) => {
                 attach_parent_console_if_cli();
                 let mut stderr = std::io::stderr().lock();
-                let _ = writeln!(stderr, "dataforge: {err}");
+                let _ = writeln!(stderr, "tableminus: {err}");
                 ExitCode::FAILURE
             }
         },
