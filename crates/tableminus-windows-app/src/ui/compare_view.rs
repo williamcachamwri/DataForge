@@ -1,10 +1,5 @@
 //! Schema & Data Compare diff and synchronization workbench view.
 
-use tableminus_services::{
-    ColumnChangeKind, ColumnDiff, DataDiffReport, RowDiffEntry, SchemaDiffReport, diff_table_rows,
-    diff_table_schemas,
-};
-use tableminus_state::connection_window::ConnectionWindowPhase;
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, PickerItem, Select,
     Separator,
@@ -16,6 +11,11 @@ use herogpui::gpui::{
     ParentElement, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::{
+    ColumnChangeKind, ColumnDiff, DataDiffReport, RowDiffEntry, SchemaDiffReport, diff_table_rows,
+    diff_table_schemas,
+};
+use tableminus_state::connection_window::ConnectionWindowPhase;
 use tablepro_core::QueryResult;
 use tablepro_core::ddl::TableDefinition;
 use tablepro_core::meta::{ObjectKind, TableRef};
@@ -694,7 +694,11 @@ fn render_schema_diff_list(
     list.into_any_element()
 }
 
-fn render_data_diff_list(ws: &TableMinusWorkspace, report: &DataDiffReport, cx: &App) -> AnyElement {
+fn render_data_diff_list(
+    ws: &TableMinusWorkspace,
+    report: &DataDiffReport,
+    cx: &App,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let mut list = div()
         .id("compare-diff-scroll")
