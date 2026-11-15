@@ -1,6 +1,6 @@
-# DataForge Web Showcase
+# TableMinus Web Showcase
 
-Official product showcase and landing site for **DataForge** — the native Windows SQL & database workbench written in Rust with HeroGPUI (Direct3D 11).
+Official product showcase and landing site for **TableMinus** — the native Windows SQL & database workbench written in Rust with HeroGPUI (Direct3D 11).
 
 Designed with a **Vercel-style Technical Grid** architecture: full-bleed `1px` horizontal section bands, continuous centered `max-w-6xl` vertical rails, `11px` 4-corner `+` crosshairs at rail intersections, and `.cell-grid` `1px` dividers — with **zero** bloated code clutter or AI-slop gradients.
 
@@ -9,23 +9,23 @@ Designed with a **Vercel-style Technical Grid** architecture: full-bleed `1px` h
 ## Desktop Previews (`1440×900`)
 
 ### Hero & Technical Grid Frame
-![DataForge Desktop Hero](docs/preview-desktop.png)
+![TableMinus Desktop Hero](docs/preview-desktop.png)
 
 ### Interactive Workbench Showcase
-![DataForge Interactive Workbench Showcase](docs/preview-workbench.png)
+![TableMinus Interactive Workbench Showcase](docs/preview-workbench.png)
 
 ### Compiled-In Driver Matrix
-![DataForge Driver Matrix](docs/preview-grid.png)
+![TableMinus Driver Matrix](docs/preview-grid.png)
 
 ### Native Benchmarks & Architecture Comparison
-![DataForge Benchmarks Technical Grid](docs/preview-benchmarks.png)
+![TableMinus Benchmarks Technical Grid](docs/preview-benchmarks.png)
 
 ---
 
 ## Key Capabilities
 
 - **Dynamic GitHub Release Resolution (`src/lib/release.ts`)**
-  - Automatically fetches the latest release tag and installer assets (`Setup.exe`, `Portable.zip`) from `williamcachamwri/DataForge` on build, with graceful offline fallback.
+  - Automatically fetches the latest release tag and installer assets (`Setup.exe`, `Portable.zip`) from `williamcachamwri/TableMinus` on build, with graceful offline fallback.
 - **6-Locale Internationalization (`src/i18n/translations.ts`)**
   - Full UI translation parity across **English (`en`)**, **Tiếng Việt (`vi`)**, **简体中文 (`zh-CN`)**, **日本語 (`ja`)**, **Español (`es`)**, and **Français (`fr`)** with `localStorage` persistence.
 - **Dark & Light Mode (`src/styles/global.css`, `src/layouts/Layout.astro`)**
@@ -45,7 +45,7 @@ Designed with a **Vercel-style Technical Grid** architecture: full-bleed `1px` h
 web/
 ├── docs/                        # Desktop preview screenshots for documentation
 ├── public/
-│   └── images/                  # Real DataForge application screenshots
+│   └── images/                  # Real TableMinus application screenshots
 ├── src/
 │   ├── components/
 │   │   ├── BenchmarksSection.astro
