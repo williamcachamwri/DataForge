@@ -1,0 +1,55 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'DataForge — Native SQL & Database Workbench for Windows',
+  description = 'A fast, native SQL and database workbench built in Rust for Windows. HeroGPUI over Direct3D 11, 9 compiled-in drivers, ~10 ms cold startup, ~55 MB RAM.',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#0C0D10" />
+    <link rel="icon" type="image/png" href="/images/dataforge_logo.png" />
+    <title>{title}</title>
+    <script is:inline>
+      (function () {
+        var root = document.documentElement;
+        var storageKey = 'dataforge-theme';
+        var theme = null;
+        try {
+          theme = localStorage.getItem(storageKey);
+        } catch (e) {}
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        root.setAttribute('data-theme', theme);
+        root.style.colorScheme = theme;
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) {
+          metaTheme.setAttribute('content', theme === 'light' ? '#FAFAFA' : '#0C0D10');
+        }
+
+        try {
+          var savedLocale = localStorage.getItem('dataforge-locale');
+          if (savedLocale && /^(en|vi|zh-CN|ja|es|fr)$/.test(savedLocale)) {
+            root.setAttribute('lang', savedLocale);
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-[var(--background)] text-[var(--foreground)] antialiased">
+    <div id="df-scroll-progress" class="df-scroll-progress" aria-hidden="true"></div>
+    <slot />
+  </body>
+</html>
