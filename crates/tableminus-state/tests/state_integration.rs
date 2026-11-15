@@ -1,6 +1,7 @@
 //! Integration tests exercising `tableminus-state` with `tablepro-session` and `tablepro-account` fakes.
 
 use chrono::{TimeDelta, Utc};
+use std::collections::BTreeMap;
 use tableminus_state::connection_window::{
     ConnectionSession, ConnectionUnavailableView, ConnectionWindowPhase,
     ConnectionWindowPhaseMachine, DriverHandle, ReportedStatus, WorkspaceId,
@@ -15,7 +16,6 @@ use tableminus_state::tabs::{
 use tableminus_state::theme::{
     ThemeAppearance, ThemeDefinition, ThemeFileFormat, ThemeResolver, ThemeScope,
 };
-use std::collections::BTreeMap;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::column::{ColumnType, ResultColumn};
 use tablepro_core::value::Value;
