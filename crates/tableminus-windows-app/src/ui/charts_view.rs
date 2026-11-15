@@ -16,7 +16,7 @@ use tablepro_core::column::ResultColumn;
 use tablepro_core::value::Value;
 
 use super::results_pane::format_core_value;
-use super::{DataForgeWorkspace, theme};
+use super::{TableMinusWorkspace, theme};
 
 const MAX_BAR_LINE_POINTS: usize = 24;
 const MAX_DONUT_SLICES: usize = 7;
@@ -85,9 +85,9 @@ pub struct ChartsViewState {
 }
 
 impl ChartsViewState {
-    /// Creates initial Result Charts state owned by [`DataForgeWorkspace`].
+    /// Creates initial Result Charts state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self::default()
     }
 }
@@ -100,9 +100,9 @@ struct ChartPoint {
 /// Renders the Result Charts view inside the Results Pane.
 #[must_use]
 pub fn render_charts_view(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let (columns, rows) = active_chart_dataset(ws);
     let numeric_cols = detect_numeric_columns(&columns, &rows);
@@ -154,7 +154,7 @@ pub fn render_charts_view(
         .into_any_element()
 }
 
-fn active_chart_dataset(ws: &DataForgeWorkspace) -> (Vec<ResultColumn>, Vec<Vec<Value>>) {
+fn active_chart_dataset(ws: &TableMinusWorkspace) -> (Vec<ResultColumn>, Vec<Vec<Value>>) {
     if let Some(tab_id) = ws.controller.tabs.active_tab()
         && let Some(res) = ws.tab_results.get(&tab_id)
         && let Some(set) = res.accumulator.result_sets.get(res.active_result_set)
@@ -222,7 +222,7 @@ fn value_to_f64(val: &Value) -> Option<f64> {
 }
 
 fn resolve_axis_indices(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     columns: &[ResultColumn],
     numeric_cols: &[usize],
 ) -> (usize, Option<usize>) {
@@ -256,14 +256,14 @@ fn resolve_axis_indices(
     reason = "charts toolbar needs axis options, numeric column flags, and active mode selections"
 )]
 fn render_charts_controls_bar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     columns: &[ResultColumn],
     numeric_cols: &[usize],
     x_idx: usize,
     y_idx: Option<usize>,
     chart_kind: ChartKind,
     agg_mode: ChartAggregation,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -341,7 +341,7 @@ fn render_charts_axis_controls(
     s: &crate::i18n::Strings,
     items: (Vec<PickerItem>, Vec<PickerItem>, Vec<PickerItem>),
     selected: (usize, Option<usize>, ChartAggregation),
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let (x_items, y_items, agg_items) = items;
     let (x_idx, y_idx, agg_mode) = selected;
@@ -406,7 +406,7 @@ fn render_chart_type_btn(
     label: &'static str,
     active: bool,
     kind: ChartKind,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     Button::new(id)
         .variant(if active {
@@ -459,7 +459,7 @@ fn render_axis_select(
         .into_any_element()
 }
 
-fn render_charts_empty_state(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_charts_empty_state(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
 
@@ -590,7 +590,7 @@ fn aggregate_chart_series(
 }
 
 fn render_chart_canvas_area(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     kind: ChartKind,
     agg: ChartAggregation,
     series: &[ChartPoint],
