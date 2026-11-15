@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 
-use dataforge_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::connection_window::ConnectionWindowPhase;
 use herogpui::components::{Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize};
 use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::{
@@ -17,7 +17,7 @@ use herogpui::theme::ActiveTheme;
 use tablepro_core::ddl::TableDefinition;
 
 use super::shell_state::ToastSeverity;
-use super::{DataForgeWorkspace, theme};
+use super::{TableMinusWorkspace, theme};
 
 const CARD_WIDTH_PX: f32 = 248.0;
 const CARD_HEADER_HEIGHT_PX: f32 = 36.0;
@@ -103,9 +103,9 @@ pub struct ErDiagramState {
 }
 
 impl ErDiagramState {
-    /// Creates initial ER Diagram state owned by [`DataForgeWorkspace`].
+    /// Creates initial ER Diagram state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self {
             zoom: 1.0,
             pan_x: 36.0,
@@ -118,9 +118,9 @@ impl ErDiagramState {
 /// Renders the ER Diagram workbench tool view.
 #[must_use]
 pub fn render_er_diagram(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_connected = matches!(
         ws.controller
@@ -148,7 +148,7 @@ pub fn render_er_diagram(
         .into_any_element()
 }
 
-fn maybe_autoload_schema(ws: &mut DataForgeWorkspace, is_connected: bool) {
+fn maybe_autoload_schema(ws: &mut TableMinusWorkspace, is_connected: bool) {
     if !is_connected {
         ws.er_diagram_ui.loaded_for_connection = None;
         return;
@@ -167,7 +167,7 @@ fn maybe_autoload_schema(ws: &mut DataForgeWorkspace, is_connected: bool) {
     }
 }
 
-fn load_er_schema(ws: &mut DataForgeWorkspace) {
+fn load_er_schema(ws: &mut TableMinusWorkspace) {
     match ws.controller.fetch_all_table_definitions_blocking() {
         Ok(defs) => {
             let prev_positions: HashMap<String, (f32, f32)> = ws
@@ -485,9 +485,9 @@ fn layout_isolated_grid(
 }
 
 fn render_er_header(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .min_h(px(42.0))
@@ -506,9 +506,9 @@ fn render_er_header(
 }
 
 fn render_er_header_actions(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let muted = cx.colors().muted;
@@ -599,7 +599,7 @@ fn render_er_header_actions(
         .into_any_element()
 }
 
-fn render_er_header_left(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_er_header_left(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
     let table_count = visible_nodes(ws).len();
@@ -640,9 +640,9 @@ fn render_er_header_left(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
 }
 
 fn render_zoom_controls(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     zoom_pct: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let border = theme::hairline_border_color(cx);
@@ -698,7 +698,7 @@ fn render_zoom_controls(
         .into_any_element()
 }
 
-fn cycle_schema_filter(ws: &mut DataForgeWorkspace) {
+fn cycle_schema_filter(ws: &mut TableMinusWorkspace) {
     let schemas = &ws.er_diagram_ui.schemas;
     if schemas.is_empty() {
         ws.er_diagram_ui.schema_filter = None;
@@ -717,9 +717,9 @@ fn cycle_schema_filter(ws: &mut DataForgeWorkspace) {
 }
 
 fn render_er_empty_state(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -783,7 +783,7 @@ fn render_er_empty_state(
         .into_any_element()
 }
 
-fn visible_nodes(ws: &DataForgeWorkspace) -> Vec<&ErTableNode> {
+fn visible_nodes(ws: &TableMinusWorkspace) -> Vec<&ErTableNode> {
     match &ws.er_diagram_ui.schema_filter {
         Some(filter) => ws
             .er_diagram_ui
@@ -795,7 +795,7 @@ fn visible_nodes(ws: &DataForgeWorkspace) -> Vec<&ErTableNode> {
     }
 }
 
-fn visible_node_keys(ws: &DataForgeWorkspace) -> HashSet<String> {
+fn visible_node_keys(ws: &TableMinusWorkspace) -> HashSet<String> {
     visible_nodes(ws)
         .into_iter()
         .map(|n| n.key.clone())
@@ -803,7 +803,7 @@ fn visible_node_keys(ws: &DataForgeWorkspace) -> HashSet<String> {
 }
 
 fn visible_edges<'a>(
-    ws: &'a DataForgeWorkspace,
+    ws: &'a TableMinusWorkspace,
     keys: &HashSet<String>,
 ) -> Vec<&'a ErRelationEdge> {
     ws.er_diagram_ui
@@ -813,7 +813,7 @@ fn visible_edges<'a>(
         .collect()
 }
 
-fn build_er_stage_container(cx: &mut Context<DataForgeWorkspace>) -> gpui::Stateful<gpui::Div> {
+fn build_er_stage_container(cx: &mut Context<TableMinusWorkspace>) -> gpui::Stateful<gpui::Div> {
     div()
         .id("er-canvas-stage")
         .relative()
@@ -866,8 +866,8 @@ fn build_er_stage_container(cx: &mut Context<DataForgeWorkspace>) -> gpui::State
 }
 
 fn render_er_canvas_stage(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let zoom = ws.er_diagram_ui.zoom;
     let pan_x = ws.er_diagram_ui.pan_x;
@@ -937,11 +937,11 @@ fn render_er_canvas_stage(
 
 fn append_er_stage_overlays(
     mut stage: gpui::Stateful<gpui::Div>,
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     graph_elements: (&[ConnectorSpec], &[ErTableNode], &[ErRelationEdge]),
     focus_table: Option<&str>,
     viewport: (f32, f32, f32),
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> gpui::Stateful<gpui::Div> {
     let (connector_specs, vis_nodes, vis_edges) = graph_elements;
     let (zoom, pan_x, pan_y) = viewport;
@@ -992,9 +992,9 @@ fn append_er_stage_overlays(
 }
 
 fn handle_canvas_mouse_move(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     ev: &gpui::MouseMoveEvent,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let mx = f32::from(ev.position.x);
     let my = f32::from(ev.position.y);
@@ -1320,14 +1320,14 @@ fn render_cardinality_badge(
     reason = "ER card renderer consumes positioned node, zoom/pan transform, and focus flags"
 )]
 fn render_er_table_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     node: &ErTableNode,
     zoom: f32,
     pan_x: f32,
     pan_y: f32,
     is_highlighted: bool,
     is_primary_focus: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -1599,7 +1599,7 @@ fn render_er_column_row(
         .into_any_element()
 }
 
-fn export_er_svg(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn export_er_svg(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let vis_nodes: Vec<ErTableNode> = visible_nodes(ws).into_iter().cloned().collect();
     let keys = visible_node_keys(ws);
     let vis_edges: Vec<ErRelationEdge> = visible_edges(ws, &keys).into_iter().cloned().collect();
@@ -1620,7 +1620,7 @@ fn export_er_svg(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
     let start_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let rx = cx.prompt_for_new_path(&start_dir, Some("er_diagram.svg"));
     ws.er_diagram_ui.export_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(path))) = rx.await else {
                 return;
             };
