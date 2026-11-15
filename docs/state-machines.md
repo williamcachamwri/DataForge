@@ -1,6 +1,6 @@
-# DataForge State Machines
+# TableMinus State Machines
 
-All UI state machines live in `crates/dataforge-state` as pure-Rust, deterministic, headless-testable models.
+All UI state machines live in `crates/tableminus-state` as pure-Rust, deterministic, headless-testable models.
 
 ## 1. `ConnectionWindowPhaseMachine` (`connection_window.rs`)
 
