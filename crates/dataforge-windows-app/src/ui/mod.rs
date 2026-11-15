@@ -1,15 +1,24 @@
 //! HeroGPUI application root, theme/icon/syntax bridges, and Wave 2 workspace contracts.
 
 pub mod actions;
+pub mod admin_view;
 pub mod ai_drawer;
+pub mod charts_view;
 pub mod command_palette;
+pub mod compare_view;
 pub mod data_grid;
 pub mod engine_icons;
+pub mod er_diagram;
+pub mod explain_view;
+pub mod import_wizard;
 pub mod inspector;
 pub mod library;
+pub mod metadata_search;
 pub mod modals;
+pub mod query_builder;
 pub mod rail;
 pub mod results_pane;
+pub mod schema_designer;
 pub mod settings;
 pub mod shell_state;
 pub mod sidebar;
@@ -60,7 +69,8 @@ pub use engine_icons::{
 pub use shell_state::{
     AiPanelState, ConnectionScreenFocus, ConnectionsViewState, InlineCellEditState,
     QueryTabResultState, ResultPaneSubView, SettingsSection, SettingsViewState, ToastSeverity,
-    WorkspacePaneState, WorkspaceSubView, push_error_toast, push_success_toast, push_toast,
+    WorkspacePaneState, WorkspaceSubView, WorkspaceToolView, push_error_toast, push_success_toast,
+    push_toast,
 };
 pub use syntax_bridge::{
     build_line_text_runs, grammar_for_engine, highlight_sql_line, highlight_sql_text,
@@ -99,6 +109,15 @@ pub struct DataForgeWorkspace {
     pub ai_drawer_ui: ai_drawer::AiDrawerViewState,
     pub settings_ui: settings::SettingsScreenState,
     pub modals_ui: modals::ModalLayerState,
+    pub er_diagram_ui: er_diagram::ErDiagramState,
+    pub explain_ui: explain_view::ExplainViewState,
+    pub charts_ui: charts_view::ChartsViewState,
+    pub schema_designer_ui: schema_designer::SchemaDesignerState,
+    pub import_wizard_ui: import_wizard::ImportWizardState,
+    pub metadata_search_ui: metadata_search::MetadataSearchState,
+    pub query_builder_ui: query_builder::QueryBuilderState,
+    pub compare_ui: compare_view::CompareViewState,
+    pub admin_ui: admin_view::AdminViewState,
     _tasks: Vec<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -114,6 +133,7 @@ impl DataForgeWorkspace {
     ) -> Self {
         controller.headless = false;
         apply_saved_theme_presets(&mut controller);
+        restore_startup_session_and_tasks(&mut controller);
         let mut content_palette = ContentThemePalette::from_definition(&controller.content_theme);
         theme::apply_backdrop_to_content_palette(
             &mut content_palette,
@@ -132,7 +152,7 @@ impl DataForgeWorkspace {
         let (tasks, subscriptions) = spawn_reactive_bridges(&controller, &ipc_inbox, window, cx);
         install_close_guard(window, cx);
 
-        Self {
+        let mut ws = Self {
             controller,
             ipc_inbox,
             focus_handle,
@@ -155,9 +175,20 @@ impl DataForgeWorkspace {
             ai_drawer_ui: ai_drawer::AiDrawerViewState::new(window, cx),
             settings_ui: settings::SettingsScreenState::new(window, cx),
             modals_ui: modals::ModalLayerState::new(window, cx),
+            er_diagram_ui: er_diagram::ErDiagramState::new(window, cx),
+            explain_ui: explain_view::ExplainViewState::new(window, cx),
+            charts_ui: charts_view::ChartsViewState::new(window, cx),
+            schema_designer_ui: schema_designer::SchemaDesignerState::new(window, cx),
+            import_wizard_ui: import_wizard::ImportWizardState::new(window, cx),
+            metadata_search_ui: metadata_search::MetadataSearchState::new(window, cx),
+            query_builder_ui: query_builder::QueryBuilderState::new(window, cx),
+            compare_ui: compare_view::CompareViewState::new(window, cx),
+            admin_ui: admin_view::AdminViewState::new(window, cx),
             _tasks: tasks,
             _subscriptions: subscriptions,
-        }
+        };
+        ws.sync_active_tab_sub_view();
+        ws
     }
 
     /// Re-synchronizes HeroGPUI Chrome [`herogpui::theme::Theme`], [`ContentThemePalette`],
@@ -205,10 +236,12 @@ impl DataForgeWorkspace {
         cx.notify();
     }
 
-    /// Dismisses transient overlays (command palette, modals, inline cell edit, autocomplete).
+    /// Dismisses transient overlays (command palette, metadata search, modals, inline cell edit, autocomplete).
     pub fn dismiss_overlays(&mut self, cx: &mut Context<Self>) {
         if self.command_palette_ui.is_open() {
             self.command_palette_ui.close();
+        } else if self.metadata_search_ui.open {
+            self.metadata_search_ui.close_modal();
         } else if self.modals_ui.has_open_modal(self) {
             self.modals_ui.close_all();
             self.workspace_pane.close_guard_open = false;
@@ -219,6 +252,16 @@ impl DataForgeWorkspace {
             self.controller.editor_autocomplete = None;
         }
         cx.notify();
+    }
+
+    /// Builds and persists the current workspace session snapshot cleanly.
+    pub fn save_session_snapshot_now(&self) {
+        let snapshot = self.controller.build_default_session_snapshot(
+            self.controller.layout_config.sidebar_visible,
+            self.controller.layout_config.inspector_visible,
+            self.controller.layout_config.ai_drawer_visible,
+        );
+        self.controller.save_workspace_session_snapshot(&snapshot);
     }
 
     /// Returns the active SQL grammar derived from the connected workspace engine.
@@ -314,6 +357,7 @@ impl DataForgeWorkspace {
         else {
             return;
         };
+        self.workspace_pane.close_tool();
         match tab.kind {
             TabKind::QueryEditor { sql } => {
                 if !sql.is_empty() {
@@ -344,6 +388,7 @@ impl DataForgeWorkspace {
                 cx.notify();
                 return;
             }
+            self.save_session_snapshot_now();
             window.remove_window();
             return;
         }
@@ -486,15 +531,37 @@ impl DataForgeWorkspace {
 
     fn render_center_pane(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let active_tab = self.controller.tabs.active_tab();
+        let active_tool = self.workspace_pane.active_tool;
         let sub_view = self.workspace_pane.sub_view;
-        let pane = match sub_view {
-            WorkspaceSubView::DataGrid => data_grid::render_data_grid(self, window, cx),
-            WorkspaceSubView::Structure => structure_view::render_structure_view(self, window, cx),
-            WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid => {
-                sql_editor::render_sql_editor(self, window, cx)
+        let pane = if let Some(tool) = active_tool {
+            match tool {
+                WorkspaceToolView::SchemaDesigner => {
+                    schema_designer::render_schema_designer(self, window, cx)
+                }
+                WorkspaceToolView::ImportWizard => {
+                    import_wizard::render_import_wizard(self, window, cx)
+                }
+                WorkspaceToolView::ErDiagram => er_diagram::render_er_diagram(self, window, cx),
+                WorkspaceToolView::QueryBuilder => {
+                    query_builder::render_query_builder(self, window, cx)
+                }
+                WorkspaceToolView::Compare => compare_view::render_compare_view(self, window, cx),
+                WorkspaceToolView::Admin => admin_view::render_admin_view(self, window, cx),
+            }
+        } else {
+            match sub_view {
+                WorkspaceSubView::DataGrid => data_grid::render_data_grid(self, window, cx),
+                WorkspaceSubView::Structure => {
+                    structure_view::render_structure_view(self, window, cx)
+                }
+                WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid => {
+                    sql_editor::render_sql_editor(self, window, cx)
+                }
             }
         };
-        let anim_id = SharedString::from(format!("center-pane-{active_tab:?}-{sub_view:?}"));
+        let anim_id = SharedString::from(format!(
+            "center-pane-{active_tab:?}-{active_tool:?}-{sub_view:?}"
+        ));
         theme::animate_slide_fade_in(
             div()
                 .flex_1()
@@ -642,6 +709,11 @@ impl Render for DataForgeWorkspace {
         if let Some(palette) = command_palette::render_command_palette(self, window, cx) {
             shell_col = shell_col.child(palette);
         }
+        if self.metadata_search_ui.open {
+            shell_col = shell_col.child(metadata_search::render_metadata_search_modal(
+                self, window, cx,
+            ));
+        }
         if let Some(modal) = modals::render_modals(self, window, cx) {
             shell_col = shell_col.child(modal);
         }
@@ -709,7 +781,8 @@ fn install_close_guard(window: &Window, cx: &mut Context<DataForgeWorkspace>) {
             return true;
         };
         let needs_guard = entity.read(cx).controller.needs_close_guard();
-        if !needs_guard {
+        if !needs_guard || entity.read(cx).pending_quit_after_confirm {
+            entity.read(cx).save_session_snapshot_now();
             return true;
         }
         entity.update(cx, |ws, cx| {
@@ -754,6 +827,28 @@ fn spawn_reactive_bridges(
         ));
     }
 
+    if !controller.headless {
+        tasks.push(cx.spawn(
+            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+                loop {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_secs(30))
+                        .await;
+                    let Ok(()) = this.update(cx, |ws, cx| {
+                        if ws.controller.scheduled_tasks.iter().any(|t| t.enabled) {
+                            let runs = ws.controller.tick_due_scheduled_tasks();
+                            if !runs.is_empty() {
+                                cx.notify();
+                            }
+                        }
+                    }) else {
+                        break;
+                    };
+                }
+            },
+        ));
+    }
+
     let weak_appearance = cx.entity().downgrade();
     let appearance_sub = window.observe_window_appearance(move |window, cx| {
         if let Some(entity) = weak_appearance.upgrade() {
@@ -765,6 +860,17 @@ fn spawn_reactive_bridges(
         }
     });
     (tasks, vec![appearance_sub])
+}
+
+fn restore_startup_session_and_tasks(controller: &mut AppController) {
+    if let Some(snapshot) = controller.restore_workspace_session_on_startup() {
+        controller.layout_config.sidebar_visible = snapshot.sidebar_open;
+        controller.layout_config.inspector_visible = snapshot.inspector_open;
+        controller.toolbar_status.inspector_open = snapshot.inspector_open;
+        controller.layout_config.ai_drawer_visible = snapshot.bottom_drawer_open;
+        controller.toolbar_status.ai_open = snapshot.bottom_drawer_open;
+    }
+    controller.load_scheduled_tasks();
 }
 
 fn mirror_query_event_to_tab(
