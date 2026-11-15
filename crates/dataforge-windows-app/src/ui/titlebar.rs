@@ -8,13 +8,14 @@ use herogpui::core::with_alpha;
 use herogpui::gpui::{
     AnyElement, Context, FontWeight, ImageSource, InteractiveElement, IntoElement, MouseButton,
     ParentElement, StatefulInteractiveElement, Styled, Window, WindowControlArea, div, img, px,
-    rgb, rgba,
+    rgb, rgba, svg,
 };
 use herogpui::theme::ActiveTheme;
 
 use crate::app::{AppController, ScreenMode};
 use dataforge_gfx::glyphs::EngineKind;
 use dataforge_state::connection_window::ConnectionWindowPhase;
+use dataforge_windows_platform::WindowControlsStyle;
 use tablepro_core::SafeModeLevel;
 
 use super::DataForgeWorkspace;
@@ -23,7 +24,8 @@ use super::theme::{
     CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, hairline_border_color, is_reduced_motion,
 };
 
-/// Renders the custom `DataForge` title bar wired with macOS-style traffic lights,
+/// Renders the custom `DataForge` title bar wired with macOS-style traffic lights
+/// or native Windows 11 caption buttons (per `settings.window_controls`),
 /// branding, live connection status, quick command search trigger, and an isolated
 /// empty drag area so clicks on controls are never swallowed by `WM_NCHITTEST`.
 #[must_use]
@@ -35,24 +37,23 @@ pub fn render_titlebar(
     let colors = cx.colors().clone();
     let hairline = hairline_border_color(cx);
     let skip_anim = is_reduced_motion(cx);
-    let _ = window;
+    let window_controls = ws.controller.settings.window_controls;
+    let is_windows_controls = window_controls == WindowControlsStyle::Windows;
+    let is_maximized = window.is_maximized();
 
-    div()
-        .id("dataforge-titlebar")
+    let mut leading = div()
         .flex()
         .flex_row()
         .items_center()
-        .w_full()
-        .h(px(36.0))
-        .min_w(px(0.0))
-        .flex_shrink_0()
-        .overflow_hidden()
-        .px(px(12.0))
         .gap(px(8.0))
-        .bg(colors.surface.background)
-        .border_b(px(HAIRLINE_BORDER_PX))
-        .border_color(hairline)
-        .child(render_traffic_lights(skip_anim, cx))
+        .min_w(px(0.0))
+        .flex_shrink(1.0);
+
+    if !is_windows_controls {
+        leading = leading.child(render_traffic_lights(skip_anim, cx));
+    }
+
+    leading = leading
         .child(
             div()
                 .flex()
@@ -61,7 +62,7 @@ pub fn render_titlebar(
                 .gap(px(6.0))
                 .min_w(px(0.0))
                 .flex_shrink(1.0)
-                .pl(px(4.0))
+                .pl(px(if is_windows_controls { 0.0 } else { 4.0 }))
                 .child(
                     img(ImageSource::Image(crate::branding::dataforge_logo_image()))
                         .w(px(18.0))
@@ -90,7 +91,24 @@ pub fn render_titlebar(
             &ws.controller.strings,
             skip_anim,
             cx,
-        ))
+        ));
+
+    let mut bar = div()
+        .id("dataforge-titlebar")
+        .flex()
+        .flex_row()
+        .items_center()
+        .w_full()
+        .h(px(36.0))
+        .min_w(px(0.0))
+        .flex_shrink_0()
+        .overflow_hidden()
+        .pl(px(12.0))
+        .pr(px(if is_windows_controls { 0.0 } else { 12.0 }))
+        .bg(colors.surface.background)
+        .border_b(px(HAIRLINE_BORDER_PX))
+        .border_color(hairline)
+        .child(leading)
         .child(
             div()
                 .id("titlebar-drag-filler")
@@ -105,8 +123,26 @@ pub fn render_titlebar(
                         window.start_window_move();
                     }
                 }),
-        )
-        .into_any_element()
+        );
+
+    if is_windows_controls {
+        bar = bar.child(render_windows_caption_buttons(is_maximized, cx));
+    }
+
+    bar.into_any_element()
+}
+
+fn request_close_window(
+    ws: &mut DataForgeWorkspace,
+    window: &mut Window,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    if ws.controller.needs_close_guard() {
+        ws.workspace_pane.close_guard_open = true;
+        cx.notify();
+    } else {
+        window.remove_window();
+    }
 }
 
 struct TrafficLightStyle {
@@ -114,7 +150,7 @@ struct TrafficLightStyle {
     base: u32,
     hover: u32,
     active: u32,
-    glyph: &'static str,
+    icon: IconName,
     glyph_color: u32,
 }
 
@@ -142,13 +178,18 @@ fn traffic_light_dot(
         .on_click(on_click)
         .child(
             div()
-                .text_size(px(9.0))
-                .line_height(px(9.0))
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgba(style.glyph_color))
+                .size(px(8.0))
+                .flex()
+                .items_center()
+                .justify_center()
                 .opacity(0.0)
                 .group_hover("traffic-lights", move |s| s.opacity(glyph_opacity))
-                .child(style.glyph),
+                .child(
+                    Icon::new(style.icon)
+                        .size(px(8.0))
+                        .stroke_width(3.0)
+                        .color(rgba(style.glyph_color)),
+                ),
         )
         .into_any_element()
 }
@@ -160,18 +201,11 @@ fn render_traffic_lights(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> A
             base: 0x00FF_5F57,
             hover: 0x00E0_443E,
             active: 0x00C9_3832,
-            glyph: "×",
+            icon: IconName::X,
             glyph_color: 0x4D00_00D9,
         },
         skip_anim,
-        cx.listener(|ws, _, window, cx| {
-            if ws.controller.needs_close_guard() {
-                ws.workspace_pane.close_guard_open = true;
-                cx.notify();
-            } else {
-                window.remove_window();
-            }
-        }),
+        cx.listener(|ws, _, window, cx| request_close_window(ws, window, cx)),
     );
 
     let minimize_btn = traffic_light_dot(
@@ -180,7 +214,7 @@ fn render_traffic_lights(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> A
             base: 0x00FE_BC2E,
             hover: 0x00D8_9E24,
             active: 0x00BF_8B1D,
-            glyph: "−",
+            icon: IconName::Minus,
             glyph_color: 0x5C3A_00D9,
         },
         skip_anim,
@@ -193,7 +227,7 @@ fn render_traffic_lights(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> A
             base: 0x0028_C840,
             hover: 0x001A_AB29,
             active: 0x0014_9421,
-            glyph: "+",
+            icon: IconName::Plus,
             glyph_color: 0x004D_0AD9,
         },
         skip_anim,
@@ -210,6 +244,86 @@ fn render_traffic_lights(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> A
         .child(close_btn)
         .child(minimize_btn)
         .child(zoom_btn)
+        .into_any_element()
+}
+
+fn render_windows_caption_buttons(
+    is_maximized: bool,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let hover_bg = with_alpha(colors.foreground, 0.08);
+    let active_bg = with_alpha(colors.foreground, 0.14);
+    let close_hover_bg = rgb(0x00C4_2B1C);
+    let close_active_bg = rgb(0x00B2_2719);
+    let close_hover_fg = rgb(0x00FF_FFFF);
+
+    let caption_btn = |id: &'static str, icon: IconName, icon_size: f32| {
+        div()
+            .id(id)
+            .flex()
+            .items_center()
+            .justify_center()
+            .w(px(46.0))
+            .h_full()
+            .flex_shrink_0()
+            .hover(move |s| s.bg(hover_bg))
+            .active(move |s| s.bg(active_bg))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(
+                Icon::new(icon)
+                    .size(px(icon_size))
+                    .stroke_width(1.1)
+                    .absolute_stroke_width(true)
+                    .color(colors.foreground),
+            )
+    };
+
+    let minimize_btn = caption_btn("win-caption-minimize", IconName::Minus, 16.0)
+        .on_click(|_, window, _| window.minimize_window());
+
+    let (zoom_icon, zoom_size) = if is_maximized {
+        (IconName::Copy, 12.0)
+    } else {
+        (IconName::Square, 12.0)
+    };
+    let zoom_btn =
+        caption_btn("win-caption-zoom", zoom_icon, zoom_size).on_click(|_, window, _| {
+            window.zoom_window();
+        });
+
+    let close_btn = div()
+        .id("win-caption-close")
+        .group("win-caption-close")
+        .flex()
+        .items_center()
+        .justify_center()
+        .w(px(46.0))
+        .h_full()
+        .flex_shrink_0()
+        .hover(move |s| s.bg(close_hover_bg))
+        .active(move |s| s.bg(close_active_bg))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_click(cx.listener(|ws, _, window, cx| request_close_window(ws, window, cx)))
+        .child(
+            svg()
+                .path(IconName::X.path_with_stroke_width(1.1 * 24.0 / 18.0))
+                .size(px(18.0))
+                .flex_none()
+                .text_color(colors.foreground)
+                .group_hover("win-caption-close", move |s| s.text_color(close_hover_fg)),
+        );
+
+    div()
+        .id("titlebar-win-controls")
+        .flex()
+        .flex_row()
+        .items_center()
+        .h_full()
+        .flex_shrink_0()
+        .child(minimize_btn)
+        .child(zoom_btn)
+        .child(close_btn)
         .into_any_element()
 }
 
