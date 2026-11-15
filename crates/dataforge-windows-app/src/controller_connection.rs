@@ -5,13 +5,21 @@ use std::path::Path;
 use std::sync::Arc;
 
 use dataforge_gfx::glyphs::EngineKind;
+use dataforge_services::DatabaseEngine;
 use dataforge_services::import_bridge::test_connection;
 use dataforge_state::connection_window::{AttemptToken, ConnectionUnavailableView};
 use secrecy::SecretString;
 use tablepro_core::SafeModeLevel;
+use tablepro_core::column::ResultColumn;
 use tablepro_core::credentials::CredentialInteraction;
+use tablepro_core::ddl::{ColumnAttributes, ColumnDefinition, TableDefinition};
 use tablepro_core::meta::{ObjectInfo, ObjectKind, ObjectScope, TableRef};
+use tablepro_core::value::Value;
+use tablepro_core::{EditorSessionOptions, ResultEvent, RunEnd, RunOptions};
 use tablepro_session::connect::{ConnectRequest, CredentialSource, NoStoredCredentials};
+use tablepro_session::operation::{OperationError, OperationKind};
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 use crate::app::{AppController, ScreenMode};
 use crate::error::{AppError, Result};
@@ -84,6 +92,7 @@ impl AppController {
             .and_then(|n| n.to_str())
             .unwrap_or("database")
             .to_owned();
+        self.restoring_connection_id = None;
         self.connection_form = ConnectionFormDraft {
             name: label,
             engine,
@@ -220,6 +229,7 @@ impl AppController {
             guard.disconnect_workspace(ws)
         })?;
         self.connections.disconnect(ws);
+        self.restoring_connection_id = None;
         self.active_table = None;
         self.cached_schemas.clear();
         self.cached_objects.clear();
@@ -522,6 +532,7 @@ impl AppController {
             self.toolbar_status.database = self.connection_form.database.clone();
         }
         self.toolbar_status.safe_mode = self.safe_mode_enabled;
+        self.restoring_connection_id = None;
         self.screen_mode = ScreenMode::Workspace;
     }
 
@@ -543,6 +554,240 @@ impl AppController {
             },
         );
         self.active_attempt = None;
+        self.restoring_connection_id = None;
+    }
+
+    /// Returns the active [`DatabaseEngine`] from the connected session grammar or form draft.
+    #[must_use]
+    pub fn active_database_engine(&self) -> DatabaseEngine {
+        if let Some(services) = self.services.as_deref() {
+            let ws = self.active_workspace;
+            let grammar = services.runtime.block_on(async {
+                let guard = services.sessions.read().await;
+                guard.session(ws).map(|s| s.grammar())
+            });
+            if let Some(grammar) = grammar {
+                return DatabaseEngine::from_grammar(grammar);
+            }
+        }
+        engine_kind_to_database_engine(self.connection_form.engine)
+    }
+
+    /// Executes `sql` on the active workspace without mutating grid or editor state.
+    pub fn execute_query_capture_blocking(
+        &self,
+        sql: &str,
+    ) -> Result<(Vec<ResultColumn>, Vec<Vec<Value>>)> {
+        let (cols, rows, _) = self.run_sql_capture_raw(sql)?;
+        Ok((cols, rows))
+    }
+
+    pub(crate) fn run_sql_capture_raw(
+        &self,
+        sql: &str,
+    ) -> Result<(Vec<ResultColumn>, Vec<Vec<Value>>, u64)> {
+        let services = self.require_services()?.clone();
+        let ws = self.active_workspace;
+        let cancel = CancellationToken::new();
+        let options = RunOptions::new(cancel.clone());
+        let editor_options = EditorSessionOptions {
+            statement_timeout: None,
+            database: None,
+        };
+        let (tx, mut rx) = mpsc::channel::<ResultEvent>(128);
+        let mut cols = Vec::new();
+        let mut rows = Vec::new();
+        let mut affected = 0_u64;
+
+        let summary = services.runtime.block_on(async {
+            let guard = services.sessions.read().await;
+            let res = guard
+                .run_query(ws, sql, options, editor_options, tx, &cancel)
+                .await;
+            drop(guard);
+            while let Some(ev) = rx.recv().await {
+                match ev {
+                    ResultEvent::ResultSetStarted { columns }
+                    | ResultEvent::ColumnsResolved { columns, .. } => {
+                        cols = columns.to_vec();
+                    }
+                    ResultEvent::Rows(batch) => rows.extend(batch),
+                    ResultEvent::CommandCompleted {
+                        rows_affected: Some(n),
+                    } => {
+                        affected = affected.saturating_add(n);
+                    }
+                    _ => {}
+                }
+            }
+            res
+        })?;
+
+        match summary.end {
+            RunEnd::Completed => Ok((cols, rows, affected)),
+            RunEnd::Failed(err) => Err(AppError::Service(
+                dataforge_services::ServiceError::Session(err.to_string()),
+            )),
+            RunEnd::Cancelled => Err(AppError::InvalidState("query cancelled".to_owned())),
+            RunEnd::TimedOut { .. } => Err(AppError::InvalidState("query timed out".to_owned())),
+        }
+    }
+
+    /// Introspects full [`TableDefinition`] metadata for `(schema, table)`.
+    pub fn fetch_table_definition_blocking(
+        &self,
+        schema: Option<&str>,
+        table: &str,
+    ) -> Result<TableDefinition> {
+        let services = self.require_services()?.clone();
+        let ws = self.active_workspace;
+        let table_ref = TableRef::new(schema.map(str::to_owned), table.to_owned());
+
+        services.runtime.block_on(async {
+            let guard = services.sessions.read().await;
+            let session = guard.session(ws).ok_or_else(|| {
+                dataforge_services::ServiceError::Session("no active session".to_owned())
+            })?;
+            let tref = table_ref.clone();
+            if let Ok(def) = session
+                .run(OperationKind::Metadata, |lease, call| {
+                    let t = tref.clone();
+                    async move {
+                        lease
+                            .fetch_table_definition(&t, call)
+                            .await
+                            .map_err(OperationError::from)
+                    }
+                })
+                .await
+            {
+                return Ok(def);
+            }
+
+            let col_infos = session
+                .columns(table_ref.clone())
+                .await
+                .map_err(|e| dataforge_services::ServiceError::Session(e.to_string()))?;
+            let columns = col_infos
+                .iter()
+                .cloned()
+                .map(|c| ColumnDefinition::new(c, ColumnAttributes::default()))
+                .collect();
+            let indexes = session
+                .run(OperationKind::Metadata, |lease, call| {
+                    let t = table_ref.clone();
+                    async move {
+                        lease
+                            .fetch_indexes(&t, call)
+                            .await
+                            .map_err(OperationError::from)
+                    }
+                })
+                .await
+                .unwrap_or_default();
+            let foreign_keys = session
+                .run(OperationKind::Metadata, |lease, call| {
+                    let t = table_ref.clone();
+                    async move {
+                        lease
+                            .fetch_foreign_keys(&t, call)
+                            .await
+                            .map_err(OperationError::from)
+                    }
+                })
+                .await
+                .unwrap_or_default();
+
+            Ok(TableDefinition {
+                table: table_ref,
+                columns,
+                primary_key: None,
+                indexes,
+                foreign_keys,
+                inbound_foreign_keys: Vec::new(),
+                source: None,
+                options: None,
+            })
+        })
+    }
+
+    /// Introspects [`TableDefinition`] metadata for every table in `self.cached_objects`.
+    pub fn fetch_all_table_definitions_blocking(&self) -> Result<Vec<TableDefinition>> {
+        let tables: Vec<(Option<String>, String)> = self
+            .cached_objects
+            .iter()
+            .filter(|obj| matches!(obj.kind, ObjectKind::Table))
+            .map(|obj| (obj.schema.clone(), obj.name.clone()))
+            .collect();
+        let mut defs = Vec::with_capacity(tables.len());
+        for (schema, name) in tables {
+            defs.push(self.fetch_table_definition_blocking(schema.as_deref(), &name)?);
+        }
+        Ok(defs)
+    }
+
+    /// Executes DDL statements sequentially and refreshes schema metadata when any ran.
+    pub fn execute_ddl_statements_blocking(&mut self, statements: &[String]) -> Result<usize> {
+        let mut executed = 0_usize;
+        for stmt in statements {
+            let trimmed = stmt.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let _ = self.run_sql_capture_raw(trimmed)?;
+            executed = executed.saturating_add(1);
+        }
+        if executed > 0 {
+            self.invalidate_and_refresh_schema_blocking();
+        }
+        Ok(executed)
+    }
+
+    /// Splits a SQL script into individual statements, runs them sequentially, and refreshes schema.
+    pub fn execute_sql_script_blocking(&mut self, script: &str) -> Result<(usize, u64)> {
+        let statements = dataforge_services::split_sql_script_statements(script);
+        let mut executed = 0_usize;
+        let mut total_rows = 0_u64;
+        for stmt in statements {
+            let trimmed = stmt.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let (_, _, affected) = self.run_sql_capture_raw(trimmed)?;
+            executed = executed.saturating_add(1);
+            total_rows = total_rows.saturating_add(affected);
+        }
+        if executed > 0 {
+            self.invalidate_and_refresh_schema_blocking();
+        }
+        Ok((executed, total_rows))
+    }
+
+    fn invalidate_and_refresh_schema_blocking(&mut self) {
+        if let Some(services) = self.services.as_deref() {
+            let ws = self.active_workspace;
+            services.runtime.block_on(async {
+                let guard = services.sessions.read().await;
+                if let Some(session) = guard.session(ws) {
+                    session.invalidate_columns();
+                }
+            });
+        }
+        let _ = self.refresh_schema_sidebar_blocking();
+    }
+}
+
+const fn engine_kind_to_database_engine(engine: EngineKind) -> DatabaseEngine {
+    match engine {
+        EngineKind::Sqlite => DatabaseEngine::Sqlite,
+        EngineKind::Postgresql => DatabaseEngine::Postgres,
+        EngineKind::Mysql | EngineKind::Mariadb => DatabaseEngine::Mysql,
+        EngineKind::Mssql => DatabaseEngine::Mssql,
+        EngineKind::Duckdb => DatabaseEngine::Duckdb,
+        EngineKind::Clickhouse => DatabaseEngine::Clickhouse,
+        EngineKind::Cassandra | EngineKind::Scylladb | EngineKind::Mongodb | EngineKind::Redis => {
+            DatabaseEngine::Generic
+        }
     }
 }
 
@@ -566,5 +811,49 @@ fn push_sidebar_section(
             is_favorite: favorites.contains(&obj.name),
             selected: false,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dataforge_windows_platform::AppSettings;
+
+    #[test]
+    fn sqlite_script_and_table_definition_introspection()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let db_path = dir.path().join("introspect_test.sqlite");
+        std::fs::File::create(&db_path)?;
+
+        let mut controller = AppController::with_detected_theme(AppSettings::default());
+        controller.connect_local_file_blocking(&db_path)?;
+        assert_eq!(controller.active_database_engine(), DatabaseEngine::Sqlite);
+
+        let script = "\
+            CREATE TABLE accounts (id INTEGER PRIMARY KEY, email TEXT NOT NULL UNIQUE, balance REAL);\
+            INSERT INTO accounts (id, email, balance) VALUES (1, 'a@example.com', 10.5);\
+            INSERT INTO accounts (id, email, balance) VALUES (2, 'b@example.com', 20.0);\
+        ";
+        let (stmt_count, rows_affected) = controller.execute_sql_script_blocking(script)?;
+        assert_eq!(stmt_count, 3);
+        assert_eq!(rows_affected, 2);
+
+        let def = controller.fetch_table_definition_blocking(None, "accounts")?;
+        assert_eq!(def.table.name, "accounts");
+        let col_names: Vec<&str> = def.columns.iter().map(|c| c.name()).collect();
+        assert_eq!(col_names, vec!["id", "email", "balance"]);
+
+        controller.set_editor_sql("SELECT 42;");
+        let (cols, rows) = controller
+            .execute_query_capture_blocking("SELECT id, email FROM accounts ORDER BY id")?;
+        assert_eq!(cols.len(), 2);
+        assert_eq!(rows.len(), 2);
+        assert!(controller.grid_raw_rows.is_empty());
+        assert_eq!(controller.editor_sql_text(), "SELECT 42;");
+
+        let all_defs = controller.fetch_all_table_definitions_blocking()?;
+        assert!(all_defs.iter().any(|d| d.table.name == "accounts"));
+        Ok(())
     }
 }
