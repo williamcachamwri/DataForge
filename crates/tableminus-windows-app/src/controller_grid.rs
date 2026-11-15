@@ -3,12 +3,12 @@
 
 use std::path::Path;
 
-use dataforge_gfx::grid_renderer::{CellKind, GridCell, GridColumn, GridRow, RowState};
-use dataforge_services::export::{ExportFormat, ExportOptions, export_rows_atomic};
-use dataforge_services::session_bridge::{SessionManager, TableQueryOutcome};
-use dataforge_services::{ColumnMapping, generate_import_sql_batches};
-use dataforge_state::data_grid::{DataGridCellEdit, DataGridColumnID, RowID};
-use dataforge_state::tabs::TabConnectionId;
+use tableminus_gfx::grid_renderer::{CellKind, GridCell, GridColumn, GridRow, RowState};
+use tableminus_services::export::{ExportFormat, ExportOptions, export_rows_atomic};
+use tableminus_services::session_bridge::{SessionManager, TableQueryOutcome};
+use tableminus_services::{ColumnMapping, generate_import_sql_batches};
+use tableminus_state::data_grid::{DataGridCellEdit, DataGridColumnID, RowID};
+use tableminus_state::tabs::TabConnectionId;
 use tablepro_core::ForeignKeyMode;
 use tablepro_core::column::ResultColumn;
 use tablepro_core::export::{TSV_NULL, render_tsv};
@@ -50,8 +50,8 @@ impl AppController {
 
         let mut grid = std::mem::replace(
             &mut self.grid_model,
-            dataforge_state::data_grid::DataGridModel::new(
-                dataforge_state::data_grid::DataGridLayoutScope::Ephemeral,
+            tableminus_state::data_grid::DataGridModel::new(
+                tableminus_state::data_grid::DataGridLayoutScope::Ephemeral,
                 100,
             ),
         );
@@ -258,8 +258,8 @@ impl AppController {
 
         let mut grid = std::mem::replace(
             &mut self.grid_model,
-            dataforge_state::data_grid::DataGridModel::new(
-                dataforge_state::data_grid::DataGridLayoutScope::Ephemeral,
+            tableminus_state::data_grid::DataGridModel::new(
+                tableminus_state::data_grid::DataGridLayoutScope::Ephemeral,
                 100,
             ),
         );
@@ -314,7 +314,7 @@ impl AppController {
             .iter()
             .zip(row.cells.iter())
             .map(|(col, cell)| {
-                let is_null = matches!(cell.kind, dataforge_gfx::grid_renderer::CellKind::Null);
+                let is_null = matches!(cell.kind, tableminus_gfx::grid_renderer::CellKind::Null);
                 InspectorField {
                     column: col.title.clone(),
                     data_type: String::new(),
@@ -807,7 +807,7 @@ pub(crate) fn format_value_cell(val: &Value) -> GridCell {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dataforge_windows_platform::{AppSettings, ScheduledTaskRecord};
+    use tableminus_windows_platform::{AppSettings, ScheduledTaskRecord};
 
     #[test]
     fn grid_aggregates_pin_and_tsv_formatting()
