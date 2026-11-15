@@ -1,6 +1,6 @@
 //! Direct2D view modules for every shell region and workspace screen.
 
-use dataforge_gfx::context::rect_f;
+use tableminus_gfx::context::rect_f;
 use windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F;
 
 use crate::shell_layout::Rect;
