@@ -4,11 +4,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use dataforge_services::{
+use tableminus_services::{
     AiAssistantService, AiEndpointConfig, DEFAULT_ANTHROPIC_URL, DEFAULT_OLLAMA_URL,
     DEFAULT_OPENAI_URL,
 };
-use dataforge_state::tabs::TabConnectionId;
+use tableminus_state::tabs::TabConnectionId;
 use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
     Button, Card, CardContent, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input,
@@ -27,7 +27,7 @@ use tablepro_core::AiProvider;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::{WorkspaceSubView, push_error_toast, push_success_toast};
 use super::syntax_bridge::styled_sql_block;
 use super::theme::{
@@ -64,9 +64,9 @@ pub struct AiDrawerViewState {
 }
 
 impl AiDrawerViewState {
-    /// Initializes AI drawer state owned by [`DataForgeWorkspace`].
+    /// Initializes AI drawer state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let api_key_input = cx.new(|cx| InputState::new(cx));
         let prompt_input = cx.new(|cx| InputState::new(cx));
         let mut state = Self {
@@ -92,9 +92,9 @@ impl AiDrawerViewState {
         state
     }
 
-    fn probe_stored_keys(&mut self, cx: &mut Context<DataForgeWorkspace>) {
+    fn probe_stored_keys(&mut self, cx: &mut Context<TableMinusWorkspace>) {
         self.key_probe_task = Some(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 let services = this
                     .read_with(cx, |ws, _| ws.controller.services.clone())
                     .ok()
@@ -131,14 +131,14 @@ impl AiDrawerViewState {
         &mut self,
         block_key: String,
         sql: String,
-        cx: &mut Context<DataForgeWorkspace>,
+        cx: &mut Context<TableMinusWorkspace>,
     ) {
         cx.write_to_clipboard(ClipboardItem::new_string(sql));
         self.copied_gen = self.copied_gen.wrapping_add(1);
         let generation = self.copied_gen;
         self.copied_block_key = Some(block_key);
         self.copy_reset_task = Some(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 cx.background_executor()
                     .timer(Duration::from_millis(1400))
                     .await;
@@ -157,9 +157,9 @@ impl AiDrawerViewState {
 /// Renders the non-blocking `320px` right-hand AI SQL Assistant drawer.
 #[must_use]
 pub fn render_ai_drawer(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let header = render_header(ws, cx);
     let privacy_bar = render_privacy_strip(ws, cx);
@@ -201,7 +201,7 @@ pub fn render_ai_drawer(
     )
 }
 
-fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
     let expanded = ws.ai_drawer_ui.config_expanded;
     let has_messages = !ws.controller.ai_drawer.messages.is_empty();
@@ -283,7 +283,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
         .into_any_element()
 }
 
-fn render_privacy_strip(ws: &DataForgeWorkspace, _cx: &App) -> AnyElement {
+fn render_privacy_strip(ws: &TableMinusWorkspace, _cx: &App) -> AnyElement {
     let provider = ws.ai_drawer_ui.config.provider;
     let model = ws.ai_drawer_ui.config.model.clone();
 
@@ -322,8 +322,8 @@ fn render_privacy_strip(ws: &DataForgeWorkspace, _cx: &App) -> AnyElement {
 }
 
 fn render_provider_config_panel(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -415,11 +415,11 @@ fn render_provider_config_panel(
 }
 
 fn render_api_key_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     active_provider: AiProvider,
     has_saved_key: bool,
     colors: &herogpui::theme::ThemeColors,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let key_input = Input::new(&ws.ai_drawer_ui.api_key_input)
@@ -483,7 +483,7 @@ fn render_api_key_section(
         .into_any_element()
 }
 
-fn render_transcript(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_transcript(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let scroll_handle = ws.ai_drawer_ui.transcript_scroll.clone();
     let messages = &ws.controller.ai_drawer.messages;
     let waiting = ws.ai_panel.waiting_reply;
@@ -547,7 +547,7 @@ fn render_transcript(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
         .into_any_element()
 }
 
-fn render_empty_transcript_card(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_empty_transcript_card(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let schema = ws
@@ -596,10 +596,10 @@ fn render_empty_transcript_card(ws: &DataForgeWorkspace, cx: &App) -> AnyElement
 }
 
 fn render_message_bubble(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     msg_idx: usize,
     msg: &AiMessage,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -677,11 +677,11 @@ fn render_message_bubble(
 }
 
 fn render_sql_code_block(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     msg_idx: usize,
     seg_idx: usize,
     sql: String,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let grammar = ws.active_grammar();
     let styled_sql = styled_sql_block(&sql, grammar, &ws.content_palette);
@@ -711,11 +711,11 @@ fn render_sql_code_block(
 }
 
 fn render_sql_block_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     msg_idx: usize,
     seg_idx: usize,
     sql: String,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -810,7 +810,7 @@ fn render_streaming_indicator(strings: &crate::i18n::Strings, cx: &App) -> AnyEl
         .into_any_element()
 }
 
-fn render_composer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_composer(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let waiting = ws.ai_panel.waiting_reply;
     let chips = render_quick_schema_chips(ws, cx);
@@ -871,8 +871,8 @@ fn render_composer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>
 }
 
 fn render_quick_schema_chips(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let select_prompt = match ws.controller.active_table.as_ref() {
@@ -954,9 +954,9 @@ fn available_models_for(state: &AiDrawerViewState, provider: AiProvider) -> Vec<
 }
 
 fn save_provider_api_key(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     provider: AiProvider,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let raw_key = ws
         .ai_drawer_ui
@@ -997,7 +997,7 @@ fn save_provider_api_key(
     }
 }
 
-fn fetch_models_async(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn fetch_models_async(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let Some(services) = ws.controller.services.clone() else {
         push_error_toast(ws.controller.strings.ai_err_service_unavailable, None, cx);
         return;
@@ -1013,7 +1013,7 @@ fn fetch_models_async(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWor
     cx.notify();
 
     ws.ai_drawer_ui.model_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let outcome = runtime
                 .spawn(async move {
                     let endpoint = ai.resolve_endpoint(&cfg).await?;
@@ -1062,10 +1062,10 @@ struct AiPromptContext {
     schema: Option<String>,
     tables: Vec<String>,
     active_table: Option<tablepro_core::meta::TableRef>,
-    workspace_id: dataforge_state::connection_window::WorkspaceId,
+    workspace_id: tableminus_state::connection_window::WorkspaceId,
 }
 
-fn build_ai_context(ws: &DataForgeWorkspace) -> (AiPromptContext, Vec<ChatMessage>) {
+fn build_ai_context(ws: &TableMinusWorkspace) -> (AiPromptContext, Vec<ChatMessage>) {
     let cfg = ws.ai_drawer_ui.config.clone();
     let editor_sql = ws.controller.editor_sql_text();
     let engine = ws.controller.toolbar_status.engine_version.clone();
@@ -1164,7 +1164,7 @@ fn dispatch_ai_request(
     });
 }
 
-fn submit_ai_prompt(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn submit_ai_prompt(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let prompt = ws
         .ai_drawer_ui
         .prompt_input
@@ -1209,10 +1209,10 @@ fn submit_ai_prompt(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorks
 
 fn spawn_ai_reply_pump(
     mut rx: mpsc::UnboundedReceiver<ReplyEvent>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Task<()> {
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             while let Some(ev) = rx.recv().await {
                 let is_terminal = matches!(ev, ReplyEvent::Finished(_) | ReplyEvent::Failed(_));
                 let res = this.update(cx, |ws, cx| {
@@ -1244,9 +1244,9 @@ fn spawn_ai_reply_pump(
 }
 
 fn insert_sql_into_active_editor(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     sql: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.set_editor_sql(sql);
     if ws.workspace_pane.sub_view == WorkspaceSubView::DataGrid
@@ -1259,9 +1259,9 @@ fn insert_sql_into_active_editor(
 }
 
 fn open_sql_in_new_tab(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     sql: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let tab_title = ws.controller.strings.ai_query_tab_title;
     let toast_title = ws.controller.strings.ai_toast_sql_new_tab;
