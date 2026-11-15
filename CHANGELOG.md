@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **DataForge** will be documented in this file.
+All notable changes to **TableMinus** will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Full 6-Locale Localization (i18n)**: Complete UI and diagnostic coverage for `en-US`, `vi-VN`, `zh-CN`, `ja-JP`, `es-ES`, and `fr-FR`, including runtime language switching in Settings.
 - **CI/CD & Release Packaging**: Automated GitHub Actions release verification, Velopack (`Setup.exe`, `Portable.zip`, and delta `.nupkg`) packaging, `SHA256SUMS.txt`, and `git-cliff` release notes.
 
-[Unreleased]: https://github.com/williamcachamwri/DataForge/compare/v0.1.2...HEAD
-[0.1.2]: https://github.com/williamcachamwri/DataForge/compare/v0.1.0...v0.1.2
-[0.1.1]: https://github.com/williamcachamwri/DataForge/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/williamcachamwri/DataForge/releases/tag/v0.1.0
+[Unreleased]: https://github.com/williamcachamwri/TableMinus/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/williamcachamwri/TableMinus/compare/v0.1.0...v0.1.2
+[0.1.1]: https://github.com/williamcachamwri/TableMinus/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/williamcachamwri/TableMinus/releases/tag/v0.1.0
