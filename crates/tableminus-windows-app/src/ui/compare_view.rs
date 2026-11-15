@@ -1,10 +1,10 @@
 //! Schema & Data Compare diff and synchronization workbench view.
 
-use dataforge_services::{
+use tableminus_services::{
     ColumnChangeKind, ColumnDiff, DataDiffReport, RowDiffEntry, SchemaDiffReport, diff_table_rows,
     diff_table_schemas,
 };
-use dataforge_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::connection_window::ConnectionWindowPhase;
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, PickerItem, Select,
     Separator,
@@ -20,7 +20,7 @@ use tablepro_core::QueryResult;
 use tablepro_core::ddl::TableDefinition;
 use tablepro_core::meta::{ObjectKind, TableRef};
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::{push_error_toast, push_success_toast};
 use super::theme::{
     CONTROL_RADIUS_PX, PANEL_RADIUS_PX, editor_gpui_font, hairline_border_color, muted_surface_bg,
@@ -42,9 +42,9 @@ pub struct CompareViewState {
 }
 
 impl CompareViewState {
-    /// Creates initial Compare view state owned by [`DataForgeWorkspace`].
+    /// Creates initial Compare view state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self::default()
     }
 }
@@ -52,9 +52,9 @@ impl CompareViewState {
 /// Renders the Schema & Data Compare workbench tool view.
 #[must_use]
 pub fn render_compare_view(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let tables = collect_comparable_tables(&ws.controller.cached_objects);
     ensure_default_table_selection(
@@ -121,8 +121,8 @@ fn ensure_default_table_selection(
 }
 
 fn render_compare_header(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -217,7 +217,7 @@ fn build_table_select(
     picker_items: Vec<PickerItem>,
     selected: Option<&TableRef>,
     is_source: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let val = selected
         .and_then(|t| tables.iter().position(|x| x == t))
@@ -245,9 +245,9 @@ fn build_table_select(
 }
 
 fn render_compare_controls(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     tables: &[TableRef],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let is_connected = matches!(
@@ -332,8 +332,8 @@ fn render_compare_controls(
 }
 
 fn render_compare_body(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -421,9 +421,9 @@ fn render_compare_body(
 }
 
 fn render_schema_summary_bar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     report: &SchemaDiffReport,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let counts = schema_diff_counts(report);
@@ -470,9 +470,9 @@ fn render_schema_summary_bar(
 }
 
 fn render_data_summary_bar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     report: &DataDiffReport,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let added = report.only_in_source.len();
@@ -526,9 +526,9 @@ fn render_data_summary_bar(
 }
 
 fn render_sync_action_buttons(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     statements: Vec<String>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     div()
@@ -655,7 +655,7 @@ fn collect_schema_diff_items(
 }
 
 fn render_schema_diff_list(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     report: &SchemaDiffReport,
     cx: &App,
 ) -> AnyElement {
@@ -694,7 +694,7 @@ fn render_schema_diff_list(
     list.into_any_element()
 }
 
-fn render_data_diff_list(ws: &DataForgeWorkspace, report: &DataDiffReport, cx: &App) -> AnyElement {
+fn render_data_diff_list(ws: &TableMinusWorkspace, report: &DataDiffReport, cx: &App) -> AnyElement {
     let s = &ws.controller.strings;
     let mut list = div()
         .id("compare-diff-scroll")
@@ -742,7 +742,7 @@ fn render_data_diff_entry(
         entry.primary_key.join(", ")
     );
     let (badge, tag, detail, color) = match entry.kind {
-        dataforge_services::RowDiffKind::OnlyInSource => (
+        tableminus_services::RowDiffKind::OnlyInSource => (
             "+",
             s.compare_added_label,
             format!(
@@ -752,7 +752,7 @@ fn render_data_diff_entry(
             ),
             HeroColor::Success,
         ),
-        dataforge_services::RowDiffKind::OnlyInTarget => (
+        tableminus_services::RowDiffKind::OnlyInTarget => (
             "-",
             s.compare_removed_label,
             format!(
@@ -762,7 +762,7 @@ fn render_data_diff_entry(
             ),
             HeroColor::Danger,
         ),
-        dataforge_services::RowDiffKind::Modified => (
+        tableminus_services::RowDiffKind::Modified => (
             "~",
             s.compare_modified_label,
             format!(
@@ -844,9 +844,9 @@ fn render_diff_row(
 }
 
 fn render_sync_sql_panel(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     statements: &[String],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -945,7 +945,7 @@ fn diff_chip(label: String, color: HeroColor) -> Chip {
         .child(ChipLabel::new().child(label))
 }
 
-fn run_compare(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn run_compare(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let (Some(src), Some(tgt)) = (
         ws.compare_ui.source_table.clone(),
         ws.compare_ui.target_table.clone(),
@@ -1029,9 +1029,9 @@ fn run_compare(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>
 }
 
 fn execute_sync_statements(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     statements: &[String],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match ws.controller.execute_ddl_statements_blocking(statements) {
         Ok(count) => {
