@@ -3,22 +3,22 @@
 
 use std::ffi::OsString;
 
-use dataforge_state::connection_window::WorkspaceId;
-use dataforge_state::tabs::CloseActionResult;
-use dataforge_windows_app::app::{AppController, ScreenMode};
-use dataforge_windows_app::i18n::Locale;
-use dataforge_windows_app::ipc::extract_forward_targets;
-use dataforge_windows_app::views::library::ConnectionFormDraft;
-use dataforge_windows_platform::{AppSettings, WindowsTheme};
+use tableminus_state::connection_window::WorkspaceId;
+use tableminus_state::tabs::CloseActionResult;
+use tableminus_windows_app::app::{AppController, ScreenMode};
+use tableminus_windows_app::i18n::Locale;
+use tableminus_windows_app::ipc::extract_forward_targets;
+use tableminus_windows_app::views::library::ConnectionFormDraft;
+use tableminus_windows_platform::{AppSettings, WindowsTheme};
 use tablepro_cli::{Dispatch, classify};
 
 #[test]
 fn cli_pre_dispatch_routes_subcommands_and_gui_targets() {
-    let help = classify(&[OsString::from("dataforge"), OsString::from("--help")]);
+    let help = classify(&[OsString::from("tableminus"), OsString::from("--help")]);
     assert_eq!(help, Dispatch::Command);
 
     let query = classify(&[
-        OsString::from("dataforge"),
+        OsString::from("tableminus"),
         OsString::from("query"),
         OsString::from("-c"),
         OsString::from("local"),
@@ -27,13 +27,13 @@ fn cli_pre_dispatch_routes_subcommands_and_gui_targets() {
     assert_eq!(query, Dispatch::Command);
 
     let url = classify(&[
-        OsString::from("dataforge"),
+        OsString::from("tableminus"),
         OsString::from("postgres://user@localhost:5432/app"),
     ]);
     assert!(matches!(url, Dispatch::Gui(_)));
 
     let bogus = classify(&[
-        OsString::from("dataforge"),
+        OsString::from("tableminus"),
         OsString::from("nonexistent_cmd"),
     ]);
     assert!(matches!(bogus, Dispatch::Invalid(_)));
@@ -42,7 +42,7 @@ fn cli_pre_dispatch_routes_subcommands_and_gui_targets() {
 #[test]
 fn ipc_extracts_db_files_and_connection_urls() {
     let args = vec![
-        OsString::from("dataforge.exe"),
+        OsString::from("tableminus.exe"),
         OsString::from("--new-window"),
         OsString::from("C:\\data\\prod.sqlite"),
         OsString::from("analytics.duckdb"),
@@ -80,7 +80,7 @@ fn ctrl_w_closes_frontmost_tab_before_window_and_reopens_with_ctrl_shift_t() {
 
     // Open a second tab, so Ctrl+W closes only the frontmost tab.
     let second_res =
-        app.handle_key_command(dataforge_windows_app::accessibility::KeyCommand::NewQueryTab);
+        app.handle_key_command(tableminus_windows_app::accessibility::KeyCommand::NewQueryTab);
     assert!(!second_res);
     assert_eq!(app.tabs.tabs().len(), 2);
 
