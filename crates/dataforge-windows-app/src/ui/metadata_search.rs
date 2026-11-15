@@ -2,23 +2,20 @@
 
 use dataforge_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
 use dataforge_state::tabs::TabConnectionId;
-use herogpui::components::{
-    Alert, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, InputState, Modal,
-    ModalSize, SearchField, Separator,
-};
-use herogpui::core::{Backdrop, Color as HeroColor, Size as HeroSize, Variant, with_alpha};
+use herogpui::components::{Alert, Button, Icon, IconName, IconSize, InputState, SearchField};
+use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::prelude::FluentBuilder as _;
 use herogpui::gpui::{
     AnyElement, App, AppContext as _, Context, Entity, Focusable as _, FontWeight,
-    InteractiveElement, IntoElement, ParentElement, SharedString, StatefulInteractiveElement,
-    Styled, Window, div, px,
+    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, ParentElement, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
 use tablepro_core::ddl::TableDefinition;
 use tablepro_core::meta::{ObjectInfo, ObjectKind, TableRef};
 
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
-use super::theme::{COMPACT_GAP_PX, CONTROL_RADIUS_PX, MICRO_GAP_PX, hairline_border_color};
+use super::theme::hairline_border_color;
 use super::{DataForgeWorkspace, TableViewMode};
 use crate::app::ScreenMode;
 
@@ -54,12 +51,13 @@ struct SearchResultEntry {
     qualified_name: String,
 }
 
-/// Persistent UI state for the global Metadata Search modal.
+/// Persistent UI state for the global Metadata Search spotlight palette.
 #[derive(Debug)]
 pub struct MetadataSearchState {
     pub open: bool,
     pub query: String,
     filter: MetadataFilterKind,
+    selected_index: usize,
     query_input: Entity<InputState>,
     cached_defs: Vec<TableDefinition>,
     loaded_for: Option<(WorkspaceId, usize)>,
@@ -67,13 +65,14 @@ pub struct MetadataSearchState {
 }
 
 impl MetadataSearchState {
-    /// Creates initial Metadata Search modal state owned by [`DataForgeWorkspace`].
+    /// Creates initial Metadata Search palette state owned by [`DataForgeWorkspace`].
     #[must_use]
     pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
         Self {
             open: false,
             query: String::new(),
             filter: MetadataFilterKind::All,
+            selected_index: 0,
             query_input: cx.new(|cx| InputState::new(cx)),
             cached_defs: Vec::new(),
             loaded_for: None,
@@ -81,28 +80,33 @@ impl MetadataSearchState {
         }
     }
 
-    /// Opens the Metadata Search modal and focuses the search input.
+    /// Opens the Metadata Search palette and focuses the search input.
     pub fn open_modal(&mut self, window: &mut Window, cx: &mut Context<DataForgeWorkspace>) {
         self.open = true;
+        self.selected_index = 0;
         self.last_error = None;
         let handle = self.query_input.read(cx).focus_handle(cx);
         window.focus(&handle, cx);
         cx.notify();
     }
 
-    /// Closes the Metadata Search modal.
+    /// Closes the Metadata Search palette.
     pub fn close_modal(&mut self) {
         self.open = false;
     }
 }
 
-/// Renders the opaque Metadata Search modal overlay above the workspace.
+/// Renders the Cmd+K style Metadata Search spotlight overlay above the workspace.
 #[must_use]
 pub fn render_metadata_search_modal(
     ws: &mut DataForgeWorkspace,
     _window: &mut Window,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    if !ws.metadata_search_ui.open {
+        return div().into_any_element();
+    }
+
     let is_connected = matches!(
         ws.controller
             .connections
@@ -111,9 +115,9 @@ pub fn render_metadata_search_modal(
     );
     ensure_columns_cached_once(ws, is_connected);
 
-    let s = &ws.controller.strings;
     let colors = cx.colors().clone();
-    let opaque_card_bg = with_alpha(colors.overlay.background, 1.0);
+    let opaque_surface = with_alpha(colors.overlay.background, 1.0);
+    let border = hairline_border_color(cx);
 
     let matches = collect_search_results(
         &ws.metadata_search_ui.query,
@@ -121,42 +125,84 @@ pub fn render_metadata_search_modal(
         &ws.controller.cached_objects,
         &ws.metadata_search_ui.cached_defs,
     );
+    let visible_count = matches.len().min(MAX_DISPLAYED_RESULTS);
+    if visible_count == 0 {
+        ws.metadata_search_ui.selected_index = 0;
+    } else if ws.metadata_search_ui.selected_index >= visible_count {
+        ws.metadata_search_ui.selected_index = visible_count - 1;
+    }
 
-    let body = div()
-        .w_full()
+    let enter_targets: Vec<(Option<TableRef>, String)> = matches
+        .iter()
+        .take(MAX_DISPLAYED_RESULTS)
+        .map(|m| (m.target_table.clone(), m.qualified_name.clone()))
+        .collect();
+
+    let palette = div()
+        .id("metadata-search-palette")
+        .w(px(620.0))
+        .max_w(px(620.0))
+        .rounded(px(12.0))
+        .border_1()
+        .border_color(border)
+        .bg(opaque_surface)
+        .shadow_lg()
+        .overflow_hidden()
         .flex()
         .flex_col()
-        .gap(px(COMPACT_GAP_PX + 2.0))
-        .bg(opaque_card_bg)
-        .child(render_search_controls(ws, is_connected, cx))
-        .child(Separator::new())
-        .child(render_results_container(ws, is_connected, &matches, cx));
-
-    Modal::new()
-        .id("modal-metadata-search")
-        .is_open(ws.metadata_search_ui.open)
-        .size(ModalSize::Lg)
-        .backdrop(Backdrop::Opaque)
-        .is_dismissible(true)
-        .title(s.metadata_search)
-        .icon(IconName::Search)
-        .icon_color(HeroColor::Accent)
-        .on_open_change(cx.listener(|ws, &open: &bool, _w, cx| {
-            ws.metadata_search_ui.open = open;
-            cx.notify();
-        }))
-        .child(body)
-        .footer_child(render_footer_summary(ws, matches.len(), cx))
-        .footer_child(
-            Button::new("metadata-search-close")
-                .variant(Variant::Ghost)
-                .size(HeroSize::Sm)
-                .on_press(cx.listener(|ws, _, _w, cx| {
+        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            cx.stop_propagation();
+        })
+        .on_key_down(cx.listener(move |ws, ev: &KeyDownEvent, _w, cx| {
+            match ev.keystroke.key.as_str() {
+                "escape" => {
                     ws.metadata_search_ui.close_modal();
                     cx.notify();
-                }))
-                .child(s.close_label),
+                }
+                "up" => {
+                    ws.metadata_search_ui.selected_index =
+                        ws.metadata_search_ui.selected_index.saturating_sub(1);
+                    cx.notify();
+                }
+                "down" if visible_count > 0 => {
+                    ws.metadata_search_ui.selected_index =
+                        (ws.metadata_search_ui.selected_index + 1).min(visible_count - 1);
+                    cx.notify();
+                }
+                "enter" => {
+                    if let Some((tbl, qual)) =
+                        enter_targets.get(ws.metadata_search_ui.selected_index)
+                    {
+                        activate_search_result(ws, tbl.as_ref(), qual, cx);
+                    }
+                }
+                _ => {}
+            }
+        }))
+        .child(render_search_controls(ws, is_connected, cx))
+        .child(div().h(px(1.0)).w_full().bg(border))
+        .child(render_results_container(ws, is_connected, &matches, cx))
+        .child(div().h(px(1.0)).w_full().bg(border))
+        .child(render_palette_footer(ws, matches.len(), cx));
+
+    div()
+        .id("metadata-search-backdrop")
+        .absolute()
+        .inset_0()
+        .bg(with_alpha(colors.overlay.background, 0.35))
+        .flex()
+        .justify_center()
+        .items_start()
+        .pt(px(88.0))
+        .px(px(20.0))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|ws, _, _w, cx| {
+                ws.metadata_search_ui.close_modal();
+                cx.notify();
+            }),
         )
+        .child(palette)
         .into_any_element()
 }
 
@@ -197,49 +243,45 @@ fn render_search_controls(
     let search_input = SearchField::new(ws.metadata_search_ui.query_input.clone())
         .placeholder(s.metadata_search_placeholder)
         .full_width()
-        .height(px(34.0))
-        .text_size(px(13.0))
+        .height(px(36.0))
+        .text_size(px(13.5))
         .on_change(cx.listener(|ws, val: &str, _w, cx| {
             ws.metadata_search_ui.query = val.to_owned();
+            ws.metadata_search_ui.selected_index = 0;
             cx.notify();
         }))
         .on_clear(move |_w, cx| {
             let _ = ws_clear.update(cx, |ws, cx| {
                 ws.metadata_search_ui.query.clear();
+                ws.metadata_search_ui.selected_index = 0;
                 cx.notify();
             });
         });
 
     let refresh_btn = Button::new("metadata-search-refresh")
-        .variant(Variant::Secondary)
+        .variant(Variant::Ghost)
         .size(HeroSize::Sm)
         .is_disabled(!is_connected)
         .on_press(cx.listener(|ws, _, _w, cx| {
             refresh_cached_columns(ws);
             cx.notify();
         }))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(5.0))
-                .child(Icon::new(IconName::RefreshCw).size(IconSize::Xs))
-                .child(s.refresh_label),
-        );
+        .child(Icon::new(IconName::RefreshCw).size(IconSize::Xs));
 
     let filter = ws.metadata_search_ui.filter;
     let pills = div()
+        .px(px(12.0))
+        .pb(px(8.0))
         .flex()
         .items_center()
         .justify_between()
-        .flex_wrap()
         .gap(px(8.0))
         .child(
             div()
                 .flex()
                 .items_center()
                 .flex_wrap()
-                .gap(px(6.0))
+                .gap(px(4.0))
                 .child(filter_pill(
                     "meta-filter-all",
                     s.metadata_type_all,
@@ -274,8 +316,13 @@ fn render_search_controls(
     div()
         .flex()
         .flex_col()
-        .gap(px(COMPACT_GAP_PX))
-        .child(search_input)
+        .child(
+            div()
+                .px(px(10.0))
+                .pt(px(8.0))
+                .pb(px(4.0))
+                .child(search_input),
+        )
         .child(pills)
         .into_any_element()
 }
@@ -286,19 +333,41 @@ fn filter_pill(
     kind: MetadataFilterKind,
     active: bool,
     cx: &mut Context<DataForgeWorkspace>,
-) -> Button {
-    Button::new(id)
-        .variant(if active {
-            Variant::Primary
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let bg = if active {
+        with_alpha(colors.accent.color, 0.16)
+    } else {
+        with_alpha(colors.foreground, 0.0)
+    };
+    let fg = if active {
+        colors.accent.color
+    } else {
+        colors.muted
+    };
+    let hover_bg = colors.surface_secondary;
+    div()
+        .id(id)
+        .px(px(8.0))
+        .py(px(3.0))
+        .rounded(px(6.0))
+        .bg(bg)
+        .hover(move |s| s.bg(hover_bg))
+        .cursor_pointer()
+        .text_size(px(11.5))
+        .font_weight(if active {
+            FontWeight::SEMIBOLD
         } else {
-            Variant::Secondary
+            FontWeight::MEDIUM
         })
-        .size(HeroSize::Sm)
-        .on_press(cx.listener(move |ws, _, _w, cx| {
+        .text_color(fg)
+        .on_click(cx.listener(move |ws, _, _w, cx| {
             ws.metadata_search_ui.filter = kind;
+            ws.metadata_search_ui.selected_index = 0;
             cx.notify();
         }))
         .child(label)
+        .into_any_element()
 }
 
 fn render_results_container(
@@ -334,12 +403,14 @@ fn render_results_container(
             .into_any_element();
     }
 
-    let mut container = div().h(px(340.0)).flex().flex_col().gap(px(6.0));
+    let mut container = div().h(px(360.0)).flex().flex_col();
     if let Some(err) = ws.metadata_search_ui.last_error.as_ref() {
         container = container.child(
-            Alert::new(s.structure_metadata_incomplete)
-                .status(HeroColor::Warning)
-                .description(err.clone()),
+            div().px(px(10.0)).pt(px(8.0)).child(
+                Alert::new(s.structure_metadata_incomplete)
+                    .status(HeroColor::Warning)
+                    .description(err.clone()),
+            ),
         );
     }
 
@@ -371,17 +442,19 @@ fn render_results_container(
             .into_any_element();
     }
 
+    let selected_idx = ws.metadata_search_ui.selected_index;
     let mut list = div()
         .id("metadata-search-results")
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .p(px(6.0))
         .flex()
         .flex_col()
-        .gap(px(4.0));
+        .gap(px(2.0));
 
     for (idx, entry) in matches.iter().take(MAX_DISPLAYED_RESULTS).enumerate() {
-        list = list.child(render_result_row(idx, entry, cx));
+        list = list.child(render_result_row(idx, idx == selected_idx, entry, cx));
     }
 
     container.child(list).into_any_element()
@@ -389,33 +462,36 @@ fn render_results_container(
 
 fn render_result_row(
     idx: usize,
+    is_selected: bool,
     entry: &SearchResultEntry,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
-    let (icon, icon_color, type_color) = match entry.kind {
-        SearchResultKind::Table => (IconName::Table, colors.accent.color, HeroColor::Accent),
-        SearchResultKind::View => (IconName::Layers, colors.accent.color, HeroColor::Default),
-        SearchResultKind::Column => (IconName::Columns2, colors.muted, HeroColor::Warning),
+    let (icon, icon_color, tag_color) = match entry.kind {
+        SearchResultKind::Table => (IconName::Table, colors.accent.color, colors.accent.color),
+        SearchResultKind::View => (IconName::Layers, colors.accent.color, colors.muted),
+        SearchResultKind::Column => (IconName::Columns2, colors.muted, colors.muted),
         SearchResultKind::Routine | SearchResultKind::Other => {
-            (IconName::Code, colors.muted, HeroColor::Default)
+            (IconName::Code, colors.muted, colors.muted)
         }
     };
 
     let target_table = entry.target_table.clone();
     let qualified = entry.qualified_name.clone();
     let hover_bg = colors.surface_secondary;
-    let border = hairline_border_color(cx);
+    let row_bg = if is_selected {
+        with_alpha(colors.accent.color, 0.14)
+    } else {
+        with_alpha(colors.overlay.background, 0.0)
+    };
 
     div()
         .id(SharedString::from(format!("meta-res-{idx}")))
         .w_full()
+        .h(px(34.0))
         .px(px(10.0))
-        .py(px(7.0))
-        .rounded(px(CONTROL_RADIUS_PX))
-        .border_1()
-        .border_color(border)
-        .bg(with_alpha(colors.overlay.background, 1.0))
+        .rounded(px(6.0))
+        .bg(row_bg)
         .hover(move |s| s.bg(hover_bg))
         .cursor_pointer()
         .flex()
@@ -431,30 +507,22 @@ fn render_result_row(
                 .flex_1()
                 .flex()
                 .items_center()
-                .gap(px(8.0))
+                .gap(px(9.0))
                 .child(Icon::new(icon).size(IconSize::Sm).color(icon_color))
                 .child(
                     div()
-                        .min_w_0()
-                        .flex_1()
-                        .flex()
-                        .flex_col()
-                        .gap(px(1.0))
-                        .child(
-                            div()
-                                .truncate()
-                                .text_size(px(12.5))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(colors.foreground)
-                                .child(entry.title.clone()),
-                        )
-                        .child(
-                            div()
-                                .truncate()
-                                .text_size(px(11.0))
-                                .text_color(colors.muted)
-                                .child(entry.subtitle.clone()),
-                        ),
+                        .truncate()
+                        .text_size(px(13.0))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(colors.foreground)
+                        .child(entry.title.clone()),
+                )
+                .child(
+                    div()
+                        .truncate()
+                        .text_size(px(11.5))
+                        .text_color(colors.muted)
+                        .child(format!("· {}", entry.subtitle)),
                 ),
         )
         .child(
@@ -462,32 +530,44 @@ fn render_result_row(
                 .flex_shrink_0()
                 .flex()
                 .items_center()
-                .gap(px(MICRO_GAP_PX + 2.0))
+                .gap(px(8.0))
                 .when_some(entry.badge.clone(), |el, badge| {
                     el.child(
-                        Chip::new()
-                            .variant(ChipVariant::Soft)
-                            .color(HeroColor::Accent)
-                            .size(HeroSize::Sm)
-                            .child(ChipLabel::new().child(badge)),
+                        div()
+                            .px(px(5.0))
+                            .py(px(1.0))
+                            .rounded(px(4.0))
+                            .bg(with_alpha(colors.accent.color, 0.14))
+                            .text_size(px(10.0))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(colors.accent.color)
+                            .child(badge),
                     )
                 })
                 .child(
-                    Chip::new()
-                        .variant(ChipVariant::Soft)
-                        .color(type_color)
-                        .size(HeroSize::Sm)
-                        .child(ChipLabel::new().child(entry.detail.clone())),
-                ),
+                    div()
+                        .text_size(px(10.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(tag_color)
+                        .child(entry.detail.clone()),
+                )
+                .when(is_selected, |el| {
+                    el.child(
+                        div()
+                            .text_size(px(11.0))
+                            .text_color(colors.muted)
+                            .child("↵"),
+                    )
+                }),
         )
         .into_any_element()
 }
 
-fn render_footer_summary(ws: &DataForgeWorkspace, total: usize, cx: &App) -> AnyElement {
+fn render_palette_footer(ws: &DataForgeWorkspace, total: usize, cx: &App) -> AnyElement {
     let colors = cx.colors();
     let s = &ws.controller.strings;
     let shown = total.min(MAX_DISPLAYED_RESULTS);
-    let text = if total > shown {
+    let count_text = if total > shown {
         format!("{shown} / {total} {}", s.object_plural)
     } else if total == 1 {
         format!("1 {}", s.object_singular)
@@ -495,10 +575,15 @@ fn render_footer_summary(ws: &DataForgeWorkspace, total: usize, cx: &App) -> Any
         format!("{total} {}", s.object_plural)
     };
     div()
-        .flex_1()
-        .text_size(px(11.5))
+        .px(px(12.0))
+        .py(px(7.0))
+        .flex()
+        .items_center()
+        .justify_between()
+        .text_size(px(11.0))
         .text_color(colors.muted)
-        .child(text)
+        .child("↑↓   ↵   Esc")
+        .child(count_text)
         .into_any_element()
 }
 
