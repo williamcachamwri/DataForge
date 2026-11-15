@@ -1,0 +1,33 @@
+---
+interface Props {
+  as?: 'section' | 'div' | 'footer';
+  id?: string;
+  bandClass?: string;
+  frameClass?: string;
+  crosshairs?: boolean;
+}
+
+const {
+  as = 'section',
+  id,
+  bandClass,
+  frameClass,
+  crosshairs = true,
+} = Astro.props;
+
+const Tag = as;
+---
+
+<Tag id={id} class:list={['grid-band', bandClass]}>
+  <div class:list={['grid-frame', frameClass]}>
+    {crosshairs && (
+      <>
+        <span class="grid-crosshair grid-crosshair-tl" aria-hidden="true"></span>
+        <span class="grid-crosshair grid-crosshair-tr" aria-hidden="true"></span>
+        <span class="grid-crosshair grid-crosshair-bl" aria-hidden="true"></span>
+        <span class="grid-crosshair grid-crosshair-br" aria-hidden="true"></span>
+      </>
+    )}
+    <slot />
+  </div>
+</Tag>
