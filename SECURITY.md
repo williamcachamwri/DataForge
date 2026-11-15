@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Security fixes are applied to the `main` branch and the latest release builds of DataForge.
+Security fixes are applied to the `main` branch and the latest release builds of TableMinus.
 
 | Version | Supported |
 | :--- | :--- |
@@ -17,7 +17,7 @@ Security fixes are applied to the `main` branch and the latest release builds of
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in DataForge:
+If you discover a security vulnerability in TableMinus:
 
 1. **Do not** open a public issue with exploit details.
 2. Report the issue privately via GitHub Security Advisories or contact the repository maintainers directly with:
