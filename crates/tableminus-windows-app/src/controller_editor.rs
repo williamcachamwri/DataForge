@@ -3,10 +3,10 @@
 
 use std::time::Instant;
 
-use dataforge_gfx::editor_renderer::{
+use tableminus_gfx::editor_renderer::{
     AutocompleteItem, AutocompletePopup, CompletionKind, CursorMode, EditorLine,
 };
-use dataforge_services::{
+use tableminus_services::{
     DatabaseEngine, ExplainNode, FindReplaceOptions, find_matches, format_sql,
     parse_explain_output, replace_all_matches,
 };
@@ -288,7 +288,7 @@ impl AppController {
         };
     }
 
-    /// Formats the active SQL editor buffer using DataForge's dialect-neutral SQL formatter.
+    /// Formats the active SQL editor buffer using TableMinus's dialect-neutral SQL formatter.
     pub fn format_editor_sql(&mut self) {
         let formatted = format_sql(&self.editor_sql_text());
         self.set_editor_sql(&formatted);
@@ -396,7 +396,7 @@ fn build_explain_sql(engine: DatabaseEngine, trimmed_sql: &str, analyze: bool) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dataforge_windows_platform::AppSettings;
+    use tableminus_windows_platform::AppSettings;
 
     #[test]
     fn format_and_find_replace_editor_sql() {
