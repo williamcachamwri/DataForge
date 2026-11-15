@@ -274,7 +274,7 @@ fn render_tabular_import_body(
     let format_name = ws
         .import_wizard_ui
         .detected_format
-        .map_or("Unknown", format_display_name);
+        .map_or(s.import_unknown_format, format_display_name);
 
     div()
         .flex_1()
@@ -441,8 +441,9 @@ fn render_mapping_pane(
     }
 
     div()
-        .w(px(340.0))
-        .flex_shrink_0()
+        .w(px(310.0))
+        .min_w(px(230.0))
+        .max_w(px(340.0))
         .min_h_0()
         .border_r_1()
         .border_color(theme::hairline_border_color(cx))
@@ -477,14 +478,53 @@ fn render_sample_rows_pane(
     let border = theme::hairline_border_color(cx);
     let value_font = theme::value_gpui_font(&ws.controller.settings);
 
+    div()
+        .flex_1()
+        .min_w_0()
+        .min_h_0()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .px(px(12.0))
+                .py(px(8.0))
+                .border_b_1()
+                .border_color(border)
+                .text_size(px(12.0))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(colors.foreground)
+                .child(format!(
+                    "{} ({}/{})",
+                    s.import_preview_rows,
+                    preview.sample_rows.len(),
+                    preview.total_rows
+                )),
+        )
+        .child(render_sample_table_grid(preview, value_font, border, cx))
+        .into_any_element()
+}
+
+fn render_sample_table_grid(
+    preview: &ParsedImportPreview,
+    value_font: herogpui::Font,
+    border: herogpui::Hsla,
+    cx: &App,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let col_count = u16::try_from(preview.columns.len().max(1)).map_or(1000.0, f32::from);
+    let table_min_w = px(col_count * 130.0 + 16.0);
+
     let mut header_row = div()
+        .min_w(table_min_w)
+        .w_full()
         .flex()
         .items_center()
         .border_b_1()
         .border_color(border)
         .bg(theme::muted_surface_bg(cx))
         .px(px(8.0))
-        .h(px(30.0));
+        .h(px(30.0))
+        .flex_shrink_0();
     for col in &preview.columns {
         header_row = header_row.child(
             div()
@@ -501,6 +541,8 @@ fn render_sample_rows_pane(
 
     let mut rows_scroll = div()
         .id("import-preview-rows-scroll")
+        .min_w(table_min_w)
+        .w_full()
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
@@ -509,6 +551,8 @@ fn render_sample_rows_pane(
 
     for (r_idx, row) in preview.sample_rows.iter().enumerate() {
         let mut row_el = div()
+            .min_w(table_min_w)
+            .w_full()
             .flex()
             .items_center()
             .px(px(8.0))
@@ -535,29 +579,24 @@ fn render_sample_rows_pane(
     }
 
     div()
+        .id("import-preview-hscroll")
         .flex_1()
         .min_w_0()
         .min_h_0()
+        .overflow_x_scroll()
         .flex()
         .flex_col()
         .child(
             div()
-                .px(px(12.0))
-                .py(px(8.0))
-                .border_b_1()
-                .border_color(border)
-                .text_size(px(12.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(colors.foreground)
-                .child(format!(
-                    "{} ({}/{})",
-                    s.import_preview_rows,
-                    preview.sample_rows.len(),
-                    preview.total_rows
-                )),
+                .min_w(table_min_w)
+                .w_full()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .child(header_row)
+                .child(rows_scroll),
         )
-        .child(header_row)
-        .child(rows_scroll)
         .into_any_element()
 }
 
