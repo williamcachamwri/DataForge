@@ -7,6 +7,7 @@ pub mod charts_view;
 pub mod command_palette;
 pub mod compare_view;
 pub mod data_grid;
+pub mod data_transfer_view;
 pub mod engine_icons;
 pub mod er_diagram;
 pub mod explain_view;
@@ -14,6 +15,7 @@ pub mod import_wizard;
 pub mod inspector;
 pub mod library;
 pub mod metadata_search;
+pub mod mock_generator_view;
 pub mod modals;
 pub mod query_builder;
 pub mod rail;
@@ -118,6 +120,8 @@ pub struct DataForgeWorkspace {
     pub query_builder_ui: query_builder::QueryBuilderState,
     pub compare_ui: compare_view::CompareViewState,
     pub admin_ui: admin_view::AdminViewState,
+    pub mock_generator_ui: mock_generator_view::MockGeneratorViewState,
+    pub data_transfer_ui: data_transfer_view::DataTransferViewState,
     _tasks: Vec<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -184,6 +188,8 @@ impl DataForgeWorkspace {
             query_builder_ui: query_builder::QueryBuilderState::new(window, cx),
             compare_ui: compare_view::CompareViewState::new(window, cx),
             admin_ui: admin_view::AdminViewState::new(window, cx),
+            mock_generator_ui: mock_generator_view::MockGeneratorViewState::new(window, cx),
+            data_transfer_ui: data_transfer_view::DataTransferViewState::new(window, cx),
             _tasks: tasks,
             _subscriptions: subscriptions,
         };
@@ -241,7 +247,7 @@ impl DataForgeWorkspace {
         if self.command_palette_ui.is_open() {
             self.command_palette_ui.close();
         } else if self.metadata_search_ui.open {
-            self.metadata_search_ui.close_modal();
+            self.metadata_search_ui.close_modal_animated(cx);
         } else if self.modals_ui.has_open_modal(self) {
             self.modals_ui.close_all();
             self.workspace_pane.close_guard_open = false;
@@ -559,6 +565,12 @@ impl DataForgeWorkspace {
                 }
                 WorkspaceToolView::Compare => compare_view::render_compare_view(self, window, cx),
                 WorkspaceToolView::Admin => admin_view::render_admin_view(self, window, cx),
+                WorkspaceToolView::MockGenerator => {
+                    mock_generator_view::render_mock_generator_view(self, window, cx)
+                }
+                WorkspaceToolView::DataTransfer => {
+                    data_transfer_view::render_data_transfer_view(self, window, cx)
+                }
             }
         } else {
             match sub_view {
