@@ -7,12 +7,6 @@
 use std::collections::{BTreeSet, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tableminus_services::DatabaseEngine;
-use tableminus_services::mock_generator::{
-    MockColumnRule, MockGenerationPlan, MockGenerationReport, MockValueKind, SeededRng,
-    build_mock_insert_batches, execute_mock_generation, infer_plan_from_table,
-};
-use tableminus_state::connection_window::ConnectionWindowPhase;
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, FieldVariant, Icon, IconName, IconSize, Input,
     InputState, InputType, PickerItem, Select, Variant,
@@ -25,6 +19,12 @@ use herogpui::gpui::{
     Styled, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::DatabaseEngine;
+use tableminus_services::mock_generator::{
+    MockColumnRule, MockGenerationPlan, MockGenerationReport, MockValueKind, SeededRng,
+    build_mock_insert_batches, execute_mock_generation, infer_plan_from_table,
+};
+use tableminus_state::connection_window::ConnectionWindowPhase;
 use tablepro_core::ddl::TableDefinition;
 use tablepro_core::meta::{ObjectInfo, ObjectKind};
 use tablepro_core::value::Value;
@@ -595,7 +595,10 @@ fn render_numeric_field(
         .into_any_element()
 }
 
-fn render_seed_field(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_seed_field(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
     div()
@@ -764,7 +767,10 @@ fn render_empty_state(title: &str, subtitle: &str, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn render_rules_pane(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_rules_pane(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let border = theme::hairline_border_color(cx);
     let mut rows = div()
         .id("mock-gen-rules-scroll")
@@ -1323,7 +1329,10 @@ fn render_sql_preview_section(
         .into_any_element()
 }
 
-fn ensure_initial_table_loaded(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
+fn ensure_initial_table_loaded(
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
     if ws.mock_generator_ui.loaded_table_key.is_some() {
         return;
     }
