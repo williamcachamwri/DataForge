@@ -1,5 +1,5 @@
-//! Pure-Rust DataForge Win32 icon fallback using `CreateIconFromResourceEx`
-//! and embedded Apple HIG Liquid Glass app logo (`assets/dataforge_logo.png`).
+//! Pure-Rust TableMinus Win32 icon fallback using `CreateIconFromResourceEx`
+//! and embedded Apple HIG Liquid Glass app logo (`assets/tableminus_logo.png`).
 
 use std::sync::{Arc, OnceLock};
 
@@ -10,34 +10,34 @@ use windows::Win32::UI::WindowsAndMessaging::{
     LookupIconIdFromDirectoryEx, SendMessageW, WM_SETICON,
 };
 
-/// Embedded multi-size Apple HIG DataForge icon (`assets/dataforge.ico`).
-pub const DATAFORGE_ICO_BYTES: &[u8] = include_bytes!("../assets/dataforge.ico");
+/// Embedded multi-size Apple HIG TableMinus icon (`assets/tableminus.ico`).
+pub const TABLEMINUS_ICO_BYTES: &[u8] = include_bytes!("../assets/tableminus.ico");
 
-/// Embedded transparent-background Apple HIG Liquid Glass logo (`assets/dataforge_logo.png`).
-pub const DATAFORGE_LOGO_PNG_BYTES: &[u8] = include_bytes!("../assets/dataforge_logo.png");
+/// Embedded transparent-background Apple HIG Liquid Glass logo (`assets/tableminus_logo.png`).
+pub const TABLEMINUS_LOGO_PNG_BYTES: &[u8] = include_bytes!("../assets/tableminus_logo.png");
 
-/// Returns the cached [`Image`] handle for the embedded DataForge Apple HIG logo.
+/// Returns the cached [`Image`] handle for the embedded TableMinus Apple HIG logo.
 #[must_use]
-pub fn dataforge_logo_image() -> Arc<Image> {
+pub fn tableminus_logo_image() -> Arc<Image> {
     static LOGO: OnceLock<Arc<Image>> = OnceLock::new();
     Arc::clone(LOGO.get_or_init(|| {
         Arc::new(Image::from_bytes(
             ImageFormat::Png,
-            DATAFORGE_LOGO_PNG_BYTES.to_vec(),
+            TABLEMINUS_LOGO_PNG_BYTES.to_vec(),
         ))
     }))
 }
 
-/// Creates a Win32 `HICON` of `desired_px x desired_px` from [`DATAFORGE_ICO_BYTES`].
+/// Creates a Win32 `HICON` of `desired_px x desired_px` from [`TABLEMINUS_ICO_BYTES`].
 #[must_use]
-pub fn create_dataforge_hicon(desired_px: i32) -> Option<HICON> {
-    if DATAFORGE_ICO_BYTES.len() < 22 {
+pub fn create_tableminus_hicon(desired_px: i32) -> Option<HICON> {
+    if TABLEMINUS_ICO_BYTES.len() < 22 {
         return None;
     }
-    // SAFETY: `DATAFORGE_ICO_BYTES` is a valid static `.ico` directory buffer.
+    // SAFETY: `TABLEMINUS_ICO_BYTES` is a valid static `.ico` directory buffer.
     let offset = unsafe {
         LookupIconIdFromDirectoryEx(
-            DATAFORGE_ICO_BYTES.as_ptr(),
+            TABLEMINUS_ICO_BYTES.as_ptr(),
             true,
             desired_px,
             desired_px,
@@ -48,7 +48,7 @@ pub fn create_dataforge_hicon(desired_px: i32) -> Option<HICON> {
         return None;
     }
     let start = usize::try_from(offset).ok()?;
-    let slice = DATAFORGE_ICO_BYTES.get(start..)?;
+    let slice = TABLEMINUS_ICO_BYTES.get(start..)?;
     // SAFETY: `slice` points into the static icon image payload (PNG or DIB) with known length.
     let icon = unsafe {
         CreateIconFromResourceEx(
@@ -64,9 +64,9 @@ pub fn create_dataforge_hicon(desired_px: i32) -> Option<HICON> {
     if icon.is_invalid() { None } else { Some(icon) }
 }
 
-/// Applies the DataForge small (16px) and large (32px) icons to `hwnd` via `WM_SETICON`.
+/// Applies the TableMinus small (16px) and large (32px) icons to `hwnd` via `WM_SETICON`.
 pub fn apply_window_icons(hwnd: HWND) {
-    if let Some(small) = create_dataforge_hicon(16) {
+    if let Some(small) = create_tableminus_hicon(16) {
         // SAFETY: `hwnd` is a valid window and `small` is a valid `HICON`.
         unsafe {
             let _ = SendMessageW(
@@ -77,7 +77,7 @@ pub fn apply_window_icons(hwnd: HWND) {
             );
         }
     }
-    if let Some(big) = create_dataforge_hicon(32) {
+    if let Some(big) = create_tableminus_hicon(32) {
         // SAFETY: `hwnd` is a valid window and `big` is a valid `HICON`.
         unsafe {
             let _ = SendMessageW(
