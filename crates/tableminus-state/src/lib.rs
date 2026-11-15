@@ -1,4 +1,4 @@
-//! Pure-Rust, headless-testable application state for DataForge.
+//! Pure-Rust, headless-testable application state for TableMinus.
 
 pub mod connection_window;
 pub mod data_grid;
