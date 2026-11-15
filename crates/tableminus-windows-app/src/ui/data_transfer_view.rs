@@ -2,17 +2,17 @@
 
 use std::sync::Arc;
 
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_services::data_transfer::{
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_services::data_transfer::{
     ColumnTypeMapping, TransferConfig, TransferMode, TransferReport, format_sql_literal,
     map_sql_type, transfer_table_cancellable,
 };
-use dataforge_services::{
+use tableminus_services::{
     AlterTableOp, ColumnSpec, CreateTableSpec, DatabaseEngine, build_alter_table_sql,
     build_create_table_sql,
 };
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_state::library::LibraryConnection;
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::library::LibraryConnection;
 use herogpui::components::{
     Alert, Button, Checkbox, Chip, ChipLabel, ChipVariant, FieldVariant, Icon, IconName, IconSize,
     Input, InputState, InputType, PickerItem, Select, Spinner, SpinnerSize,
@@ -41,7 +41,7 @@ use tablepro_storage::{KeyringCredentials, SavedSshAuth};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::{push_error_toast, push_success_toast};
 use super::syntax_bridge;
@@ -105,9 +105,9 @@ pub struct DataTransferViewState {
 }
 
 impl DataTransferViewState {
-    /// Creates initial Cross-Engine Data Transfer view state owned by [`DataForgeWorkspace`].
+    /// Creates initial Cross-Engine Data Transfer view state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let target_schema_input = cx.new(|cx| InputState::new(cx));
         let target_table_input = cx.new(|cx| InputState::new(cx));
         let batch_size_input = cx.new(|cx| InputState::with_value(cx, DEFAULT_BATCH_SIZE));
@@ -140,9 +140,9 @@ impl DataTransferViewState {
 /// Renders the Cross-Engine Data Transfer & Schema Migration workbench view.
 #[must_use]
 pub fn render_data_transfer_view(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_connected = is_active_workspace_connected(ws);
     sync_source_selection_and_metadata(ws, is_connected, cx);
@@ -160,7 +160,7 @@ pub fn render_data_transfer_view(
         .into_any_element()
 }
 
-fn is_active_workspace_connected(ws: &DataForgeWorkspace) -> bool {
+fn is_active_workspace_connected(ws: &TableMinusWorkspace) -> bool {
     matches!(
         ws.controller
             .connections
@@ -170,9 +170,9 @@ fn is_active_workspace_connected(ws: &DataForgeWorkspace) -> bool {
 }
 
 fn sync_source_selection_and_metadata(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if ws.data_transfer_ui.source_connection_id.is_none() {
         if !is_connected {
@@ -243,7 +243,7 @@ fn ensure_default_source_table(
     }
 }
 
-fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
 
@@ -308,9 +308,9 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
 }
 
 fn render_endpoints_bar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let border = hairline_border_color(cx);
     let colors = cx.colors().clone();
@@ -338,9 +338,9 @@ fn render_endpoints_bar(
 }
 
 fn render_source_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -355,7 +355,8 @@ fn render_source_section(
 
     div()
         .flex_1()
-        .min_w(px(270.0))
+        .min_w(px(220.0))
+        .overflow_hidden()
         .flex()
         .flex_col()
         .gap(px(6.0))
@@ -397,11 +398,12 @@ fn render_source_conn_select(
     conn_items: Vec<PickerItem>,
     selected_conn: String,
     disabled: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .flex_1()
-        .min_w(px(130.0))
+        .min_w(px(210.0))
+        .max_w_full()
         .child(
             Select::new("transfer-source-conn", conn_items)
                 .variant(FieldVariant::Secondary)
@@ -419,8 +421,8 @@ fn render_source_conn_select(
 }
 
 fn render_source_table_select(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let tables = active_source_tables(ws);
     let table_items: Vec<PickerItem> = tables
@@ -439,7 +441,8 @@ fn render_source_table_select(
 
     div()
         .flex_1()
-        .min_w(px(130.0))
+        .min_w(px(210.0))
+        .max_w_full()
         .child(
             Select::new("transfer-source-table", table_items)
                 .variant(FieldVariant::Secondary)
@@ -465,9 +468,9 @@ fn render_source_table_select(
 }
 
 fn render_target_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -482,7 +485,8 @@ fn render_target_section(
 
     div()
         .flex_1()
-        .min_w(px(320.0))
+        .min_w(px(220.0))
+        .overflow_hidden()
         .flex()
         .flex_col()
         .gap(px(6.0))
@@ -510,7 +514,7 @@ fn render_target_section(
                     cx,
                 ))
                 .child(
-                    div().w(px(95.0)).flex_shrink_0().child(
+                    div().w(px(120.0)).flex_shrink_0().child(
                         Input::new(&ws.data_transfer_ui.target_schema_input)
                             .variant(FieldVariant::Secondary)
                             .placeholder(s.default_schema)
@@ -537,11 +541,12 @@ fn render_target_conn_select(
     conn_items: Vec<PickerItem>,
     selected_conn: String,
     disabled: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .flex_1()
-        .min_w(px(130.0))
+        .min_w(px(210.0))
+        .max_w_full()
         .child(
             Select::new("transfer-target-conn", conn_items)
                 .variant(FieldVariant::Secondary)
@@ -562,7 +567,7 @@ fn render_target_engine_select(
     target_engine: DatabaseEngine,
     disabled: bool,
     icon_color: herogpui::gpui::Hsla,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let engine_items: Vec<PickerItem> = TRANSFER_TARGET_ENGINES
         .iter()
@@ -622,9 +627,9 @@ fn render_section_heading(
 }
 
 fn render_options_bar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let border = hairline_border_color(cx);
     let can_start = can_start_transfer(ws, is_connected, cx);
@@ -644,7 +649,7 @@ fn render_options_bar(
         .into_any_element()
 }
 
-fn can_start_transfer(ws: &DataForgeWorkspace, is_connected: bool, cx: &App) -> bool {
+fn can_start_transfer(ws: &TableMinusWorkspace, is_connected: bool, cx: &App) -> bool {
     let has_included = ws
         .data_transfer_ui
         .column_mappings
@@ -664,9 +669,9 @@ fn can_start_transfer(ws: &DataForgeWorkspace, is_connected: bool, cx: &App) -> 
 }
 
 fn render_mode_and_batch_controls(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     border: herogpui::gpui::Hsla,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -730,9 +735,9 @@ fn render_mode_and_batch_controls(
 }
 
 fn render_transfer_action_area(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     can_start: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -806,7 +811,7 @@ fn mode_button(
     selected: bool,
     mode: TransferMode,
     disabled: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     Button::new(id)
         .variant(if selected {
@@ -825,9 +830,9 @@ fn mode_button(
 }
 
 fn render_body(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let has_saved = !ws.controller.library.storage().connections.is_empty();
@@ -873,8 +878,8 @@ fn render_body(
 }
 
 fn render_column_mapping_pane(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -912,7 +917,7 @@ fn render_column_mapping_pane(
     div()
         .id("transfer-mapping-pane")
         .flex_1()
-        .min_w(px(360.0))
+        .min_w(px(240.0))
         .min_h_0()
         .overflow_x_scroll()
         .border_r_1()
@@ -1037,7 +1042,7 @@ fn render_mapping_row(
     value_font: &herogpui::Font,
     border: herogpui::gpui::Hsla,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let mut row = div()
@@ -1113,7 +1118,7 @@ fn render_mapping_checkbox(
     idx: usize,
     include: bool,
     disabled: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .w(px(24.0))
@@ -1159,8 +1164,8 @@ fn render_mapping_source_name(
 }
 
 fn render_preview_and_report_pane(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -1171,9 +1176,10 @@ fn render_preview_and_report_pane(
     let grammar = grammar_for_db_engine(ws.data_transfer_ui.target_engine);
 
     div()
-        .w(px(360.0))
-        .min_w(px(260.0))
+        .w(px(320.0))
+        .min_w(px(220.0))
         .max_w(px(440.0))
+        .flex_shrink(1.0)
         .min_h_0()
         .flex()
         .flex_col()
@@ -1238,7 +1244,7 @@ fn render_preview_and_report_pane(
 }
 
 fn render_report_footer(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     border: herogpui::gpui::Hsla,
     cx: &App,
 ) -> Option<AnyElement> {
@@ -1423,7 +1429,7 @@ fn render_loading_state(label: &'static str, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn build_connection_picker_items(ws: &DataForgeWorkspace, is_connected: bool) -> Vec<PickerItem> {
+fn build_connection_picker_items(ws: &TableMinusWorkspace, is_connected: bool) -> Vec<PickerItem> {
     let s = &ws.controller.strings;
     let mut items = Vec::new();
     if is_connected {
@@ -1452,7 +1458,7 @@ fn build_connection_picker_items(ws: &DataForgeWorkspace, is_connected: bool) ->
     items
 }
 
-fn active_source_tables(ws: &DataForgeWorkspace) -> Vec<TableRef> {
+fn active_source_tables(ws: &TableMinusWorkspace) -> Vec<TableRef> {
     if ws.data_transfer_ui.source_connection_id.is_none() {
         collect_transferable_tables(&ws.controller.cached_objects)
     } else {
@@ -1474,9 +1480,9 @@ fn collect_transferable_tables(objects: &[ObjectInfo]) -> Vec<TableRef> {
 }
 
 fn apply_source_connection_change(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     key: Option<&str>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let next = key
         .filter(|k| !k.is_empty() && *k != ACTIVE_CONNECTION_KEY)
@@ -1504,9 +1510,9 @@ fn apply_source_connection_change(
 }
 
 fn apply_target_connection_change(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     key: Option<&str>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let next = key
         .filter(|k| !k.is_empty() && *k != ACTIVE_CONNECTION_KEY)
@@ -1524,9 +1530,9 @@ fn apply_target_connection_change(
 }
 
 fn apply_target_engine_change(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     target_engine: DatabaseEngine,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.data_transfer_ui.target_engine = target_engine;
     let src_engine = ws.data_transfer_ui.source_engine;
@@ -1540,7 +1546,7 @@ fn apply_target_engine_change(
     cx.notify();
 }
 
-fn force_reload_source_metadata(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn force_reload_source_metadata(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     ws.data_transfer_ui.loaded_source_key = None;
     ws.data_transfer_ui.source_tables_loaded_for = None;
     ws.data_transfer_ui.last_error = None;
@@ -1551,9 +1557,9 @@ fn force_reload_source_metadata(ws: &mut DataForgeWorkspace, cx: &mut Context<Da
 }
 
 fn start_load_saved_source_tables(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     conn_id: String,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
         return;
@@ -1574,7 +1580,7 @@ fn start_load_saved_source_tables(
 
     let expected_conn = conn_id.clone();
     ws.data_transfer_ui.metadata_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             if let Ok(result) = rx.recv().await {
                 let _ = this.update(cx, |ws, cx| {
                     if ws.data_transfer_ui.source_connection_id.as_deref()
@@ -1603,10 +1609,10 @@ fn start_load_saved_source_tables(
 }
 
 fn start_load_source_definition(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     conn_id: Option<String>,
     table: TableRef,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
         return;
@@ -1642,7 +1648,7 @@ fn start_load_source_definition(
     }));
 
     ws.data_transfer_ui.metadata_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             if let Ok(result) = rx.recv().await {
                 let _ = this.update(cx, |ws, cx| {
                     ws.data_transfer_ui.loading_source_metadata = false;
@@ -1664,10 +1670,10 @@ fn start_load_source_definition(
 }
 
 fn apply_loaded_source_definition(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     src_engine: DatabaseEngine,
     def: TableDefinition,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let target_engine = ws.data_transfer_ui.target_engine;
     let pk_names: std::collections::HashSet<&str> = def
@@ -1717,7 +1723,7 @@ fn apply_loaded_source_definition(
     ws.data_transfer_ui.column_mappings = drafts;
 }
 
-fn start_data_transfer(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn start_data_transfer(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let Some(services) = ws.controller.services.clone() else {
         return;
     };
@@ -1762,7 +1768,7 @@ fn start_data_transfer(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWo
     }));
 
     ws.data_transfer_ui.transfer_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             if let Ok(result) = rx.recv().await {
                 let _ = this.update(cx, |ws, cx| finish_data_transfer(ws, result, cx));
             }
@@ -1770,7 +1776,7 @@ fn start_data_transfer(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWo
     ));
 }
 
-fn build_transfer_config(ws: &DataForgeWorkspace, cx: &App) -> Option<TransferConfig> {
+fn build_transfer_config(ws: &TableMinusWorkspace, cx: &App) -> Option<TransferConfig> {
     let src_table = ws.data_transfer_ui.source_table.clone()?;
     let target_table = ws
         .data_transfer_ui
@@ -1826,9 +1832,9 @@ fn build_transfer_config(ws: &DataForgeWorkspace, cx: &App) -> Option<TransferCo
 }
 
 fn finish_data_transfer(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     result: Result<TransferReport, String>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.data_transfer_ui.is_running = false;
     ws.data_transfer_ui.cancel_token = None;
@@ -1853,7 +1859,7 @@ fn finish_data_transfer(
 
 async fn execute_transfer_async(
     services: &Arc<ServiceHub>,
-    active_ws: dataforge_state::connection_window::WorkspaceId,
+    active_ws: tableminus_state::connection_window::WorkspaceId,
     src_conn: Option<LibraryConnection>,
     dst_conn: Option<LibraryConnection>,
     config: &TransferConfig,
@@ -1912,7 +1918,7 @@ async fn execute_transfer_async(
 
 async fn active_session_or_err(
     services: &ServiceHub,
-    active_ws: dataforge_state::connection_window::WorkspaceId,
+    active_ws: tableminus_state::connection_window::WorkspaceId,
 ) -> Result<Arc<Session>, String> {
     let guard = services.sessions.read().await;
     guard
@@ -1935,7 +1941,7 @@ async fn load_saved_connection_tables(
 
 async fn fetch_active_table_definition(
     services: &ServiceHub,
-    active_ws: dataforge_state::connection_window::WorkspaceId,
+    active_ws: tableminus_state::connection_window::WorkspaceId,
     table: &TableRef,
 ) -> Result<(DatabaseEngine, TableDefinition), String> {
     let session = active_session_or_err(services, active_ws).await?;
@@ -2091,7 +2097,7 @@ async fn open_library_session(
     Ok(Session::start(pending, deps))
 }
 
-fn build_transfer_preview_sql(ws: &DataForgeWorkspace, cx: &App) -> String {
+fn build_transfer_preview_sql(ws: &TableMinusWorkspace, cx: &App) -> String {
     let target_engine = ws.data_transfer_ui.target_engine;
     let target_schema_raw = ws
         .data_transfer_ui
@@ -2239,7 +2245,7 @@ fn preview_default_expr(default: &ColumnDefault, engine: DatabaseEngine) -> Opti
 }
 
 fn find_library_connection<'a>(
-    ws: &'a DataForgeWorkspace,
+    ws: &'a TableMinusWorkspace,
     id: &str,
 ) -> Option<&'a LibraryConnection> {
     ws.controller
