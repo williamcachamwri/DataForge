@@ -255,12 +255,24 @@ impl DataForgeWorkspace {
     }
 
     /// Builds and persists the current workspace session snapshot cleanly.
-    pub fn save_session_snapshot_now(&self) {
-        let snapshot = self.controller.build_default_session_snapshot(
+    pub fn save_session_snapshot_now(&self, cx: &App) {
+        let drafts = self.sql_editor_ui.collect_tab_drafts(cx);
+        let mut snapshot = self.controller.build_default_session_snapshot(
             self.controller.layout_config.sidebar_visible,
             self.controller.layout_config.inspector_visible,
             self.controller.layout_config.ai_drawer_visible,
         );
+        for (tab_snap, tab_item) in snapshot
+            .tabs
+            .iter_mut()
+            .zip(self.controller.tabs.tabs().iter())
+        {
+            if tab_snap.kind == "query"
+                && let Some(draft) = drafts.get(&tab_item.id)
+            {
+                tab_snap.sql_draft = draft.clone();
+            }
+        }
         self.controller.save_workspace_session_snapshot(&snapshot);
     }
 
@@ -388,7 +400,7 @@ impl DataForgeWorkspace {
                 cx.notify();
                 return;
             }
-            self.save_session_snapshot_now();
+            self.save_session_snapshot_now(cx);
             window.remove_window();
             return;
         }
@@ -782,7 +794,7 @@ fn install_close_guard(window: &Window, cx: &mut Context<DataForgeWorkspace>) {
         };
         let needs_guard = entity.read(cx).controller.needs_close_guard();
         if !needs_guard || entity.read(cx).pending_quit_after_confirm {
-            entity.read(cx).save_session_snapshot_now();
+            entity.read(cx).save_session_snapshot_now(cx);
             return true;
         }
         entity.update(cx, |ws, cx| {
