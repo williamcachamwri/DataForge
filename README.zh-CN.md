@@ -32,21 +32,41 @@ TableMinus 是一款用 Rust 编写的 Windows 原生 SQL 与数据库工作台�
 
 ## 界面截图
 
-### SQL 编辑器、Vim 模式与分栏结果面板（1000 万行索引查询 `15 ms`）
+### SQL 编辑器、实时图表与查询结果
 
-![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor and Live Charts](docs/screenshots/sql-editor-charts.png)
 
-### 虚拟化数据网格、结构检查器与参数化筛选
+### 虚拟化数据网格、列聚合统计与参数化筛选
 
-![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.png)
+
+### 交互式 ER 关系图、外键连线与 SVG 导出
+
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram.png)
+
+### 数据导入向导（CSV、JSON、XLSX）与自动类型映射
+
+![TableMinus Import Wizard](docs/screenshots/import-wizard.png)
+
+### 架构与数据对比、差异汇总与同步脚本生成
+
+![TableMinus Schema and Data Compare](docs/screenshots/data-compare.png)
+
+### 模拟数据生成器（确定性种子与外键拓扑排序）
+
+![TableMinus Mock Data Generator](docs/screenshots/mock-generator.png)
+
+### 跨引擎数据传输与实时 DDL 预览
+
+![TableMinus Cross-Engine Data Transfer](docs/screenshots/data-transfer.png)
+
+### 元数据全局搜索面板（Metadata Search）
+
+![TableMinus Metadata Search](docs/screenshots/metadata-search.png)
 
 ### 仅发送 Schema 的 AI 抽屉（`Ctrl+Shift+A`）
 
 ![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
-
-### 交互式 ER 关系图、外键连线与 SVG 导出
-
-![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
