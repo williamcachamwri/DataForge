@@ -10,9 +10,9 @@ interface Props {
 const { release } = Astro.props;
 
 const installCommands = [
-  { id: 'winget', label: 'winget', cmd: 'winget install williamcachamwri.DataForge' },
-  { id: 'scoop', label: 'scoop', cmd: 'scoop install dataforge' },
-  { id: 'cli', label: 'cli', cmd: 'dataforge.exe --smoke-startup' },
+  { id: 'winget', label: 'winget', cmd: 'winget install williamcachamwri.TableMinus' },
+  { id: 'scoop', label: 'scoop', cmd: 'scoop install tableminus' },
+  { id: 'cli', label: 'cli', cmd: 'tableminus.exe --smoke-startup' },
 ];
 
 const shortcuts = [
@@ -152,7 +152,7 @@ const shortcuts = [
         data-i18n="cta.subtitle"
         class="mt-2.5 text-sm leading-relaxed text-[var(--muted)]"
       >
-        Install via DataForge-win-Setup.exe (no UAC required, Velopack delta updates) or extract DataForge-win-Portable.zip. Verify checksums with SHA256SUMS.txt.
+        Install via TableMinus-win-Setup.exe (no UAC required, Velopack delta updates) or extract TableMinus-win-Portable.zip. Verify checksums with SHA256SUMS.txt.
       </p>
     </div>
 
@@ -166,7 +166,7 @@ const shortcuts = [
       >
         <Download class="h-4 w-4 shrink-0" />
         <span>
-          <span data-i18n="cta.download">Download DataForge</span>
+          <span data-i18n="cta.download">Download TableMinus</span>
           <span data-release-version class="font-mono">{release.tag}</span>
         </span>
       </a>
