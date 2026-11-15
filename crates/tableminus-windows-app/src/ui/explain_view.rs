@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use tableminus_services::ExplainNode;
-use tableminus_state::connection_window::ConnectionWindowPhase;
 use herogpui::components::{Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize};
 use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::{
@@ -13,6 +11,8 @@ use herogpui::gpui::{
 };
 use herogpui::prelude::FluentBuilder;
 use herogpui::theme::ActiveTheme;
+use tableminus_services::ExplainNode;
+use tableminus_state::connection_window::ConnectionWindowPhase;
 
 use super::shell_state::ToastSeverity;
 use super::{TableMinusWorkspace, theme};
