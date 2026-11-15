@@ -2,8 +2,6 @@
 
 use std::time::Duration;
 
-use tableminus_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
-use tableminus_state::tabs::TabConnectionId;
 use herogpui::components::{Alert, Button, Icon, IconName, IconSize, InputState, SearchField};
 use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::prelude::FluentBuilder as _;
@@ -14,6 +12,8 @@ use herogpui::gpui::{
     px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
+use tableminus_state::tabs::TabConnectionId;
 use tablepro_core::ddl::TableDefinition;
 use tablepro_core::meta::{ObjectInfo, ObjectKind, TableRef};
 
