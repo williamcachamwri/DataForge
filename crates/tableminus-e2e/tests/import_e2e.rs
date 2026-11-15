@@ -5,8 +5,8 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use dataforge_e2e::E2eResult;
-use dataforge_state::library::{
+use tableminus_e2e::E2eResult;
+use tableminus_state::library::{
     ConnectionsLibraryModel, connection_from_url, parse_connection_url,
 };
 use tablepro_foreign_import::{
