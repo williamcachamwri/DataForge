@@ -11,7 +11,7 @@ use dataforge_state::library::{
     ForeignImportReport, LibraryConnection, LibraryConnectionId, LibraryGroupId, LibraryOutlineRow,
     LibraryRowID, LibrarySection,
 };
-use dataforge_windows_platform::foreign_app_dirs;
+use dataforge_windows_platform::{EnvironmentKind, foreign_app_dirs};
 use herogpui::components::{
     Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant,
     Checkbox, Chip, ChipLabel, ChipVariant, Color, FieldVariant, Form, Icon, IconName, IconSize,
@@ -75,6 +75,8 @@ struct ListRowMeta {
     engine: EngineKind,
     is_favorite: bool,
     color: Option<ConnectionColor>,
+    env: EnvironmentKind,
+    env_label: &'static str,
 }
 
 /// Persistent UI state for the Connections Library and Connection Form screen.
@@ -103,6 +105,7 @@ pub struct LibraryScreenState {
     tags_input: Entity<InputState>,
     selected_connection_id: Option<String>,
     selected_color: Option<ConnectionColor>,
+    selected_environment: EnvironmentKind,
     read_only: bool,
     dns_seed_list: bool,
     channel_binding: bool,
@@ -153,6 +156,7 @@ impl LibraryScreenState {
             tags_input: cx.new(|cx| InputState::new(cx)),
             selected_connection_id: None,
             selected_color: None,
+            selected_environment: EnvironmentKind::Local,
             read_only: false,
             dns_seed_list: false,
             channel_binding: false,
@@ -248,6 +252,7 @@ impl LibraryScreenState {
         *draft = ConnectionFormDraft::default();
         self.selected_connection_id = None;
         self.selected_color = None;
+        self.selected_environment = EnvironmentKind::Local;
         self.read_only = false;
         self.dns_seed_list = false;
         self.channel_binding = false;
@@ -714,6 +719,8 @@ fn build_listbox_items(
                 let engine = engine_from_driver_id(&conn.driver_id);
                 let subtitle = format_connection_subtitle(conn, engine);
                 let color = saved.get(&id.0).and_then(|s| s.color);
+                let env = ws.controller.connection_environment(&id.0);
+                let env_label = env_display_name(env, s);
                 meta_map.insert(
                     row_key.clone(),
                     ListRowMeta {
@@ -723,6 +730,8 @@ fn build_listbox_items(
                         engine,
                         is_favorite: conn.is_favorite,
                         color,
+                        env,
+                        env_label,
                     },
                 );
                 items.push(ListBoxItem::new(row_key, conn.name.clone()).description(subtitle));
@@ -833,11 +842,14 @@ fn render_listbox_row(
                         .when_some(meta.color, |d, c| d.child(color_dot(c)))
                         .child(
                             div()
+                                .flex_1()
+                                .min_w_0()
                                 .text_xs()
                                 .font_weight(FontWeight::MEDIUM)
                                 .truncate()
                                 .child(display_name),
-                        ),
+                        )
+                        .child(render_env_pill(meta.env, meta.env_label)),
                 )
                 .child(
                     div()
@@ -1052,7 +1064,8 @@ fn render_detail_header(
                 .color(Color::Default)
                 .size(Size::Sm)
                 .child(ChipLabel::new().child(engine.display_name())),
-        );
+        )
+        .child(render_env_badge(ws.library_ui.selected_environment, s));
 
     if let Some(conn_id) = selected_id {
         let delete_armed = ws.library_ui.delete_armed_for.as_deref() == Some(conn_id.as_str());
@@ -1210,7 +1223,13 @@ fn render_identity_card(
                             .child(div().flex_1().min_w_0().child(render_engine_select(ws, cx)))
                             .child(
                                 div()
-                                    .w(px(210.0))
+                                    .w(px(170.0))
+                                    .flex_shrink_0()
+                                    .child(render_environment_select(ws, cx)),
+                            )
+                            .child(
+                                div()
+                                    .w(px(170.0))
                                     .flex_shrink_0()
                                     .child(render_color_select(ws, cx)),
                             ),
@@ -1327,6 +1346,58 @@ fn render_color_select(
                 .checked_sub(1)
                 .and_then(|pos| ConnectionColor::ALL.get(pos).copied());
             ws.library_ui.delete_armed_for = None;
+            cx.notify();
+        }))
+        .into_any_element()
+}
+
+fn render_environment_select(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = ws.controller.strings.clone();
+    let items: Vec<PickerItem> = EnvironmentKind::ALL
+        .iter()
+        .enumerate()
+        .map(|(idx, env)| PickerItem::new(idx.to_string(), env_display_name(*env, &s)))
+        .collect();
+    let selected_idx = EnvironmentKind::ALL
+        .iter()
+        .position(|e| *e == ws.library_ui.selected_environment)
+        .unwrap_or(0);
+
+    Select::new("library-environment-select", items)
+        .label(s.env_label)
+        .variant(FieldVariant::Secondary)
+        .full_width(true)
+        .value(Some(SharedString::from(selected_idx.to_string())))
+        .item_leading(|key: &SharedString, _selected: bool| {
+            let idx = key.parse::<usize>().ok()?;
+            let env = EnvironmentKind::ALL.get(idx).copied()?;
+            Some(render_env_dot(env))
+        })
+        .value_content(move |sv: SelectionValue<'_>| {
+            let idx = sv.selected_indices.first().copied().unwrap_or(selected_idx);
+            let env = EnvironmentKind::ALL.get(idx).copied().unwrap_or_default();
+            div()
+                .flex()
+                .items_center()
+                .gap(px(COMPACT_GAP_PX))
+                .child(render_env_dot(env))
+                .child(env_display_name(env, &s))
+                .into_any_element()
+        })
+        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
+            let Some(idx) = key.as_deref().and_then(|s| s.parse::<usize>().ok()) else {
+                return;
+            };
+            let Some(&next_env) = EnvironmentKind::ALL.get(idx) else {
+                return;
+            };
+            ws.library_ui.selected_environment = next_env;
+            if let Some(conn_id) = ws.library_ui.selected_connection_id.clone() {
+                ws.controller.set_connection_environment(&conn_id, next_env);
+            }
             cx.notify();
         }))
         .into_any_element()
@@ -2422,6 +2493,7 @@ fn select_saved_connection(
     }
 
     ws.library_ui.selected_connection_id = Some(conn_id.to_owned());
+    ws.library_ui.selected_environment = ws.controller.connection_environment(conn_id);
     ws.library_ui.delete_armed_for = None;
     ws.library_ui.test_outcome = None;
     ws.library_ui.test_in_flight = false;
@@ -2623,6 +2695,8 @@ fn save_current_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
 
     ws.controller
         .save_form_to_library(&conn_id, group_id.as_deref(), tags, is_favorite);
+    ws.controller
+        .set_connection_environment(&conn_id, ws.library_ui.selected_environment);
     ws.library_ui.selected_connection_id = Some(conn_id.clone());
     ws.library_ui.delete_armed_for = None;
 
@@ -3578,6 +3652,78 @@ fn truncate_middle(text: &str, max_chars: usize) -> String {
     let head: String = text.chars().take(keep_head).collect();
     let tail: String = text.chars().skip(count.saturating_sub(keep_tail)).collect();
     format!("{head}…{tail}")
+}
+
+pub(crate) fn env_color_hsla(env: EnvironmentKind) -> Hsla {
+    let (r, g, b): (u8, u8, u8) = match env {
+        EnvironmentKind::Local => (0x64, 0x74, 0x8B),
+        EnvironmentKind::Development => (0x10, 0xB9, 0x81),
+        EnvironmentKind::Staging => (0xF5, 0x9E, 0x0B),
+        EnvironmentKind::Production => (0xEF, 0x44, 0x44),
+    };
+    Hsla::from(herogpui::gpui::Rgba {
+        r: f32::from(r) / 255.0,
+        g: f32::from(g) / 255.0,
+        b: f32::from(b) / 255.0,
+        a: 1.0,
+    })
+}
+
+pub(crate) fn env_display_name(env: EnvironmentKind, s: &Strings) -> &'static str {
+    match env {
+        EnvironmentKind::Local => s.env_local,
+        EnvironmentKind::Development => s.env_development,
+        EnvironmentKind::Staging => s.env_staging,
+        EnvironmentKind::Production => s.env_production,
+    }
+}
+
+pub(crate) fn render_env_dot(env: EnvironmentKind) -> AnyElement {
+    let hsla = env_color_hsla(env);
+    div()
+        .w(px(7.0))
+        .h(px(7.0))
+        .rounded(px(999.0))
+        .flex_shrink_0()
+        .bg(hsla)
+        .border_1()
+        .border_color(with_alpha(hsla, 0.35))
+        .into_any_element()
+}
+
+pub(crate) fn render_env_pill(env: EnvironmentKind, label: &'static str) -> AnyElement {
+    let hsla = env_color_hsla(env);
+    div()
+        .flex_shrink_0()
+        .px(px(6.0))
+        .py(px(1.5))
+        .rounded(px(999.0))
+        .bg(with_alpha(hsla, 0.14))
+        .border_1()
+        .border_color(with_alpha(hsla, 0.34))
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .child(
+            div()
+                .w(px(5.5))
+                .h(px(5.5))
+                .rounded(px(999.0))
+                .flex_shrink_0()
+                .bg(hsla),
+        )
+        .child(
+            div()
+                .text_size(px(10.0))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(hsla)
+                .child(label),
+        )
+        .into_any_element()
+}
+
+pub(crate) fn render_env_badge(env: EnvironmentKind, s: &Strings) -> AnyElement {
+    render_env_pill(env, env_display_name(env, s))
 }
 
 fn tabular_font_features() -> FontFeatures {
