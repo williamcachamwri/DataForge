@@ -44,6 +44,10 @@ En compilaciones release sobre Windows 11, el arranque en frío ronda los `10 ms
 
 ![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
+### Diagrama ER interactivo, relaciones de clave foránea y exportación SVG
+
+![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+
 ---
 
 ## Bases de datos compatibles
