@@ -203,6 +203,21 @@ impl SqlEditorViewState {
     pub fn current_text(&self, cx: &App) -> String {
         self.doc.read(cx).rope.text()
     }
+
+    /// Collects unsaved SQL drafts across all open query tabs, including the active editor rope.
+    #[must_use]
+    pub fn collect_tab_drafts(&self, cx: &App) -> std::collections::HashMap<TabId, String> {
+        let doc = self.doc.read(cx);
+        let mut drafts: std::collections::HashMap<TabId, String> = doc
+            .tab_buffers
+            .iter()
+            .map(|(id, snap)| (*id, snap.text.clone()))
+            .collect();
+        if let Some(active_id) = doc.active_tab_id {
+            drafts.insert(active_id, doc.rope.text());
+        }
+        drafts
+    }
 }
 
 /// Entity owning the live SQL buffer, rope, undo stack, Vim mode, autocomplete, and IME state.
@@ -2613,18 +2628,30 @@ fn trigger_explain_query(
     } else {
         ws.controller.strings.explain_plan
     };
+    let suffix = ws.controller.strings.explain_nodes_suffix;
     match ws.controller.run_visual_explain_blocking(&sql, analyze) {
         Ok(nodes) => {
+            ws.explain_ui.last_error = None;
+            ws.explain_ui.selected_node_id = nodes.first().map(|n| n.id.to_string());
+            ws.controller.screen_mode = crate::app::ScreenMode::Workspace;
+            ws.workspace_pane.close_tool();
+            ws.workspace_pane.sub_view = super::WorkspaceSubView::SqlEditor;
+            if let Some(tab_id) = ws.controller.tabs.active_tab() {
+                ws.ensure_tab_result(tab_id).sub_view = super::ResultPaneSubView::Explain;
+            }
             ws.notify_toast(
                 ToastSeverity::Success,
-                format!("{label}: {} nodes", nodes.len()),
+                format!("{label}: {} {suffix}", nodes.len()),
                 None,
                 cx,
             );
             cx.notify();
         }
         Err(err) => {
-            ws.notify_toast(ToastSeverity::Error, err.to_string(), None, cx);
+            let msg = err.to_string();
+            ws.explain_ui.last_error = Some(msg.clone());
+            ws.notify_toast(ToastSeverity::Error, msg, None, cx);
+            cx.notify();
         }
     }
 }
