@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use dataforge_services::ExplainNode;
-use dataforge_state::connection_window::ConnectionWindowPhase;
+use tableminus_services::ExplainNode;
+use tableminus_state::connection_window::ConnectionWindowPhase;
 use herogpui::components::{Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize};
 use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::{
@@ -15,7 +15,7 @@ use herogpui::prelude::FluentBuilder;
 use herogpui::theme::ActiveTheme;
 
 use super::shell_state::ToastSeverity;
-use super::{DataForgeWorkspace, theme};
+use super::{TableMinusWorkspace, theme};
 
 /// Persistent UI state for the Visual EXPLAIN pane.
 #[derive(Debug, Default)]
@@ -25,9 +25,9 @@ pub struct ExplainViewState {
 }
 
 impl ExplainViewState {
-    /// Creates initial Visual EXPLAIN state owned by [`DataForgeWorkspace`].
+    /// Creates initial Visual EXPLAIN state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self::default()
     }
 }
@@ -47,9 +47,9 @@ struct FlatExplainRow<'a> {
 /// Renders the Visual EXPLAIN execution plan view inside the Results Pane.
 #[must_use]
 pub fn render_explain_view(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_connected = matches!(
         ws.controller
@@ -133,10 +133,10 @@ fn find_node_recursive(nodes: &[ExplainNode], target_id: usize) -> Option<&Expla
 }
 
 fn render_explain_header(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
     stats: &PlanStats,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
@@ -230,9 +230,9 @@ fn render_explain_header(
 }
 
 fn trigger_visual_explain(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     analyze: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let sql = ws.controller.editor_sql_text();
     let label = if analyze {
@@ -263,9 +263,9 @@ fn trigger_visual_explain(
 }
 
 fn render_explain_empty_state(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors();
@@ -321,10 +321,10 @@ fn render_explain_empty_state(
 }
 
 fn render_explain_split_body(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     nodes: &[ExplainNode],
     stats: &PlanStats,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let mut flat = Vec::new();
     flatten_nodes(nodes, 0, &mut flat);
@@ -375,12 +375,12 @@ fn render_explain_split_body(
 }
 
 fn render_explain_node_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     depth: usize,
     node: &ExplainNode,
     stats: &PlanStats,
     is_selected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -612,7 +612,7 @@ fn cost_bar_color(
 }
 
 fn render_explain_inspector(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     node: &ExplainNode,
     stats: &PlanStats,
     cx: &App,
