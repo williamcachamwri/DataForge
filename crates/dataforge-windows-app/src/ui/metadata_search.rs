@@ -1,21 +1,24 @@
 //! Global metadata search modal for schemas, tables, views, routines, and columns.
 
+use std::time::Duration;
+
 use dataforge_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
 use dataforge_state::tabs::TabConnectionId;
 use herogpui::components::{Alert, Button, Icon, IconName, IconSize, InputState, SearchField};
 use herogpui::core::{Color as HeroColor, Size as HeroSize, Variant, with_alpha};
 use herogpui::gpui::prelude::FluentBuilder as _;
 use herogpui::gpui::{
-    AnyElement, App, AppContext as _, Context, Entity, Focusable as _, FontWeight,
-    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, Window, div, px,
+    Animation, AnimationExt as _, AnyElement, App, AppContext as _, AsyncApp, Context, Entity,
+    Focusable as _, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
+    ParentElement, SharedString, StatefulInteractiveElement, Styled, Task, WeakEntity, Window, div,
+    px,
 };
 use herogpui::theme::ActiveTheme;
 use tablepro_core::ddl::TableDefinition;
 use tablepro_core::meta::{ObjectInfo, ObjectKind, TableRef};
 
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
-use super::theme::hairline_border_color;
+use super::theme::{ease_out_cubic, ease_out_quint, effective_duration_ms, hairline_border_color};
 use super::{DataForgeWorkspace, TableViewMode};
 use crate::app::ScreenMode;
 
@@ -55,6 +58,9 @@ struct SearchResultEntry {
 #[derive(Debug)]
 pub struct MetadataSearchState {
     pub open: bool,
+    closing: bool,
+    anim_gen: u64,
+    close_task: Option<Task<()>>,
     pub query: String,
     filter: MetadataFilterKind,
     selected_index: usize,
@@ -70,6 +76,9 @@ impl MetadataSearchState {
     pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
         Self {
             open: false,
+            closing: false,
+            anim_gen: 0,
+            close_task: None,
             query: String::new(),
             filter: MetadataFilterKind::All,
             selected_index: 0,
@@ -82,6 +91,11 @@ impl MetadataSearchState {
 
     /// Opens the Metadata Search palette and focuses the search input.
     pub fn open_modal(&mut self, window: &mut Window, cx: &mut Context<DataForgeWorkspace>) {
+        self.close_task = None;
+        self.closing = false;
+        if !self.open {
+            self.anim_gen = self.anim_gen.wrapping_add(1);
+        }
         self.open = true;
         self.selected_index = 0;
         self.last_error = None;
@@ -90,9 +104,45 @@ impl MetadataSearchState {
         cx.notify();
     }
 
-    /// Closes the Metadata Search palette.
+    /// Immediately closes the Metadata Search palette without waiting for exit transition.
     pub fn close_modal(&mut self) {
+        self.close_task = None;
+        self.closing = false;
         self.open = false;
+    }
+
+    /// Closes the Metadata Search palette with a 100ms exit transition matching `Cmd+K`.
+    pub fn close_modal_animated(&mut self, cx: &mut Context<DataForgeWorkspace>) {
+        if !self.open || self.closing {
+            return;
+        }
+        let exit_ms = effective_duration_ms(100, cx);
+        if exit_ms == 0 {
+            self.close_modal();
+            cx.notify();
+            return;
+        }
+        self.open = false;
+        self.closing = true;
+        self.anim_gen = self.anim_gen.wrapping_add(1);
+        let expected_gen = self.anim_gen;
+        self.close_task = Some(cx.spawn(
+            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+                cx.background_executor()
+                    .timer(Duration::from_millis(exit_ms))
+                    .await;
+                let _ = this.update(cx, |ws, cx| {
+                    if ws.metadata_search_ui.closing
+                        && ws.metadata_search_ui.anim_gen == expected_gen
+                    {
+                        ws.metadata_search_ui.closing = false;
+                        ws.metadata_search_ui.close_task = None;
+                        cx.notify();
+                    }
+                });
+            },
+        ));
+        cx.notify();
     }
 }
 
@@ -103,9 +153,12 @@ pub fn render_metadata_search_modal(
     _window: &mut Window,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
-    if !ws.metadata_search_ui.open {
+    let is_open = ws.metadata_search_ui.open;
+    let is_closing = ws.metadata_search_ui.closing;
+    if !is_open && !is_closing {
         return div().into_any_element();
     }
+    let anim_gen = ws.metadata_search_ui.anim_gen;
 
     let is_connected = matches!(
         ws.controller
@@ -156,8 +209,7 @@ pub fn render_metadata_search_modal(
         .on_key_down(cx.listener(move |ws, ev: &KeyDownEvent, _w, cx| {
             match ev.keystroke.key.as_str() {
                 "escape" => {
-                    ws.metadata_search_ui.close_modal();
-                    cx.notify();
+                    ws.metadata_search_ui.close_modal_animated(cx);
                 }
                 "up" => {
                     ws.metadata_search_ui.selected_index =
@@ -185,11 +237,16 @@ pub fn render_metadata_search_modal(
         .child(div().h(px(1.0)).w_full().bg(border))
         .child(render_palette_footer(ws, matches.len(), cx));
 
-    div()
+    let enter_ms = effective_duration_ms(150, cx);
+    let exit_ms = effective_duration_ms(100, cx);
+    let anim_ms = if is_closing { exit_ms } else { enter_ms };
+    let animated_palette = wrap_metadata_palette_anim(palette, anim_gen, anim_ms, is_closing);
+
+    let backdrop = div()
         .id("metadata-search-backdrop")
         .absolute()
         .inset_0()
-        .bg(with_alpha(colors.overlay.background, 0.35))
+        .bg(colors.backdrop)
         .flex()
         .justify_center()
         .items_start()
@@ -198,11 +255,68 @@ pub fn render_metadata_search_modal(
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(|ws, _, _w, cx| {
-                ws.metadata_search_ui.close_modal();
-                cx.notify();
+                ws.metadata_search_ui.close_modal_animated(cx);
             }),
         )
-        .child(palette)
+        .child(animated_palette);
+
+    wrap_metadata_backdrop_anim(backdrop, anim_gen, anim_ms, is_closing)
+}
+
+fn wrap_metadata_palette_anim(
+    palette: herogpui::gpui::Stateful<herogpui::gpui::Div>,
+    anim_gen: u64,
+    anim_ms: u64,
+    is_closing: bool,
+) -> AnyElement {
+    if anim_ms == 0 {
+        return palette.into_any_element();
+    }
+    let easing = if is_closing {
+        ease_out_cubic
+    } else {
+        ease_out_quint
+    };
+    palette
+        .with_animation(
+            ("metadata-search-palette-anim", anim_gen),
+            Animation::new(Duration::from_millis(anim_ms)).with_easing(easing),
+            move |el, delta| {
+                if is_closing {
+                    el.opacity((1.0 - delta).max(0.0)).mt(px(-6.0 * delta))
+                } else if delta >= 1.0 {
+                    el
+                } else {
+                    el.opacity(delta).mt(px(-10.0 * (1.0 - delta)))
+                }
+            },
+        )
+        .into_any_element()
+}
+
+fn wrap_metadata_backdrop_anim(
+    backdrop: herogpui::gpui::Stateful<herogpui::gpui::Div>,
+    anim_gen: u64,
+    anim_ms: u64,
+    is_closing: bool,
+) -> AnyElement {
+    if anim_ms == 0 {
+        return backdrop.into_any_element();
+    }
+    backdrop
+        .with_animation(
+            ("metadata-search-backdrop-anim", anim_gen),
+            Animation::new(Duration::from_millis(anim_ms)).with_easing(ease_out_cubic),
+            move |el, delta| {
+                if is_closing {
+                    el.opacity((1.0 - delta).max(0.0))
+                } else if delta >= 1.0 {
+                    el
+                } else {
+                    el.opacity(delta)
+                }
+            },
+        )
         .into_any_element()
 }
 
