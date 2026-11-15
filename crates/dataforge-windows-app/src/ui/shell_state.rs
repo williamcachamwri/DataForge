@@ -15,6 +15,8 @@ pub enum ResultPaneSubView {
     Results,
     Messages,
     Summary,
+    Explain,
+    Charts,
 }
 
 /// Active inline editor session over a single editable DataGrid cell.
@@ -137,14 +139,47 @@ pub enum WorkspaceSubView {
     SplitSqlAndGrid,
 }
 
+/// Active full-pane workbench tool rendered in place of the tab sub-view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceToolView {
+    SchemaDesigner,
+    ImportWizard,
+    ErDiagram,
+    QueryBuilder,
+    Compare,
+    Admin,
+}
+
 /// UI state for the active Workspace panes (filter bar, inline edit, confirm sheets).
 #[derive(Debug, Clone, Default)]
 pub struct WorkspacePaneState {
     pub sub_view: WorkspaceSubView,
+    pub active_tool: Option<WorkspaceToolView>,
     pub filter_input: String,
     pub inline_edit: Option<InlineCellEditState>,
     pub confirm_commit_open: bool,
     pub close_guard_open: bool,
+}
+
+impl WorkspacePaneState {
+    /// Opens `tool` in the workspace center pane.
+    pub fn open_tool(&mut self, tool: WorkspaceToolView) {
+        self.active_tool = Some(tool);
+    }
+
+    /// Closes any active workbench tool and returns to the active tab's sub-view.
+    pub fn close_tool(&mut self) {
+        self.active_tool = None;
+    }
+
+    /// Toggles `tool`, closing it when already active.
+    pub fn toggle_tool(&mut self, tool: WorkspaceToolView) {
+        if self.active_tool == Some(tool) {
+            self.active_tool = None;
+        } else {
+            self.active_tool = Some(tool);
+        }
+    }
 }
 
 /// UI state for the right-hand AI Assistant drawer.
