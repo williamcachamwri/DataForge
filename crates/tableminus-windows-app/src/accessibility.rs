@@ -2,7 +2,7 @@
 
 use crate::shell_layout::ShellHitTarget;
 
-/// Logical focus region in the DataForge shell for keyboard `Tab` / `Shift+Tab` cycling.
+/// Logical focus region in the TableMinus shell for keyboard `Tab` / `Shift+Tab` cycling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FocusRegion {
     ConnectionRail,
@@ -131,7 +131,7 @@ pub struct Modifiers {
     pub alt: bool,
 }
 
-/// High-level keyboard commands dispatched by DataForge.
+/// High-level keyboard commands dispatched by TableMinus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyCommand {
     FocusNextRegion,
