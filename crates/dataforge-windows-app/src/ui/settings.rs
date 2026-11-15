@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use dataforge_state::theme::{ThemeAppearance, ThemeDefinition, ThemeSlot, VsCodeThemeImporter};
 use dataforge_windows_platform::{
-    AppSettings, ThemePreference, WindowBackdropPreference, detect_reduced_motion, storage_paths,
+    AppSettings, ThemePreference, WindowBackdropPreference, WindowControlsStyle,
+    detect_reduced_motion, storage_paths,
 };
 use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
@@ -592,9 +593,11 @@ fn render_sidebar(
     }
 
     div()
+        .id("settings-sidebar-scroll")
         .w(px(sidebar_width))
         .h_full()
         .flex_shrink_0()
+        .overflow_y_scroll()
         .p(px(10.0))
         .bg(muted_surface_bg(cx))
         .border_r(px(HAIRLINE_BORDER_PX))
@@ -784,6 +787,33 @@ fn render_appearance_section(
     render_two_column_grid(columns, vec![appearance_card], vec![importer_card])
 }
 
+fn render_window_controls_select(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let key = window_controls_key(ws.controller.settings.window_controls);
+    let items = vec![
+        PickerItem::new("mac_os", s.window_controls_macos),
+        PickerItem::new("windows", s.window_controls_windows),
+    ];
+    div()
+        .w(px(230.0))
+        .max_w_full()
+        .flex_shrink_0()
+        .child(
+            Select::new("settings-window-controls", items)
+                .full_width(true)
+                .value(Some(SharedString::from(key)))
+                .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _window, cx| {
+                    if let Some(next_style) = key.as_deref().and_then(parse_window_controls_style) {
+                        apply_window_controls(ws, next_style, cx);
+                    }
+                })),
+        )
+        .into_any_element()
+}
+
 fn render_appearance_card(
     ws: &DataForgeWorkspace,
     cx: &mut Context<DataForgeWorkspace>,
@@ -824,6 +854,7 @@ fn render_appearance_card(
     );
 
     let (backdrop_select, preset_select, syntax_select) = render_theme_and_blur_selects(ws, cx);
+    let window_controls_select = render_window_controls_select(ws, cx);
 
     Card::new()
         .sx(|c| c.w_full().overflow_hidden())
@@ -853,6 +884,13 @@ fn render_appearance_card(
                     s.window_backdrop,
                     Some(s.window_backdrop_desc),
                     backdrop_select,
+                    cx,
+                ))
+                .child(Separator::new())
+                .child(settings_row(
+                    s.window_controls_label,
+                    Some(s.window_controls_desc),
+                    window_controls_select,
                     cx,
                 ))
                 .child(Separator::new())
@@ -2712,6 +2750,15 @@ fn apply_window_backdrop(
     persist_settings(ws, cx);
 }
 
+fn apply_window_controls(
+    ws: &mut DataForgeWorkspace,
+    style: WindowControlsStyle,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    ws.controller.settings.window_controls = style;
+    persist_settings(ws, cx);
+}
+
 fn apply_syntax_palette(
     ws: &mut DataForgeWorkspace,
     id: &str,
@@ -3033,6 +3080,21 @@ fn parse_backdrop_pref(key: &str) -> Option<WindowBackdropPreference> {
         "gaussian_blur" => Some(WindowBackdropPreference::GaussianBlur),
         "mica" => Some(WindowBackdropPreference::Mica),
         "mica_alt" => Some(WindowBackdropPreference::MicaAlt),
+        _ => None,
+    }
+}
+
+const fn window_controls_key(style: WindowControlsStyle) -> &'static str {
+    match style {
+        WindowControlsStyle::MacOs => "mac_os",
+        WindowControlsStyle::Windows => "windows",
+    }
+}
+
+fn parse_window_controls_style(key: &str) -> Option<WindowControlsStyle> {
+    match key {
+        "mac_os" => Some(WindowControlsStyle::MacOs),
+        "windows" => Some(WindowControlsStyle::Windows),
         _ => None,
     }
 }
