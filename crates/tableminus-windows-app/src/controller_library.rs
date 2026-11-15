@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use secrecy::SecretString;
 use tableminus_services::import_bridge::{
     SUPPORTED_IMPORT_APPS, foreign_inventory, import_from_app, import_from_app_with_dirs,
     parse_connection_url,
@@ -14,7 +15,6 @@ use tableminus_state::library::{
     connection_from_url,
 };
 use tableminus_windows_platform::ForeignAppDirs;
-use secrecy::SecretString;
 use tablepro_core::credentials::{SecretKind, SecretLookup, SecretVault};
 use tablepro_core::{AuthMode as CoreAuthMode, TlsMode as CoreTlsMode};
 use tablepro_foreign_import::{ForeignApp, ImportRequest, Inventory};
