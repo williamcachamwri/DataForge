@@ -128,7 +128,14 @@ pub fn render_charts_view(
     let body = if !can_chart {
         render_charts_empty_state(ws, cx)
     } else {
-        let series = aggregate_chart_series(&rows, x_idx, y_idx, agg_mode, chart_kind);
+        let series = aggregate_chart_series(
+            &rows,
+            x_idx,
+            y_idx,
+            agg_mode,
+            chart_kind,
+            ws.controller.strings.charts_other_label,
+        );
         if series.is_empty() {
             render_charts_empty_state(ws, cx)
         } else {
@@ -509,6 +516,7 @@ fn aggregate_chart_series(
     y_idx: Option<usize>,
     agg: ChartAggregation,
     kind: ChartKind,
+    other_label: &str,
 ) -> Vec<ChartPoint> {
     let mut order: Vec<String> = Vec::new();
     let mut groups: HashMap<String, GroupAcc> = HashMap::new();
@@ -570,7 +578,7 @@ fn aggregate_chart_series(
             let tail_sum: f64 = pts.drain(MAX_DONUT_SLICES..).map(|p| p.value).sum();
             if tail_sum > 0.0 {
                 pts.push(ChartPoint {
-                    label: "Other".to_owned(),
+                    label: other_label.to_owned(),
                     value: tail_sum,
                 });
             }
@@ -977,7 +985,7 @@ fn render_donut_chart(series: &[ChartPoint], agg_label: &str, cx: &App) -> AnyEl
         .size_full()
         .flex()
         .flex_row()
-        .items_center()
+        .items_stretch()
         .min_h_0()
         .child(donut_ring)
         .child(legend)
@@ -993,6 +1001,7 @@ fn render_donut_legend(
     let colors = cx.colors();
     let mut legend = div()
         .id("charts-donut-legend")
+        .h_full()
         .flex_1()
         .min_w_0()
         .min_h_0()
@@ -1128,19 +1137,37 @@ mod tests {
         let num_cols = detect_numeric_columns(&cols, &rows);
         assert_eq!(num_cols, vec![1]);
 
-        let sum_pts =
-            aggregate_chart_series(&rows, 0, Some(1), ChartAggregation::Sum, ChartKind::Bar);
+        let sum_pts = aggregate_chart_series(
+            &rows,
+            0,
+            Some(1),
+            ChartAggregation::Sum,
+            ChartKind::Bar,
+            "Other",
+        );
         assert_eq!(sum_pts.len(), 2);
         assert_eq!(sum_pts[0].label, "US");
         assert!((sum_pts[0].value - 150.0).abs() < 1e-6);
         assert!((sum_pts[1].value - 75.5).abs() < 1e-6);
 
-        let avg_pts =
-            aggregate_chart_series(&rows, 0, Some(1), ChartAggregation::Avg, ChartKind::Line);
+        let avg_pts = aggregate_chart_series(
+            &rows,
+            0,
+            Some(1),
+            ChartAggregation::Avg,
+            ChartKind::Line,
+            "Other",
+        );
         assert!((avg_pts[0].value - 75.0).abs() < 1e-6);
 
-        let cnt_pts =
-            aggregate_chart_series(&rows, 0, Some(1), ChartAggregation::Count, ChartKind::Donut);
+        let cnt_pts = aggregate_chart_series(
+            &rows,
+            0,
+            Some(1),
+            ChartAggregation::Count,
+            ChartKind::Donut,
+            "Other",
+        );
         assert!((cnt_pts[0].value - 2.0).abs() < 1e-6);
     }
 }
