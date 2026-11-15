@@ -4,10 +4,10 @@
 //! - DataGrid Aggregates (`Count`, `NonNull`, `NumericCount`, `Sum`, `Avg`, `Min`, `Max`)
 //! - Multi-row TSV copy (`format_rows_as_tsv`) & Pinned Columns (`toggle_pin_column`, `is_column_pinned`)
 
-use dataforge_windows_app::app::AppController;
-use dataforge_windows_app::controller_types::GridAggregateStats;
-use dataforge_windows_app::i18n::Locale;
-use dataforge_windows_platform::{AppSettings, WindowsTheme};
+use tableminus_windows_app::app::AppController;
+use tableminus_windows_app::controller_types::GridAggregateStats;
+use tableminus_windows_app::i18n::Locale;
+use tableminus_windows_platform::{AppSettings, WindowsTheme};
 use tablepro_core::column::{ColumnType, ResultColumn};
 use tablepro_core::value::Value;
 
