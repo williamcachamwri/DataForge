@@ -18,7 +18,7 @@ use dataforge_state::data_grid::{
 use herogpui::components::{
     Button, Chip, ChipLabel, ChipVariant, ContextMenu, Dropdown, DropdownPlacement, Icon, IconName,
     IconSize, Input, InputState, MenuItem, Pagination, PickerItem, Popover, PopoverPlacement,
-    Scrollbar, Select,
+    Scrollbar, Select, Tooltip,
 };
 use herogpui::core::{
     Color as HeroColor, Orientation as HeroOrientation, Size as HeroSize, Variant, with_alpha,
@@ -66,6 +66,8 @@ pub struct DataGridViewState {
     pub resize_start_x: f32,
     pub resize_start_width: f32,
     pub dragging_selection: bool,
+    pub selected_rows: BTreeSet<usize>,
+    pub last_clicked_row: Option<usize>,
 }
 
 impl DataGridViewState {
@@ -90,6 +92,8 @@ impl DataGridViewState {
             resize_start_x: 0.0,
             resize_start_width: 140.0,
             dragging_selection: false,
+            selected_rows: BTreeSet::new(),
+            last_clicked_row: None,
         }
     }
 }
@@ -127,9 +131,13 @@ pub fn render_data_grid(
         return render_grid_empty_state(phase.as_ref(), &ws.controller.strings, cx);
     }
 
+    let row_len = ws.controller.grid_rows.len();
+    ws.data_grid_ui.selected_rows.retain(|&idx| idx < row_len);
+
     let toolbar = render_grid_toolbar(ws, cx);
     let filter_strip = render_active_filter_strip(ws, cx);
     let viewport = render_grid_viewport(ws, cx);
+    let aggregates_bar = render_grid_aggregates_bar(ws, cx);
     let footer = render_grid_footer(ws, cx);
     let focus_handle = ws.data_grid_ui.focus_handle.clone();
 
@@ -146,6 +154,7 @@ pub fn render_data_grid(
         .child(toolbar)
         .children(filter_strip)
         .child(div().flex_1().min_h_0().w_full().child(viewport))
+        .children(aggregates_bar)
         .child(footer)
         .into_any_element()
 }
@@ -327,6 +336,8 @@ fn render_grid_toolbar_right(
         right = append_pending_edit_buttons(right, has_table, s, cx);
     }
 
+    right = append_copy_paste_buttons(right, ws.controller.grid_rows.is_empty(), has_table, s, cx);
+
     right
         .child(render_columns_popover(ws, cx))
         .child(render_filters_popover(ws, cx))
@@ -343,6 +354,39 @@ fn render_grid_toolbar_right(
                 })),
         )
         .into_any_element()
+}
+
+fn append_copy_paste_buttons(
+    row: gpui::Div,
+    no_rows: bool,
+    has_table: bool,
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> gpui::Div {
+    row.child(
+        Button::new("grid-copy-rows-btn")
+            .variant(Variant::Tertiary)
+            .size(HeroSize::Sm)
+            .is_disabled(no_rows)
+            .child(Icon::new(IconName::ClipboardCopy).size(IconSize::Xs))
+            .label(s.grid_copy_rows)
+            .on_press(cx.listener(|ws, _ev, _w, cx| {
+                copy_selected_rows_as_tsv(ws, cx);
+                cx.notify();
+            })),
+    )
+    .child(
+        Button::new("grid-paste-rows-btn")
+            .variant(Variant::Tertiary)
+            .size(HeroSize::Sm)
+            .is_disabled(!has_table)
+            .child(Icon::new(IconName::Clipboard).size(IconSize::Xs))
+            .label(s.grid_paste_rows)
+            .on_press(cx.listener(|ws, _ev, _w, cx| {
+                paste_tsv_rows_from_clipboard(ws, cx);
+                cx.notify();
+            })),
+    )
 }
 
 fn append_pending_edit_buttons(
@@ -822,8 +866,9 @@ fn render_grid_viewport(
     let view_w = f32::from(vp_size.width).max(760.0);
     let scroll_y = (-f32::from(offset.y)).max(0.0);
 
-    let (frozen_cols, scroll_cols): GridColumnSplit =
-        visible_cols.into_iter().partition(|(_, c)| c.is_frozen);
+    let (frozen_cols, scroll_cols): GridColumnSplit = visible_cols
+        .into_iter()
+        .partition(|(_, c)| c.is_frozen || ws.controller.is_column_pinned(&c.name));
 
     let frozen_width_sum: f32 = frozen_cols.iter().map(|(_, c)| c.width as f32).sum();
     let max_frozen_px = view_w * dataforge_state::data_grid::MAXIMUM_FROZEN_SHARE as f32;
@@ -1069,10 +1114,19 @@ fn render_grid_header_cell(
         .find(|k| k.column_id == col.id)
         .map(|k| k.direction);
     let col_width = col.width as f32;
+    let is_pinned = col.is_frozen || ws.controller.is_column_pinned(&col.name);
     let is_resizing = ws.data_grid_ui.resizing_col_idx == Some(display_pos);
     let menu_btn =
         render_header_column_menu(display_pos, col, viewport_w, &ws.controller.strings, cx);
+    let pin_btn = render_header_pin_button(
+        display_pos,
+        &col.name,
+        is_pinned,
+        ws.controller.strings.grid_pin_column,
+        cx,
+    );
     let resize_handle = render_header_resize_handle(display_pos, col_width, is_resizing, cx);
+    let accent_color = cx.colors().accent.color;
 
     div()
         .id(("grid-hdr", display_pos))
@@ -1083,6 +1137,11 @@ fn render_grid_header_cell(
         .px(px(8.0))
         .border_r_1()
         .border_color(border)
+        .when(is_pinned, |el| {
+            el.border_l_2()
+                .border_color(accent_color)
+                .bg(with_alpha(accent_color, 0.06))
+        })
         .hover(|s| s.bg(cx.colors().surface_secondary.opacity(0.6)))
         .flex()
         .items_center()
@@ -1102,6 +1161,9 @@ fn render_grid_header_cell(
                 .flex()
                 .items_center()
                 .gap(px(4.0))
+                .when(is_pinned, |el| {
+                    el.child(Icon::new(IconName::Pin).size(px(11.0)).color(accent_color))
+                })
                 .child(
                     div()
                         .min_w_0()
@@ -1118,13 +1180,55 @@ fn render_grid_header_cell(
                             ModelSortDir::Descending => IconName::ArrowDown,
                         })
                         .size(IconSize::Xs)
-                        .color(cx.colors().accent.color),
+                        .color(accent_color),
                     )
                 }),
         )
-        .child(menu_btn)
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(2.0))
+                .child(pin_btn)
+                .child(menu_btn),
+        )
         .child(resize_handle)
         .into_any_element()
+}
+
+fn render_header_pin_button(
+    display_pos: usize,
+    col_name: &str,
+    is_pinned: bool,
+    tooltip: &'static str,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let col_owned = col_name.to_owned();
+    let icon_color = if is_pinned {
+        cx.colors().accent.color
+    } else {
+        with_alpha(cx.colors().muted, 0.55)
+    };
+    let hover_bg = cx.colors().surface_secondary;
+    let btn = div()
+        .id(("col-pin-btn", display_pos))
+        .w(px(18.0))
+        .h(px(18.0))
+        .rounded(px(4.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .hover(move |s| s.bg(hover_bg))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| {
+            cx.stop_propagation();
+        })
+        .on_click(cx.listener(move |ws, _ev, _w, cx| {
+            ws.controller.toggle_pin_column(&col_owned);
+            cx.notify();
+        }))
+        .child(Icon::new(IconName::Pin).size(px(11.0)).color(icon_color));
+    Tooltip::new(tooltip).child(btn).into_any_element()
 }
 
 fn render_header_column_menu(
@@ -1139,6 +1243,7 @@ fn render_header_column_menu(
         MenuItem::new("sort-desc", s.sort_descending),
         MenuItem::new("sort-clear", s.clear_sort),
         MenuItem::Separator,
+        MenuItem::new("pin-col", s.grid_pin_column),
         MenuItem::new(
             "freeze",
             if col.is_frozen {
@@ -1249,11 +1354,18 @@ fn render_grid_data_row(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     let border = theme::hairline_border_color(cx);
+    let is_row_selected = ws.data_grid_ui.selected_rows.contains(&row_idx);
     let row_bg = match grid_row.state {
         RowState::Inserted => Some(ws.content_palette.data_grid_inserted),
         RowState::Modified => Some(ws.content_palette.data_grid_modified),
         RowState::Deleted => Some(ws.content_palette.data_grid_deleted),
-        RowState::Clean => theme::row_zebra_bg(row_idx, cx),
+        RowState::Clean => {
+            if is_row_selected {
+                Some(with_alpha(cx.colors().accent.color, 0.08))
+            } else {
+                theme::row_zebra_bg(row_idx, cx)
+            }
+        }
     };
     let row_id_opt = ws.controller.grid_model.row_order.row_id(row_idx);
 
@@ -1326,23 +1438,37 @@ fn render_grid_row_gutter(
         RowState::Deleted => Some("-"),
         RowState::Clean => None,
     };
+    let is_row_selected = ws.data_grid_ui.selected_rows.contains(&row_idx);
+    let gutter_bg = if is_row_selected {
+        with_alpha(cx.colors().accent.color, 0.16)
+    } else {
+        ws.content_palette.data_grid_header_background
+    };
+    let gutter_fg = if is_row_selected {
+        cx.colors().accent.color
+    } else {
+        cx.colors().muted
+    };
     div()
         .id(("dg-gutter", row_idx))
         .w(px(ROW_GUTTER_WIDTH_PX))
         .h_full()
         .flex_shrink_0()
         .px(px(8.0))
-        .bg(ws.content_palette.data_grid_header_background)
+        .bg(gutter_bg)
         .border_r_1()
         .border_color(border)
         .flex()
         .items_center()
         .justify_between()
         .text_size(px(11.0))
-        .text_color(cx.colors().muted)
+        .text_color(gutter_fg)
         .on_mouse_down(
             MouseButton::Left,
-            cx.listener(move |ws, _ev, _w, cx| {
+            cx.listener(move |ws, ev: &gpui::MouseDownEvent, _w, cx| {
+                let shift = ev.modifiers.shift;
+                let ctrl = ev.modifiers.control || ev.modifiers.platform;
+                update_multi_row_selection(ws, row_idx, shift, ctrl);
                 if let Some(rid) = ws.controller.grid_model.row_order.row_id(row_idx) {
                     ws.controller
                         .grid_model
@@ -1645,6 +1771,144 @@ fn render_inline_edit_cell(
         .into_any_element()
 }
 
+fn render_grid_aggregates_bar(ws: &DataForgeWorkspace, cx: &App) -> Option<AnyElement> {
+    if ws.controller.grid_rows.is_empty() {
+        return None;
+    }
+    let s = &ws.controller.strings;
+    let focused = ws.controller.grid_selection.focused;
+    let rows: Vec<usize> = if !ws.data_grid_ui.selected_rows.is_empty() {
+        ws.data_grid_ui.selected_rows.iter().copied().collect()
+    } else if let Some((r, _)) = focused {
+        vec![r]
+    } else {
+        (0..ws.controller.grid_rows.len()).collect()
+    };
+    let focused_col = focused.map(|(_, c)| c);
+    let stats = ws.controller.compute_grid_aggregates(&rows, focused_col);
+    if stats.count == 0 {
+        return None;
+    }
+
+    let mut bar = div()
+        .h(px(26.0))
+        .w_full()
+        .px(px(12.0))
+        .flex_shrink_0()
+        .border_t_1()
+        .border_color(theme::hairline_border_color(cx))
+        .bg(theme::muted_surface_bg(cx))
+        .font_features(tnum_features())
+        .flex()
+        .items_center()
+        .gap(px(16.0))
+        .text_size(px(11.0))
+        .text_color(cx.colors().muted)
+        .child(render_agg_metric(
+            s.grid_agg_count,
+            stats.count.to_string(),
+            cx,
+        ));
+
+    if stats.numeric_count > 0 {
+        bar = bar
+            .child(render_agg_metric(
+                s.grid_agg_sum,
+                format_agg_number(stats.sum),
+                cx,
+            ))
+            .child(render_agg_metric(
+                s.grid_agg_avg,
+                format_agg_number(stats.avg),
+                cx,
+            ))
+            .child(render_agg_metric(
+                s.grid_agg_min,
+                format_agg_number(stats.min),
+                cx,
+            ))
+            .child(render_agg_metric(
+                s.grid_agg_max,
+                format_agg_number(stats.max),
+                cx,
+            ));
+    }
+
+    Some(bar.into_any_element())
+}
+
+fn render_agg_metric(label: &str, value: String, cx: &App) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .child(
+            div()
+                .text_color(cx.colors().muted)
+                .child(format!("{label}:")),
+        )
+        .child(
+            div()
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(cx.colors().foreground)
+                .child(value),
+        )
+        .into_any_element()
+}
+
+fn format_agg_number(val: f64) -> String {
+    if (val.fract()).abs() < 1e-9 && val.abs() < 1e15 {
+        format!("{val:.0}")
+    } else {
+        let s = format!("{val:.4}");
+        s.trim_end_matches('0').trim_end_matches('.').to_owned()
+    }
+}
+
+fn copy_selected_rows_as_tsv(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    let rows: Vec<usize> = if !ws.data_grid_ui.selected_rows.is_empty() {
+        ws.data_grid_ui.selected_rows.iter().copied().collect()
+    } else if let Some((r, _)) = ws.controller.grid_selection.focused {
+        vec![r]
+    } else {
+        Vec::new()
+    };
+    if rows.is_empty() {
+        return;
+    }
+    let tsv = ws.controller.format_rows_as_tsv(&rows);
+    if tsv.is_empty() {
+        return;
+    }
+    let msg = ws.controller.strings.row_copied_tsv_toast;
+    cx.write_to_clipboard(ClipboardItem::new_string(tsv));
+    ws.notify_toast(ToastSeverity::Info, msg, None, cx);
+}
+
+fn paste_tsv_rows_from_clipboard(
+    ws: &mut DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let Some(tsv) = cx.read_from_clipboard().and_then(|item| item.text()) else {
+        return;
+    };
+    match ws.controller.paste_tsv_into_active_table(&tsv) {
+        Ok(inserted) => {
+            let label = ws.controller.strings.grid_paste_rows;
+            ws.notify_toast(
+                ToastSeverity::Success,
+                format!("{label}: {inserted}"),
+                None,
+                cx,
+            );
+            cx.notify();
+        }
+        Err(err) => {
+            ws.notify_toast(ToastSeverity::Error, err.to_string(), None, cx);
+        }
+    }
+}
+
 fn render_grid_footer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let page = ws.controller.grid_model.page;
@@ -1733,6 +1997,38 @@ fn render_grid_footer(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
         .into_any_element()
 }
 
+fn update_multi_row_selection(
+    ws: &mut DataForgeWorkspace,
+    row_idx: usize,
+    shift: bool,
+    ctrl: bool,
+) {
+    let selected = &mut ws.data_grid_ui.selected_rows;
+    if shift {
+        let anchor = ws.data_grid_ui.last_clicked_row.unwrap_or(row_idx);
+        let (start, end) = if anchor <= row_idx {
+            (anchor, row_idx)
+        } else {
+            (row_idx, anchor)
+        };
+        if !ctrl {
+            selected.clear();
+        }
+        for r in start..=end {
+            selected.insert(r);
+        }
+    } else if ctrl {
+        if !selected.remove(&row_idx) {
+            selected.insert(row_idx);
+        }
+        ws.data_grid_ui.last_clicked_row = Some(row_idx);
+    } else {
+        selected.clear();
+        selected.insert(row_idx);
+        ws.data_grid_ui.last_clicked_row = Some(row_idx);
+    }
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "cell click handles focus, shift selection, inspector sync, and double-click inline editor"
@@ -1749,6 +2045,8 @@ fn handle_cell_click(
 ) {
     window.focus(&ws.data_grid_ui.focus_handle, cx);
     ws.data_grid_ui.dragging_selection = true;
+    let ctrl = event.modifiers.control || event.modifiers.platform;
+    update_multi_row_selection(ws, row_idx, event.modifiers.shift, ctrl);
     if let Some(rid) = row_id_opt {
         let coord = GridCoord {
             row: rid,
@@ -1784,6 +2082,27 @@ fn handle_grid_key_down(
         return;
     }
 
+    let ctrl = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+    let shift = event.keystroke.modifiers.shift;
+    if ctrl && !event.keystroke.modifiers.alt {
+        match event.keystroke.key.as_str() {
+            "c" => {
+                copy_selected_rows_as_tsv(ws, cx);
+                return;
+            }
+            "v" => {
+                paste_tsv_rows_from_clipboard(ws, cx);
+                return;
+            }
+            "a" => {
+                ws.data_grid_ui.selected_rows = (0..ws.controller.grid_rows.len()).collect();
+                cx.notify();
+                return;
+            }
+            _ => {}
+        }
+    }
+
     let Some((row, col)) = ws.controller.grid_selection.focused else {
         return;
     };
@@ -1797,12 +2116,14 @@ fn handle_grid_key_down(
         }
         "up" => {
             let next = row.saturating_sub(1);
+            update_multi_row_selection(ws, next, shift, false);
             ws.controller.select_grid_cell(next, col);
             ws.data_grid_ui.scroll_handle.scroll_to_item(next);
             cx.notify();
         }
         "down" => {
             let next = (row + 1).min(max_row);
+            update_multi_row_selection(ws, next, shift, false);
             ws.controller.select_grid_cell(next, col);
             ws.data_grid_ui.scroll_handle.scroll_to_item(next);
             cx.notify();
@@ -1923,6 +2244,9 @@ fn handle_column_menu_action(
             let width = ((max_chars as f32) * 8.0 + 36.0).clamp(80.0, 420.0);
             ws.controller.resize_grid_column(display_pos, width);
         }
+        "pin-col" => {
+            ws.controller.toggle_pin_column(col_title);
+        }
         "hide" => {
             ws.data_grid_ui.hidden_columns.insert(col_id);
         }
@@ -1949,21 +2273,17 @@ fn handle_cell_context_action(
             ws.notify_toast(ToastSeverity::Info, msg, None, cx);
         }
         "copy-row" => {
-            if let Some(row) = ws.controller.grid_rows.get(row_idx) {
-                let line: String = row
-                    .cells
-                    .iter()
-                    .map(|c| {
-                        if c.kind == CellKind::Null {
-                            "NULL"
-                        } else {
-                            c.text.as_str()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\t");
+            let rows: Vec<usize> = if ws.data_grid_ui.selected_rows.contains(&row_idx)
+                && ws.data_grid_ui.selected_rows.len() > 1
+            {
+                ws.data_grid_ui.selected_rows.iter().copied().collect()
+            } else {
+                vec![row_idx]
+            };
+            let tsv = ws.controller.format_rows_as_tsv(&rows);
+            if !tsv.is_empty() {
                 let msg = ws.controller.strings.row_copied_tsv_toast;
-                cx.write_to_clipboard(ClipboardItem::new_string(line));
+                cx.write_to_clipboard(ClipboardItem::new_string(tsv));
                 ws.notify_toast(ToastSeverity::Info, msg, None, cx);
             }
         }
