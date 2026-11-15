@@ -2,9 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use tableminus_services::{
-    JoinClause, JoinKind, VisualQuerySpec, WhereClause, build_visual_query_sql,
-};
 use herogpui::components::{
     Alert, Button, Checkbox, Chip, ChipLabel, ChipVariant, FieldVariant, Icon, IconName, IconSize,
     Input, InputState, InputType, PickerItem, Select, Separator, Variant,
@@ -16,6 +13,9 @@ use herogpui::gpui::{
     Styled, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::{
+    JoinClause, JoinKind, VisualQuerySpec, WhereClause, build_visual_query_sql,
+};
 use tablepro_core::meta::ObjectInfo;
 
 use super::shell_state::{WorkspaceSubView, push_error_toast, push_success_toast};
