@@ -4,11 +4,6 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use tableminus_services::{
-    AiAssistantService, AiEndpointConfig, DEFAULT_ANTHROPIC_URL, DEFAULT_OLLAMA_URL,
-    DEFAULT_OPENAI_URL,
-};
-use tableminus_state::tabs::TabConnectionId;
 use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
     Button, Card, CardContent, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input,
@@ -22,6 +17,11 @@ use herogpui::gpui::{
     Task, WeakEntity, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::{
+    AiAssistantService, AiEndpointConfig, DEFAULT_ANTHROPIC_URL, DEFAULT_OLLAMA_URL,
+    DEFAULT_OPENAI_URL,
+};
+use tableminus_state::tabs::TabConnectionId;
 use tablepro_ai::{ChatMessage, QueryLanguage, ReplyEvent};
 use tablepro_core::AiProvider;
 use tokio::sync::mpsc;
@@ -483,7 +483,10 @@ fn render_api_key_section(
         .into_any_element()
 }
 
-fn render_transcript(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_transcript(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let scroll_handle = ws.ai_drawer_ui.transcript_scroll.clone();
     let messages = &ws.controller.ai_drawer.messages;
     let waiting = ws.ai_panel.waiting_reply;
