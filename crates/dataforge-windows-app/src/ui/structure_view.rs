@@ -28,7 +28,7 @@ use tablepro_session::{OperationError, OperationKind};
 use crate::views::content::StructureColumnRow;
 
 use super::results_pane::format_core_value;
-use super::shell_state::ToastSeverity;
+use super::shell_state::{ToastSeverity, WorkspaceToolView};
 use super::{DataForgeWorkspace, syntax_bridge, theme};
 
 /// Sub-tabs within the Structure View.
@@ -335,24 +335,56 @@ fn render_structure_header(
                             })
                         }),
                 )
-                .child(
-                    Button::new("structure-refresh-btn")
-                        .variant(Variant::Secondary)
-                        .size(HeroSize::Sm)
-                        .is_disabled(is_loading)
-                        .child(Icon::new(IconName::RotateCcw).size(IconSize::Xs))
-                        .label(if is_loading {
-                            ws.controller.strings.refreshing_label
-                        } else {
-                            ws.controller.strings.refresh_label
-                        })
-                        .on_press(cx.listener(move |ws, _ev, _w, cx| {
-                            start_fetch_definition(ws, table_for_refresh.clone(), true, cx);
-                            cx.notify();
-                        })),
-                ),
+                .child(render_structure_header_actions(
+                    ws,
+                    is_loading,
+                    table_for_refresh,
+                    cx,
+                )),
         )
         .child(tabs)
+        .into_any_element()
+}
+
+fn render_structure_header_actions(
+    ws: &DataForgeWorkspace,
+    is_loading: bool,
+    table_for_refresh: TableRef,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    div()
+        .flex()
+        .items_center()
+        .gap(px(6.0))
+        .child(
+            Button::new("structure-alter-schema-btn")
+                .variant(Variant::Secondary)
+                .size(HeroSize::Sm)
+                .child(Icon::new(IconName::SquarePen).size(IconSize::Xs))
+                .label(format!("{} / {}", s.schema_alter_table, s.schema_designer))
+                .on_press(cx.listener(|ws, _ev, _w, cx| {
+                    ws.workspace_pane
+                        .open_tool(WorkspaceToolView::SchemaDesigner);
+                    cx.notify();
+                })),
+        )
+        .child(
+            Button::new("structure-refresh-btn")
+                .variant(Variant::Secondary)
+                .size(HeroSize::Sm)
+                .is_disabled(is_loading)
+                .child(Icon::new(IconName::RotateCcw).size(IconSize::Xs))
+                .label(if is_loading {
+                    s.refreshing_label
+                } else {
+                    s.refresh_label
+                })
+                .on_press(cx.listener(move |ws, _ev, _w, cx| {
+                    start_fetch_definition(ws, table_for_refresh.clone(), true, cx);
+                    cx.notify();
+                })),
+        )
         .into_any_element()
 }
 
