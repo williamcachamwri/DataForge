@@ -10,13 +10,13 @@
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 
-use dataforge_services::export::ExportFormat;
-use dataforge_state::connection_window::WorkspaceId;
-use dataforge_windows_app::app::{AppController, ScreenMode};
-use dataforge_windows_app::cli_flags::{AppFlagOutcome, handle_app_flags};
-use dataforge_windows_app::controller_types::{SplitPaneMode, VimMode};
-use dataforge_windows_app::i18n::Locale;
-use dataforge_windows_platform::{AppSettings, WindowsTheme};
+use tableminus_services::export::ExportFormat;
+use tableminus_state::connection_window::WorkspaceId;
+use tableminus_windows_app::app::{AppController, ScreenMode};
+use tableminus_windows_app::cli_flags::{AppFlagOutcome, handle_app_flags};
+use tableminus_windows_app::controller_types::{SplitPaneMode, VimMode};
+use tableminus_windows_app::i18n::Locale;
+use tableminus_windows_platform::{AppSettings, WindowsTheme};
 use tablepro_core::filter::FilterOp;
 use tablepro_core::meta::TableRef;
 use tablepro_core::value::Value;
@@ -26,16 +26,16 @@ use tempfile::TempDir;
 fn cli_flags_handle_version_help_and_smoke_startup() {
     let mut ver_out = Vec::new();
     let ver = handle_app_flags(
-        &[OsString::from("dataforge"), OsString::from("--version")],
+        &[OsString::from("tableminus"), OsString::from("--version")],
         &mut ver_out,
     );
     assert_eq!(ver, AppFlagOutcome::Exit(0));
     let ver_str = String::from_utf8(ver_out).expect("utf8");
-    assert!(ver_str.starts_with("dataforge "));
+    assert!(ver_str.starts_with("tableminus "));
 
     let mut help_out = Vec::new();
     let help = handle_app_flags(
-        &[OsString::from("dataforge"), OsString::from("--help")],
+        &[OsString::from("tableminus"), OsString::from("--help")],
         &mut help_out,
     );
     assert_eq!(help, AppFlagOutcome::Exit(0));
@@ -45,18 +45,18 @@ fn cli_flags_handle_version_help_and_smoke_startup() {
     let mut smoke_out = Vec::new();
     let smoke = handle_app_flags(
         &[
-            OsString::from("dataforge"),
+            OsString::from("tableminus"),
             OsString::from("--smoke-startup"),
         ],
         &mut smoke_out,
     );
     assert_eq!(smoke, AppFlagOutcome::Exit(0));
     let smoke_str = String::from_utf8(smoke_out).expect("utf8");
-    assert!(smoke_str.contains("dataforge smoke-startup ok:"));
+    assert!(smoke_str.contains("tableminus smoke-startup ok:"));
 
     let mut cont_out = Vec::new();
     let cont = handle_app_flags(
-        &[OsString::from("dataforge"), OsString::from("query")],
+        &[OsString::from("tableminus"), OsString::from("query")],
         &mut cont_out,
     );
     assert_eq!(cont, AppFlagOutcome::Continue);
@@ -223,8 +223,8 @@ fn startup_state_has_no_mock_rows_columns_or_fake_status() {
 #[test]
 fn connect_library_item_hydrates_actual_saved_connection_fields()
 -> Result<(), Box<dyn std::error::Error>> {
-    use dataforge_gfx::glyphs::EngineKind;
-    use dataforge_state::library::{LibraryConnection, LibraryConnectionId};
+    use tableminus_gfx::glyphs::EngineKind;
+    use tableminus_state::library::{LibraryConnection, LibraryConnectionId};
 
     let tmp = TempDir::new()?;
     let db_path = tmp.path().join("library_target.sqlite");
