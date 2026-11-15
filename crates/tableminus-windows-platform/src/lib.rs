@@ -1,4 +1,4 @@
-//! Windows platform integration for DataForge.
+//! Windows platform integration for TableMinus.
 
 pub mod browser;
 pub mod cli_host;
