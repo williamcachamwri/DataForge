@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use dataforge_services::{
+use tableminus_services::{
     ColumnMapping, ImportFormat, ParsedImportPreview, detect_import_format,
     generate_import_sql_batches, preview_import_file, read_all_import_rows,
     split_sql_script_statements,
@@ -20,7 +20,7 @@ use herogpui::gpui::{
 use herogpui::theme::ActiveTheme;
 
 use super::shell_state::{push_error_toast, push_success_toast};
-use super::{DataForgeWorkspace, syntax_bridge, theme};
+use super::{TableMinusWorkspace, syntax_bridge, theme};
 
 const PREVIEW_ROW_LIMIT: usize = 25;
 const PREVIEW_STMT_LIMIT: usize = 25;
@@ -77,9 +77,9 @@ pub struct ImportWizardState {
 }
 
 impl ImportWizardState {
-    /// Creates initial Import Wizard state owned by [`DataForgeWorkspace`].
+    /// Creates initial Import Wizard state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let target_table_input = cx.new(|cx| InputState::with_value(cx, "imported_data"));
         Self {
             file_path: None,
@@ -101,9 +101,9 @@ impl ImportWizardState {
 /// Renders the Data Import Wizard & SQL Script Runner view.
 #[must_use]
 pub fn render_import_wizard(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let body = match ws.import_wizard_ui.mode {
         ImportWizardMode::TabularData => render_tabular_import_body(ws, cx),
@@ -123,7 +123,7 @@ pub fn render_import_wizard(
         .into_any_element()
 }
 
-fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
     div()
@@ -167,7 +167,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
         .into_any_element()
 }
 
-fn render_toolbar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_toolbar(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let selected_key = SharedString::from(ws.import_wizard_ui.mode.key());
     let mode_items = vec![
@@ -235,7 +235,7 @@ fn render_toolbar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
         .into_any_element()
 }
 
-fn render_feedback_alerts(ws: &DataForgeWorkspace) -> Option<AnyElement> {
+fn render_feedback_alerts(ws: &TableMinusWorkspace) -> Option<AnyElement> {
     if let Some(err) = &ws.import_wizard_ui.last_error {
         return Some(
             div()
@@ -258,8 +258,8 @@ fn render_feedback_alerts(ws: &DataForgeWorkspace) -> Option<AnyElement> {
 }
 
 fn render_tabular_import_body(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let Some(preview) = ws.import_wizard_ui.preview.as_ref() else {
@@ -295,10 +295,10 @@ fn render_tabular_import_body(
 }
 
 fn render_target_bar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     format_name: &str,
     total_rows: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let has_included = ws.import_wizard_ui.mappings.iter().any(|m| m.include);
@@ -377,8 +377,8 @@ fn render_target_bar(
 }
 
 fn render_mapping_pane(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -469,9 +469,9 @@ fn render_mapping_pane(
 }
 
 fn render_sample_rows_pane(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     preview: &ParsedImportPreview,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -601,8 +601,8 @@ fn render_sample_table_grid(
 }
 
 fn render_sql_script_body(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     if ws.import_wizard_ui.script_statements.is_empty() {
@@ -680,7 +680,7 @@ fn render_sql_script_body(
 }
 
 fn render_sql_statement_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     idx: usize,
     stmt: &str,
     editor_font: &herogpui::Font,
@@ -723,7 +723,7 @@ fn render_empty_drop_prompt(
     title: &'static str,
     cta: &'static str,
     hint: &'static str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     div()
@@ -766,7 +766,7 @@ fn render_empty_drop_prompt(
         .into_any_element()
 }
 
-fn trigger_select_import_file(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn trigger_select_import_file(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
         directories: false,
@@ -774,7 +774,7 @@ fn trigger_select_import_file(ws: &mut DataForgeWorkspace, cx: &mut Context<Data
         prompt: None,
     });
     ws.import_wizard_ui.picker_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(paths))) = rx.await else {
                 return;
             };
@@ -790,9 +790,9 @@ fn trigger_select_import_file(ws: &mut DataForgeWorkspace, cx: &mut Context<Data
 }
 
 fn load_selected_file(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     path: &Path,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let path_str = path.display().to_string();
     ws.import_wizard_ui.file_path = Some(path_str);
@@ -840,9 +840,9 @@ fn load_selected_file(
 }
 
 fn load_sql_script_file(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     path: &Path,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match std::fs::read_to_string(path) {
         Ok(script) => {
@@ -888,7 +888,7 @@ fn build_mapping_drafts(preview: &ParsedImportPreview, cx: &mut App) -> Vec<Mapp
         .collect()
 }
 
-fn execute_tabular_import(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn execute_tabular_import(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let Some(path_str) = ws.import_wizard_ui.file_path.clone() else {
         return;
     };
@@ -962,7 +962,7 @@ fn execute_tabular_import(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForg
     cx.notify();
 }
 
-fn execute_sql_script_import(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn execute_sql_script_import(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let script = ws.import_wizard_ui.script_text.clone();
     if script.trim().is_empty() {
         return;
