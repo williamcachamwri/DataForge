@@ -17,10 +17,15 @@ use dataforge_state::connection_window::{
 };
 use dataforge_state::data_grid::{DataGridLayoutScope, DataGridModel, RowID};
 use dataforge_state::library::ConnectionsLibraryModel;
-use dataforge_state::tabs::{CloseActionResult, TabConnectionId, TabId, TabKind, TabStripModel};
+use dataforge_state::tabs::{
+    CloseActionResult, RestoredTabMerge, TabConnectionId, TabId, TabItem, TabKind, TabStripModel,
+};
 use dataforge_state::theme::{ThemeDefinition, ThemeSlot};
 use dataforge_windows_platform::{
-    AppSettings, ThemePreference, WindowsTheme, detect_theme_or_default,
+    AppSettings, EnvironmentKind, SavedTabSnapshot, ScheduledTaskRecord, ThemePreference,
+    WORKSPACE_SESSION_SCHEMA_VERSION, WindowsTheme, WorkspaceSessionSnapshot,
+    detect_theme_or_default, load_workspace_session, save_workspace_session, storage_paths,
+    workspace_session_path,
 };
 use tablepro_core::column::ResultColumn;
 use tablepro_core::meta::{ObjectInfo, PagePosition, SchemaInfo, TableRef};
@@ -112,6 +117,10 @@ pub struct AppController {
     pub split_editor_lines: Vec<EditorLine>,
     pub last_test_status: Option<String>,
     pub last_export_status: Option<String>,
+    pub scheduled_tasks: Vec<ScheduledTaskRecord>,
+    pub last_explain_nodes: Vec<dataforge_services::ExplainNode>,
+    pub grid_pinned_columns: BTreeSet<String>,
+    pub restoring_connection_id: Option<String>,
     pub last_width_dip: f32,
     pub last_height_dip: f32,
     pub updater: UpdaterManager,
@@ -200,6 +209,10 @@ impl AppController {
             split_editor_lines: Vec::new(),
             last_test_status: None,
             last_export_status: None,
+            scheduled_tasks: Vec::new(),
+            last_explain_nodes: Vec::new(),
+            grid_pinned_columns: BTreeSet::new(),
+            restoring_connection_id: None,
             last_width_dip: 1280.0,
             last_height_dip: 800.0,
             updater: UpdaterManager::new(),
@@ -753,6 +766,339 @@ impl AppController {
     /// Applies the staged update package and restarts the application.
     pub fn apply_update_and_restart(&mut self) -> std::result::Result<(), String> {
         self.updater.apply_and_restart()
+    }
+
+    /// Returns the active saved library or rail connection ID, if any.
+    #[must_use]
+    pub(crate) fn active_connection_id(&self) -> Option<&str> {
+        if let Some(restoring) = self.restoring_connection_id.as_deref() {
+            return Some(restoring);
+        }
+        if !self.connection_form.name.is_empty()
+            && self.rail_items.iter().any(|r| r.active)
+            && let Some(conn) = self
+                .library
+                .storage()
+                .connections
+                .values()
+                .find(|c| c.name == self.connection_form.name)
+        {
+            return Some(conn.id.0.as_str());
+        }
+        self.rail_items
+            .iter()
+            .find(|r| r.active)
+            .map(|r| r.id.as_str())
+    }
+
+    /// Returns the deployment [`EnvironmentKind`] tag for `conn_id`, defaulting to `Local`.
+    #[must_use]
+    pub fn connection_environment(&self, conn_id: &str) -> EnvironmentKind {
+        self.settings
+            .environment_tags
+            .get(conn_id)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// Assigns the deployment [`EnvironmentKind`] tag for `conn_id` and persists [`AppSettings`].
+    pub fn set_connection_environment(&mut self, conn_id: &str, env: EnvironmentKind) {
+        self.settings
+            .environment_tags
+            .insert(conn_id.to_owned(), env);
+        if !self.headless
+            && let Ok(paths) = storage_paths()
+        {
+            let _ = self.settings.save_atomic(&AppSettings::file_path(&paths));
+        }
+    }
+
+    /// Builds a [`WorkspaceSessionSnapshot`] reflecting the current tabs, selection, and layout.
+    #[must_use]
+    pub fn build_default_session_snapshot(
+        &self,
+        sidebar_open: bool,
+        inspector_open: bool,
+        bottom_drawer_open: bool,
+    ) -> WorkspaceSessionSnapshot {
+        let active_id = self.tabs.active_tab();
+        let active_tab_index = active_id
+            .and_then(|id| self.tabs.tabs().iter().position(|t| t.id == id))
+            .unwrap_or(0);
+        let active_conn = self.active_connection_id().map(str::to_owned);
+        let active_database = (!self.toolbar_status.database.is_empty())
+            .then(|| self.toolbar_status.database.clone());
+        let active_editor_sql = self.editor_sql_text();
+
+        let tabs = self
+            .tabs
+            .tabs()
+            .iter()
+            .map(|tab| {
+                snapshot_tab_from_item(
+                    tab,
+                    active_id == Some(tab.id),
+                    &active_editor_sql,
+                    active_conn.as_deref(),
+                    active_database.as_deref(),
+                )
+            })
+            .collect();
+
+        let saved_at_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+
+        WorkspaceSessionSnapshot {
+            version: WORKSPACE_SESSION_SCHEMA_VERSION,
+            active_connection_id: active_conn,
+            active_database,
+            selected_table: self
+                .active_table
+                .as_ref()
+                .map(|t| (t.schema.clone(), t.name.clone())),
+            active_tab_index,
+            tabs,
+            sidebar_open,
+            sidebar_width: Some(self.layout_config.sidebar_width),
+            inspector_open,
+            bottom_drawer_open,
+            saved_at_unix,
+        }
+    }
+
+    /// Persists `snapshot` to the default workspace session path (no-op when headless).
+    pub fn save_workspace_session_snapshot(&self, snapshot: &WorkspaceSessionSnapshot) {
+        if self.headless {
+            return;
+        }
+        let _ = save_workspace_session(None, snapshot);
+    }
+
+    /// Persists `snapshot` atomically to `path`.
+    pub fn save_workspace_session_from_path(
+        &self,
+        path: &std::path::Path,
+        snapshot: &WorkspaceSessionSnapshot,
+    ) {
+        let _ = save_workspace_session(Some(path), snapshot);
+    }
+
+    /// Loads and restores a [`WorkspaceSessionSnapshot`] from `path`, optionally reconnecting.
+    pub fn restore_workspace_session_from_path(
+        &mut self,
+        path: &std::path::Path,
+        trigger_reconnect: bool,
+    ) -> Option<WorkspaceSessionSnapshot> {
+        let snapshot = load_workspace_session(Some(path)).ok().flatten()?;
+        self.apply_restored_session_snapshot(&snapshot, trigger_reconnect);
+        Some(snapshot)
+    }
+
+    /// Restores the saved workspace session at startup when `restore_last_session` is enabled.
+    pub fn restore_workspace_session_on_startup(&mut self) -> Option<WorkspaceSessionSnapshot> {
+        if self.headless || !self.settings.restore_last_session {
+            return None;
+        }
+        let paths = storage_paths().ok()?;
+        let session_path = workspace_session_path(&paths);
+        self.restore_workspace_session_from_path(&session_path, true)
+    }
+
+    fn apply_restored_session_snapshot(
+        &mut self,
+        snapshot: &WorkspaceSessionSnapshot,
+        trigger_reconnect: bool,
+    ) {
+        if !snapshot.tabs.is_empty() {
+            let items: Vec<TabItem> = snapshot
+                .tabs
+                .iter()
+                .enumerate()
+                .map(|(idx, saved)| restored_tab_item(saved, idx))
+                .collect();
+            self.tabs = TabStripModel::new();
+            RestoredTabMerge::merge(&mut self.tabs, items);
+            if let Some(target_id) = self
+                .tabs
+                .tabs()
+                .get(snapshot.active_tab_index)
+                .or_else(|| self.tabs.tabs().first())
+                .map(|t| t.id)
+            {
+                self.tabs.select(target_id);
+            }
+        }
+
+        if let Some(active_tab_sql) = self
+            .tabs
+            .active_tab()
+            .and_then(|id| self.tabs.tabs().iter().find(|t| t.id == id))
+            .and_then(|t| match &t.kind {
+                TabKind::QueryEditor { sql } => Some(sql.clone()),
+                TabKind::TableData { .. } | TabKind::Structure { .. } => None,
+            })
+        {
+            self.set_editor_sql(&active_tab_sql);
+        }
+
+        self.active_table = snapshot
+            .selected_table
+            .as_ref()
+            .map(|(schema, name)| TableRef::new(schema.clone(), name.clone()));
+        self.layout_config.sidebar_visible = snapshot.sidebar_open;
+        if let Some(width) = snapshot.sidebar_width {
+            self.layout_config.sidebar_width = width;
+        }
+        self.layout_config.inspector_visible = snapshot.inspector_open;
+        self.sync_layout_counts();
+
+        if trigger_reconnect
+            && !self.headless
+            && let Some(conn_id) = snapshot.active_connection_id.as_deref()
+        {
+            self.restoring_connection_id = Some(conn_id.to_owned());
+            if self.reconnect_saved_connection_async(conn_id).is_err() {
+                self.restoring_connection_id = None;
+            }
+        }
+    }
+}
+
+fn snapshot_tab_from_item(
+    tab: &TabItem,
+    is_active: bool,
+    active_editor_sql: &str,
+    active_conn: Option<&str>,
+    active_database: Option<&str>,
+) -> SavedTabSnapshot {
+    let (kind, table, sql_draft) = match &tab.kind {
+        TabKind::QueryEditor { sql } => {
+            let draft = if is_active {
+                active_editor_sql.to_owned()
+            } else {
+                sql.clone()
+            };
+            ("query".to_owned(), None, draft)
+        }
+        TabKind::TableData { table_name } => {
+            ("table".to_owned(), Some(table_name.clone()), String::new())
+        }
+        TabKind::Structure { table_name } => (
+            "structure".to_owned(),
+            Some(table_name.clone()),
+            String::new(),
+        ),
+    };
+    let connection_id = if tab.connection_id.0 == "default" {
+        active_conn.map(str::to_owned)
+    } else {
+        Some(tab.connection_id.0.clone())
+    };
+    SavedTabSnapshot {
+        tab_id: tab.id.0.to_string(),
+        title: tab.title.clone(),
+        kind,
+        connection_id,
+        database: active_database.map(str::to_owned),
+        schema: None,
+        table,
+        sql_draft,
+        filter_clause: tab.has_active_filters.then(String::new),
+        sort_clause: tab.has_active_sort.then(String::new),
+        is_pinned: tab.pinned,
+    }
+}
+
+fn restored_tab_item(saved: &SavedTabSnapshot, index: usize) -> TabItem {
+    let table_name = saved.table.clone().unwrap_or_else(|| saved.title.clone());
+    let kind = match saved.kind.as_str() {
+        "table" => TabKind::TableData { table_name },
+        "structure" => TabKind::Structure { table_name },
+        _ => TabKind::QueryEditor {
+            sql: saved.sql_draft.clone(),
+        },
+    };
+    let conn = saved
+        .connection_id
+        .clone()
+        .unwrap_or_else(|| "default".to_owned());
+    let numeric_id = saved
+        .tab_id
+        .parse::<u64>()
+        .unwrap_or_else(|_| u64::try_from(index + 1).unwrap_or(1));
+    TabItem {
+        id: TabId(numeric_id),
+        connection_id: TabConnectionId(conn),
+        title: saved.title.clone(),
+        kind,
+        pinned: saved.is_pinned,
+        has_unsaved_edits: false,
+        has_active_filters: saved.filter_clause.is_some(),
+        has_active_sort: saved.sort_clause.is_some(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn environment_tag_roundtrip_and_default() -> std::result::Result<(), Box<dyn std::error::Error>>
+    {
+        let mut controller = AppController::with_detected_theme(AppSettings::default());
+        assert_eq!(
+            controller.connection_environment("conn-1"),
+            EnvironmentKind::Local
+        );
+        controller.set_connection_environment("conn-1", EnvironmentKind::Production);
+        assert_eq!(
+            controller.connection_environment("conn-1"),
+            EnvironmentKind::Production
+        );
+
+        let temp_dir = tempfile::tempdir()?;
+        let settings_path = temp_dir.path().join("settings.json");
+        controller.settings.save_atomic(&settings_path)?;
+        let reloaded = AppSettings::load(&settings_path)?;
+        let restored = AppController::with_detected_theme(reloaded);
+        assert_eq!(
+            restored.connection_environment("conn-1"),
+            EnvironmentKind::Production
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn workspace_session_snapshot_save_and_restore_roundtrip()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = tempfile::tempdir()?;
+        let session_path = temp_dir.path().join("workspace_session.json");
+
+        let mut writer = AppController::with_detected_theme(AppSettings::default());
+        writer.set_editor_sql("SELECT id, email FROM users;");
+        writer.active_table = Some(TableRef::new(Some("public".to_owned()), "users".to_owned()));
+        writer
+            .tabs
+            .open_table_tab(TabConnectionId("c1".to_owned()), "users");
+        writer.tabs.select(TabId(1));
+
+        let snapshot = writer.build_default_session_snapshot(false, true, true);
+        writer.save_workspace_session_from_path(&session_path, &snapshot);
+
+        let mut reader = AppController::with_detected_theme(AppSettings::default());
+        let restored = reader
+            .restore_workspace_session_from_path(&session_path, false)
+            .ok_or("expected restored workspace session")?;
+        assert_eq!(restored.tabs.len(), 2);
+        assert!(!reader.layout_config.sidebar_visible);
+        assert!(reader.layout_config.inspector_visible);
+        assert_eq!(
+            reader.active_table,
+            Some(TableRef::new(Some("public".to_owned()), "users".to_owned()))
+        );
+        assert_eq!(reader.editor_sql_text(), "SELECT id, email FROM users;");
+        Ok(())
     }
 }
 
