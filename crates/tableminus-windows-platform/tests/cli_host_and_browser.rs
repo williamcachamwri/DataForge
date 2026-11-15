@@ -1,10 +1,10 @@
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 
+use secrecy::SecretString;
 use tableminus_windows_platform::{
     AppSettings, McpSettings, SingleInstanceLock, WindowsCliHost, WindowsCredentialStore,
     validate_http_url,
 };
-use secrecy::SecretString;
 use tablepro_cli::{Host, HostError};
 use tablepro_core::credentials::{SecretItem, SecretItems};
 use tablepro_storage::StoragePaths;
