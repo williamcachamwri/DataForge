@@ -41,7 +41,11 @@ fn storage_paths_for_uses_custom_app_dir_name() -> TestResult {
             .config
             .ends_with(Path::new("TableMinusDev").join("config"))
     );
-    assert!(paths.data.ends_with(Path::new("TableMinusDev").join("data")));
+    assert!(
+        paths
+            .data
+            .ends_with(Path::new("TableMinusDev").join("data"))
+    );
     Ok(())
 }
 
