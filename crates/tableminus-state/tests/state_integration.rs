@@ -1,18 +1,18 @@
-//! Integration tests exercising `dataforge-state` with `tablepro-session` and `tablepro-account` fakes.
+//! Integration tests exercising `tableminus-state` with `tablepro-session` and `tablepro-account` fakes.
 
 use chrono::{TimeDelta, Utc};
-use dataforge_state::connection_window::{
+use tableminus_state::connection_window::{
     ConnectionSession, ConnectionUnavailableView, ConnectionWindowPhase,
     ConnectionWindowPhaseMachine, DriverHandle, ReportedStatus, WorkspaceId,
 };
-use dataforge_state::data_grid::{
+use tableminus_state::data_grid::{
     DataGridLayoutScope, DataGridModel, GridSelectionAction, GridSelectionMode,
 };
-use dataforge_state::editor::{CursorPosition, Rope, UndoHistory};
-use dataforge_state::tabs::{
+use tableminus_state::editor::{CursorPosition, Rope, UndoHistory};
+use tableminus_state::tabs::{
     MoveQueryTabQueue, RestoredTabMerge, TabConnectionId, TabItem, TabKind, TabStripModel,
 };
-use dataforge_state::theme::{
+use tableminus_state::theme::{
     ThemeAppearance, ThemeDefinition, ThemeFileFormat, ThemeResolver, ThemeScope,
 };
 use std::collections::BTreeMap;
@@ -88,7 +88,7 @@ fn session_fakes_connection_phase_tab_move_grid_and_editor_flow()
     RestoredTabMerge::merge(
         &mut strip2,
         vec![TabItem {
-            id: dataforge_state::tabs::TabId(1),
+            id: tableminus_state::tabs::TabId(1),
             connection_id: c2.clone(),
             title: "Init".to_owned(),
             kind: TabKind::QueryEditor {
