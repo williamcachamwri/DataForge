@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
-use dataforge_services::export::{ExportFormat, ExportOptions, export_rows_atomic};
+use tableminus_services::export::{ExportFormat, ExportOptions, export_rows_atomic};
 use futures::channel::oneshot;
 use herogpui::components::{
     AlertDialog, AlertDialogSize, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize,
@@ -20,7 +20,7 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::{WorkspaceSubView, push_error_toast, push_success_toast};
 use super::theme::{
     COMPACT_GAP_PX, CONTROL_RADIUS_PX, editor_gpui_font, hairline_border_color, is_reduced_motion,
@@ -92,9 +92,9 @@ impl std::fmt::Debug for ModalLayerState {
 }
 
 impl ModalLayerState {
-    /// Initializes modal overlay state owned by [`DataForgeWorkspace`].
+    /// Initializes modal overlay state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let export_path_input = cx.new(|cx| InputState::new(cx));
         let prompt_input = cx.new(|cx| InputState::new(cx));
         Self {
@@ -123,7 +123,7 @@ impl ModalLayerState {
     }
 
     /// Opens the result/grid export modal and pre-populates a suggested filename.
-    pub fn open_export(&mut self, _window: &mut Window, cx: &mut Context<DataForgeWorkspace>) {
+    pub fn open_export(&mut self, _window: &mut Window, cx: &mut Context<TableMinusWorkspace>) {
         self.export_modal_open = true;
         self.export_error = None;
         let current = self.export_path_input.read(cx).value().trim().to_owned();
@@ -178,7 +178,7 @@ impl ModalLayerState {
 
     /// Returns `true` if any modal or workspace confirmation sheet is open.
     #[must_use]
-    pub fn has_open_modal(&self, ws: &DataForgeWorkspace) -> bool {
+    pub fn has_open_modal(&self, ws: &TableMinusWorkspace) -> bool {
         self.export_modal_open
             || self.update_modal_open
             || ws.workspace_pane.close_guard_open
@@ -203,9 +203,9 @@ impl ModalLayerState {
 /// Renders active blocking confirmation alerts or modal dialogs above the workspace.
 #[must_use]
 pub fn render_modals(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     if !ws.modals_ui.has_open_modal(ws) {
         return None;
@@ -247,9 +247,9 @@ pub fn render_modals(
 }
 
 fn render_queued_prompt_modal(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     prompt: &BlockingPrompt,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     match prompt {
@@ -286,7 +286,7 @@ fn render_queued_prompt_modal(
 }
 
 fn render_ssh_host_key_body(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     host: &str,
     port: u16,
     algorithm: &str,
@@ -344,12 +344,12 @@ fn render_ssh_host_key_body(
 }
 
 fn render_ssh_host_key_modal(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     host: &str,
     port: u16,
     algorithm: &str,
     fingerprint: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
 
@@ -414,12 +414,12 @@ fn render_ssh_host_key_modal(
 }
 
 fn render_secret_prompt_modal(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     title: &str,
     prompt_text: &str,
     masked: bool,
     label: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -493,9 +493,9 @@ fn render_secret_prompt_modal(
 }
 
 fn render_generic_safe_mode_modal(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     summary: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let editor_font = editor_gpui_font(&ws.controller.settings);
@@ -567,9 +567,9 @@ fn render_generic_safe_mode_modal(
 }
 
 fn render_close_transaction_guard(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let summary = build_pending_impact_summary(ws);
     let has_edits = ws.controller.grid_model.edits.has_pending_edits();
@@ -651,8 +651,8 @@ fn render_close_transaction_guard(
 }
 
 fn render_safe_mode_commit_modal(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let summary = build_pending_impact_summary(ws);
@@ -752,8 +752,8 @@ fn render_safe_mode_commit_modal(
 }
 
 fn render_export_form_body(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let format = ws.modals_ui.export_format;
     let source = ws.modals_ui.export_source;
@@ -843,8 +843,8 @@ fn render_export_form_body(
 }
 
 fn render_export_modal(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
 
@@ -888,7 +888,7 @@ fn render_export_modal(
         .into_any_element()
 }
 
-fn browse_export_save_path(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn browse_export_save_path(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let ext = export_extension(ws.modals_ui.export_format);
     let table_stem = ws
         .controller
@@ -900,7 +900,7 @@ fn browse_export_save_path(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
     let rx = cx.prompt_for_new_path(&start_dir, Some(&suggested));
 
     ws.modals_ui.export_picker_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(path))) = rx.await else {
                 return;
             };
@@ -916,7 +916,7 @@ fn browse_export_save_path(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
     ));
 }
 
-fn execute_export(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn execute_export(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let s = ws.controller.strings.clone();
     let raw_path = ws
         .modals_ui
@@ -974,7 +974,7 @@ fn execute_export(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
 }
 
 fn export_active_query_result(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     path: &std::path::Path,
     format: ExportFormat,
     s: &Strings,
@@ -1007,7 +1007,7 @@ fn export_active_query_result(
     Ok(count)
 }
 
-fn should_export_query_result(ws: &DataForgeWorkspace, source: ExportSource) -> bool {
+fn should_export_query_result(ws: &TableMinusWorkspace, source: ExportSource) -> bool {
     match source {
         ExportSource::DataGrid => false,
         ExportSource::QueryResult => true,
@@ -1024,7 +1024,7 @@ fn should_export_query_result(ws: &DataForgeWorkspace, source: ExportSource) -> 
     }
 }
 
-fn resolve_export_dataset_label(ws: &DataForgeWorkspace, source: ExportSource) -> String {
+fn resolve_export_dataset_label(ws: &TableMinusWorkspace, source: ExportSource) -> String {
     let s = &ws.controller.strings;
     if should_export_query_result(ws, source)
         && let Some(r) = ws.active_tab_result()
@@ -1079,7 +1079,7 @@ fn resolve_export_dataset_label(ws: &DataForgeWorkspace, source: ExportSource) -
     )
 }
 
-fn build_pending_impact_summary(ws: &DataForgeWorkspace) -> String {
+fn build_pending_impact_summary(ws: &TableMinusWorkspace) -> String {
     let s = &ws.controller.strings;
     let edits = &ws.controller.grid_model.edits;
     let open_tx = ws
@@ -1103,7 +1103,7 @@ fn build_pending_impact_summary(ws: &DataForgeWorkspace) -> String {
 
 fn default_export_path(format: ExportFormat, table: Option<&str>) -> PathBuf {
     let ext = export_extension(format);
-    let stem = table.unwrap_or("dataforge_export");
+    let stem = table.unwrap_or("tableminus_export");
     std::env::temp_dir().join(format!("{stem}.{ext}"))
 }
 
@@ -1167,8 +1167,8 @@ fn parse_export_source(key: &str) -> Option<ExportSource> {
 }
 
 fn render_update_modal(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let state = ws.controller.updater.state().clone();
     let s = &ws.controller.strings;
@@ -1203,7 +1203,7 @@ fn render_update_modal(
     append_update_modal_footer(modal, ws, &state, cx).into_any_element()
 }
 
-fn render_update_modal_body(ws: &DataForgeWorkspace, state: &UpdateState, cx: &App) -> AnyElement {
+fn render_update_modal_body(ws: &TableMinusWorkspace, state: &UpdateState, cx: &App) -> AnyElement {
     match state {
         UpdateState::Available { version, notes } => {
             render_update_available_body(ws, version, notes, cx)
@@ -1219,7 +1219,7 @@ fn render_update_modal_body(ws: &DataForgeWorkspace, state: &UpdateState, cx: &A
 }
 
 fn render_update_available_body(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     version: &str,
     notes: &str,
     cx: &App,
@@ -1330,7 +1330,7 @@ fn render_version_column(
         .into_any_element()
 }
 
-fn render_update_downloading_body(ws: &DataForgeWorkspace, percent: u8, cx: &App) -> AnyElement {
+fn render_update_downloading_body(ws: &TableMinusWorkspace, percent: u8, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let status_line = s
@@ -1374,7 +1374,7 @@ fn render_update_downloading_body(ws: &DataForgeWorkspace, percent: u8, cx: &App
         .into_any_element()
 }
 
-fn render_update_ready_body(ws: &DataForgeWorkspace, version: &str, cx: &App) -> AnyElement {
+fn render_update_ready_body(ws: &TableMinusWorkspace, version: &str, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
 
@@ -1407,7 +1407,7 @@ fn render_update_ready_body(ws: &DataForgeWorkspace, version: &str, cx: &App) ->
         .into_any_element()
 }
 
-fn render_update_checking_body(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_update_checking_body(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let indicator = if is_reduced_motion(cx) {
@@ -1447,7 +1447,7 @@ fn render_update_checking_body(ws: &DataForgeWorkspace, cx: &App) -> AnyElement 
         .into_any_element()
 }
 
-fn render_update_error_body(ws: &DataForgeWorkspace, msg: &str, cx: &App) -> AnyElement {
+fn render_update_error_body(ws: &TableMinusWorkspace, msg: &str, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let err_text = s.updates_status_error_tpl.replace("{error}", msg);
@@ -1464,7 +1464,7 @@ fn render_update_error_body(ws: &DataForgeWorkspace, msg: &str, cx: &App) -> Any
         .into_any_element()
 }
 
-fn render_update_idle_body(ws: &DataForgeWorkspace, state: &UpdateState, cx: &App) -> AnyElement {
+fn render_update_idle_body(ws: &TableMinusWorkspace, state: &UpdateState, cx: &App) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
     let current_ver = env!("CARGO_PKG_VERSION");
@@ -1492,7 +1492,7 @@ fn update_dismiss_button(
     id: &'static str,
     variant: Variant,
     label: &'static str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Button {
     Button::new(id)
         .variant(variant)
@@ -1506,9 +1506,9 @@ fn update_dismiss_button(
 
 fn append_update_modal_footer(
     modal: Modal,
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     state: &UpdateState,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Modal {
     let s = &ws.controller.strings;
     match state {
