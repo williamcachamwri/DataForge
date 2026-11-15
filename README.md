@@ -16,7 +16,7 @@
 [![Windows](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows11&logoColor=white)](#installation--auto-updates)
 [![License: MIT / AGPL-3.0](https://img.shields.io/badge/License-MIT%20%2F%20AGPL--3.0-blue?style=flat-square)](LICENSE-MIT)
 
-[English](README.md) · [Tiếng Việt](README.vi.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Español](README.es.md) · [Français](README.fr.md)
+[English](README.md) Â· [Tiáº¿ng Viá»‡t](README.vi.md) Â· [ç®€ä½“ä¸­æ–‡](README.zh-CN.md) Â· [æ—¥æœ¬èªž](README.ja.md) Â· [EspaÃ±ol](README.es.md) Â· [FranÃ§ais](README.fr.md)
 
 </div>
 
@@ -66,7 +66,7 @@ On Windows 11 release builds, cold startup runs around `10 ms` (measured `9.21` 
 
 ### Schema-only AI drawer (`Ctrl+Shift+A`)
 
-![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
+![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.png)
 
 ---
 
