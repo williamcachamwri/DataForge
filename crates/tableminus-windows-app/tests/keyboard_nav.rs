@@ -1,12 +1,12 @@
 //! Integration tests for keyboard navigation, shortcut dispatch, and UIA roles.
 
-use dataforge_windows_app::accessibility::{
+use tableminus_windows_app::accessibility::{
     FocusRegion, KeyCommand, Modifiers, handle_wm_getobject, translate_key, uia_role_for_target, vk,
 };
-use dataforge_windows_app::app::{AppController, ScreenMode};
-use dataforge_windows_app::i18n::Locale;
-use dataforge_windows_app::shell_layout::ShellHitTarget;
-use dataforge_windows_platform::{AppSettings, WindowsTheme};
+use tableminus_windows_app::app::{AppController, ScreenMode};
+use tableminus_windows_app::i18n::Locale;
+use tableminus_windows_app::shell_layout::ShellHitTarget;
+use tableminus_windows_platform::{AppSettings, WindowsTheme};
 
 #[test]
 fn keyboard_shortcuts_map_accurately() {
