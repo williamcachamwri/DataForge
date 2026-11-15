@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-use tableminus_state::editor::AccumulatedResultSet;
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, ProgressBar, Scrollbar,
     Spinner, SpinnerSize, TabItem, Tabs, TabsSize, TabsVariant,
@@ -21,6 +20,7 @@ use herogpui::gpui::{
 };
 use herogpui::prelude::FluentBuilder;
 use herogpui::theme::ActiveTheme;
+use tableminus_state::editor::AccumulatedResultSet;
 use tablepro_core::value::{Temporal, Value};
 use tablepro_core::{TransactionState, Truncation};
 
@@ -196,8 +196,9 @@ fn render_results_pane_body(
         .and_then(|id| ws.tab_results.get(&id).cloned())
         .or_else(|| {
             (!ws.controller.last_explain_nodes.is_empty()).then(|| {
-                let mut tmp =
-                    QueryTabResultState::new(active_tab.unwrap_or(tableminus_state::tabs::TabId(0)));
+                let mut tmp = QueryTabResultState::new(
+                    active_tab.unwrap_or(tableminus_state::tabs::TabId(0)),
+                );
                 tmp.sub_view = ResultPaneSubView::Explain;
                 tmp
             })
@@ -1165,7 +1166,11 @@ fn render_server_notice_banner(
         .into_any_element()
 }
 
-fn render_summary_view(res: &QueryTabResultState, ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
+fn render_summary_view(
+    res: &QueryTabResultState,
+    ws: &TableMinusWorkspace,
+    cx: &App,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let font = theme::value_gpui_font(&ws.controller.settings);
     let total_rows: usize = res
