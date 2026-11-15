@@ -44,6 +44,10 @@ On Windows 11 release builds, cold startup runs around `10 ms` (measured `9.21` 
 
 ![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
+### Interactive ER Diagram, foreign key relations, and SVG export
+
+![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+
 ---
 
 ## Supported Databases
