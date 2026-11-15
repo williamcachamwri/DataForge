@@ -1,4 +1,4 @@
-//! Complete 6-language localization catalog for DataForge UI strings.
+//! Complete 6-language localization catalog for TableMinus UI strings.
 //!
 //! Supported languages:
 //! - English (`en-US`)
@@ -8,9 +8,9 @@
 //! - Español (`es-ES`)
 //! - Français (`fr-FR`)
 
-use dataforge_services::diagnostics::LocaleTable;
+use tableminus_services::diagnostics::LocaleTable;
 
-/// Supported UI locales in DataForge.
+/// Supported UI locales in TableMinus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Locale {
     /// English (United States) — default.
@@ -1198,7 +1198,7 @@ impl Strings {
 }
 
 const EN_US: Strings = Strings {
-    app_title: "DataForge",
+    app_title: "TableMinus",
     connections_library: "Connections",
     settings: "Settings",
     workspace: "Workspace",
@@ -1366,7 +1366,7 @@ const EN_US: Strings = Strings {
     behavior_card_title: "Session, Execution & Safety",
     behavior_card_desc: "Controls startup restore behavior and Safe Mode guardrails.",
     restore_tabs_label: "Restore Workspace Tabs on Startup",
-    restore_tabs_desc: "Automatically reopen previous tabs and connection windows when launching DataForge.",
+    restore_tabs_desc: "Automatically reopen previous tabs and connection windows when launching TableMinus.",
     safe_mode_prompt_label: "Safe Mode Confirmation Prompts",
     safe_mode_prompt_desc: "Require explicit modal approval before committing batch table edits or mutating writes.",
     fetch_limit_label: "Default Row Fetch Limit",
@@ -1393,7 +1393,7 @@ const EN_US: Strings = Strings {
     diag_copy_path: "Copy Path",
     diag_runtime_title: "Build & Connected Runtime",
     diag_runtime_desc: "Genuine binary metadata and active session telemetry.",
-    diag_app_label: "DataForge App",
+    diag_app_label: "TableMinus App",
     diag_platform_label: "Platform",
     diag_engine_label: "Active Engine",
     diag_endpoint_label: "Active Endpoint",
@@ -1488,7 +1488,7 @@ const EN_US: Strings = Strings {
     target_endpoint_fallback: "target endpoint",
     cmd_palette_placeholder: "Search actions, connections, tables, tabs, or queries...",
     cmd_palette_empty: "No matching commands or objects",
-    cmd_palette_label: "DataForge Command Palette",
+    cmd_palette_label: "TableMinus Command Palette",
     cmd_group_actions: "Actions",
     cmd_group_view: "View",
     cmd_group_navigation: "Navigation",
@@ -1998,11 +1998,11 @@ const EN_US: Strings = Strings {
     updates_mode_velopack: "Velopack Managed",
     updates_mode_standalone: "Standalone",
     updates_auto_check_label: "Automatically check for updates on startup",
-    updates_auto_check_desc: "Checks GitHub Releases in the background when DataForge opens.",
+    updates_auto_check_desc: "Checks GitHub Releases in the background when TableMinus opens.",
     updates_status_label: "Update Status",
     updates_status_idle: "Ready to check for updates",
     updates_status_checking: "Checking for updates...",
-    updates_status_up_to_date: "DataForge is up to date",
+    updates_status_up_to_date: "TableMinus is up to date",
     updates_status_available_tpl: "Version v{version} is available",
     updates_status_downloading_tpl: "Downloading update... {percent}%",
     updates_status_ready_tpl: "v{version} downloaded — restart to apply",
@@ -2019,14 +2019,14 @@ const EN_US: Strings = Strings {
 
     // Update Modal
     update_modal_title: "Software Update",
-    update_available_subtitle: "A new version of DataForge is ready to download and install.",
+    update_available_subtitle: "A new version of TableMinus is ready to download and install.",
     update_current_version: "Current Version",
     update_new_version: "New Version",
     update_release_notes: "What's New",
     update_download_install: "Download & Update",
     update_downloading_progress: "Downloading update package...",
     update_ready_title: "Ready to Install",
-    update_ready_desc: "The update has been verified. DataForge will apply the new version cleanly and restart.",
+    update_ready_desc: "The update has been verified. TableMinus will apply the new version cleanly and restart.",
     update_apply_restart: "Apply & Restart",
     update_later: "Later",
     update_retry: "Retry",
@@ -2244,7 +2244,7 @@ const EN_US: Strings = Strings {
 };
 
 const VI_VN: Strings = Strings {
-    app_title: "DataForge",
+    app_title: "TableMinus",
     connections_library: "Kết nối",
     settings: "Cài đặt",
     workspace: "Không gian làm việc",
@@ -2412,7 +2412,7 @@ const VI_VN: Strings = Strings {
     behavior_card_title: "Phiên làm việc, Thực thi & An toàn",
     behavior_card_desc: "Kiểm soát khôi phục tab khi khởi động và lớp bảo vệ Chế độ an toàn.",
     restore_tabs_label: "Khôi phục các tab làm việc khi mở ứng dụng",
-    restore_tabs_desc: "Tự động mở lại các tab truy vấn và kết nối trước đó khi khởi chạy DataForge.",
+    restore_tabs_desc: "Tự động mở lại các tab truy vấn và kết nối trước đó khi khởi chạy TableMinus.",
     safe_mode_prompt_label: "Hộp thoại xác nhận Chế độ an toàn",
     safe_mode_prompt_desc: "Yêu cầu xác nhận rõ ràng trước khi Commit sửa đổi bảng hoặc thực thi lệnh ghi.",
     fetch_limit_label: "Giới hạn dòng mặc định mỗi trang",
@@ -2439,7 +2439,7 @@ const VI_VN: Strings = Strings {
     diag_copy_path: "Sao chép đường dẫn",
     diag_runtime_title: "Thông tin bản dựng & Phiên kết nối",
     diag_runtime_desc: "Siêu dữ liệu nhị phân thực tế và thông số phiên đang hoạt động.",
-    diag_app_label: "Ứng dụng DataForge",
+    diag_app_label: "Ứng dụng TableMinus",
     diag_platform_label: "Nền tảng",
     diag_engine_label: "Hệ quản trị đang dùng",
     diag_endpoint_label: "Máy chủ kết nối",
@@ -2534,7 +2534,7 @@ const VI_VN: Strings = Strings {
     target_endpoint_fallback: "máy chủ đích",
     cmd_palette_placeholder: "Tìm lệnh, kết nối, bảng, tab hoặc truy vấn...",
     cmd_palette_empty: "Không tìm thấy lệnh hoặc đối tượng phù hợp",
-    cmd_palette_label: "Bảng lệnh DataForge",
+    cmd_palette_label: "Bảng lệnh TableMinus",
     cmd_group_actions: "Thao tác",
     cmd_group_view: "Hiển thị",
     cmd_group_navigation: "Điều hướng",
@@ -3044,11 +3044,11 @@ const VI_VN: Strings = Strings {
     updates_mode_velopack: "Quản lý bởi Velopack",
     updates_mode_standalone: "Độc lập (Standalone)",
     updates_auto_check_label: "Tự động kiểm tra bản cập nhật khi khởi động",
-    updates_auto_check_desc: "Kiểm tra nền trên GitHub Releases mỗi khi mở DataForge.",
+    updates_auto_check_desc: "Kiểm tra nền trên GitHub Releases mỗi khi mở TableMinus.",
     updates_status_label: "Trạng thái cập nhật",
     updates_status_idle: "Sẵn sàng kiểm tra bản cập nhật",
     updates_status_checking: "Đang kiểm tra bản cập nhật...",
-    updates_status_up_to_date: "DataForge đang ở phiên bản mới nhất",
+    updates_status_up_to_date: "TableMinus đang ở phiên bản mới nhất",
     updates_status_available_tpl: "Đã có phiên bản mới v{version}",
     updates_status_downloading_tpl: "Đang tải bản cập nhật... {percent}%",
     updates_status_ready_tpl: "Đã tải xong v{version} — khởi động lại để áp dụng",
@@ -3065,14 +3065,14 @@ const VI_VN: Strings = Strings {
 
     // Update Modal
     update_modal_title: "Cập nhật phần mềm",
-    update_available_subtitle: "Đã có phiên bản DataForge mới sẵn sàng tải về và cài đặt.",
+    update_available_subtitle: "Đã có phiên bản TableMinus mới sẵn sàng tải về và cài đặt.",
     update_current_version: "Phiên bản hiện tại",
     update_new_version: "Phiên bản mới",
     update_release_notes: "Có gì mới",
     update_download_install: "Tải về & Cập nhật",
     update_downloading_progress: "Đang tải gói cập nhật...",
     update_ready_title: "Sẵn sàng cài đặt",
-    update_ready_desc: "Bản cập nhật đã được xác minh. DataForge sẽ áp dụng phiên bản mới và khởi động lại.",
+    update_ready_desc: "Bản cập nhật đã được xác minh. TableMinus sẽ áp dụng phiên bản mới và khởi động lại.",
     update_apply_restart: "Áp dụng & Khởi động lại",
     update_later: "Để sau",
     update_retry: "Thử lại",
@@ -3290,7 +3290,7 @@ const VI_VN: Strings = Strings {
 };
 
 const ZH_CN: Strings = Strings {
-    app_title: "DataForge",
+    app_title: "TableMinus",
     connections_library: "连接管理",
     settings: "设置",
     workspace: "工作区",
@@ -3458,7 +3458,7 @@ const ZH_CN: Strings = Strings {
     behavior_card_title: "会话、执行与安全",
     behavior_card_desc: "控制启动时恢复标签页行为以及安全模式防护。",
     restore_tabs_label: "启动时恢复工作区标签页",
-    restore_tabs_desc: "启动 DataForge 时自动重新打开上次的标签页与连接窗口。",
+    restore_tabs_desc: "启动 TableMinus 时自动重新打开上次的标签页与连接窗口。",
     safe_mode_prompt_label: "安全模式确认弹窗",
     safe_mode_prompt_desc: "提交批量表格修改或执行写入操作前必须经过明确确认。",
     fetch_limit_label: "默认每页获取行数",
@@ -3485,7 +3485,7 @@ const ZH_CN: Strings = Strings {
     diag_copy_path: "复制路径",
     diag_runtime_title: "构建信息与连接运行时",
     diag_runtime_desc: "真实二进制元数据与当前会话实时状态。",
-    diag_app_label: "DataForge 应用",
+    diag_app_label: "TableMinus 应用",
     diag_platform_label: "平台环境",
     diag_engine_label: "当前数据库引擎",
     diag_endpoint_label: "当前连接端点",
@@ -3580,7 +3580,7 @@ const ZH_CN: Strings = Strings {
     target_endpoint_fallback: "目标端点",
     cmd_palette_placeholder: "搜索命令、连接、表、标签页或查询...",
     cmd_palette_empty: "没有匹配的命令或对象",
-    cmd_palette_label: "DataForge 命令面板",
+    cmd_palette_label: "TableMinus 命令面板",
     cmd_group_actions: "操作",
     cmd_group_view: "视图",
     cmd_group_navigation: "导航",
@@ -4090,11 +4090,11 @@ const ZH_CN: Strings = Strings {
     updates_mode_velopack: "Velopack 托管",
     updates_mode_standalone: "独立运行",
     updates_auto_check_label: "启动时自动检查更新",
-    updates_auto_check_desc: "打开 DataForge 时在后台检查 GitHub Releases。",
+    updates_auto_check_desc: "打开 TableMinus 时在后台检查 GitHub Releases。",
     updates_status_label: "更新状态",
     updates_status_idle: "准备检查更新",
     updates_status_checking: "正在检查更新...",
-    updates_status_up_to_date: "DataForge 已是最新版本",
+    updates_status_up_to_date: "TableMinus 已是最新版本",
     updates_status_available_tpl: "发现新版本 v{version}",
     updates_status_downloading_tpl: "正在下载更新... {percent}%",
     updates_status_ready_tpl: "v{version} 下载完成 — 重启以应用更新",
@@ -4111,14 +4111,14 @@ const ZH_CN: Strings = Strings {
 
     // Update Modal
     update_modal_title: "软件更新",
-    update_available_subtitle: "DataForge 新版本已准备好下载并安装。",
+    update_available_subtitle: "TableMinus 新版本已准备好下载并安装。",
     update_current_version: "当前版本",
     update_new_version: "新版本",
     update_release_notes: "更新内容",
     update_download_install: "下载并更新",
     update_downloading_progress: "正在下载更新包...",
     update_ready_title: "准备安装",
-    update_ready_desc: "更新包已校验完成。DataForge 将安全应用新版本并重启。",
+    update_ready_desc: "更新包已校验完成。TableMinus 将安全应用新版本并重启。",
     update_apply_restart: "应用并重启",
     update_later: "稍后",
     update_retry: "重试",
@@ -4336,7 +4336,7 @@ const ZH_CN: Strings = Strings {
 };
 
 const JA_JP: Strings = Strings {
-    app_title: "DataForge",
+    app_title: "TableMinus",
     connections_library: "接続",
     settings: "設定",
     workspace: "ワークスペース",
@@ -4504,7 +4504,7 @@ const JA_JP: Strings = Strings {
     behavior_card_title: "セッション・実行・セーフティ",
     behavior_card_desc: "起動時のタブ復元動作およびセーフモード保護を制御します。",
     restore_tabs_label: "起動時にワークスペースのタブを復元",
-    restore_tabs_desc: "DataForge 起動時に前回のタブと接続ウィンドウを自動的に再開します。",
+    restore_tabs_desc: "TableMinus 起動時に前回のタブと接続ウィンドウを自動的に再開します。",
     safe_mode_prompt_label: "セーフモード確認ダイアログ",
     safe_mode_prompt_desc: "一括編集のコミットや更新系クエリ実行前に明示的な承認を必須にします。",
     fetch_limit_label: "デフォルト行取得上限",
@@ -4531,7 +4531,7 @@ const JA_JP: Strings = Strings {
     diag_copy_path: "パスをコピー",
     diag_runtime_title: "ビルド情報と接続ランタイム",
     diag_runtime_desc: "アプリケーションのビルド情報と現在のセッション状態。",
-    diag_app_label: "DataForge アプリ",
+    diag_app_label: "TableMinus アプリ",
     diag_platform_label: "プラットフォーム",
     diag_engine_label: "アクティブエンジン",
     diag_endpoint_label: "接続先エンドポイント",
@@ -4626,7 +4626,7 @@ const JA_JP: Strings = Strings {
     target_endpoint_fallback: "接続先エンドポイント",
     cmd_palette_placeholder: "操作、接続、テーブル、タブ、クエリを検索...",
     cmd_palette_empty: "一致するコマンドまたはオブジェクトがありません",
-    cmd_palette_label: "DataForge コマンドパレット",
+    cmd_palette_label: "TableMinus コマンドパレット",
     cmd_group_actions: "アクション",
     cmd_group_view: "表示",
     cmd_group_navigation: "ナビゲーション",
@@ -5136,11 +5136,11 @@ const JA_JP: Strings = Strings {
     updates_mode_velopack: "Velopack 管理",
     updates_mode_standalone: "スタンドアロン",
     updates_auto_check_label: "起動時にアップデートを自動確認",
-    updates_auto_check_desc: "DataForge の起動時にバックグラウンドで GitHub Releases を確認します。",
+    updates_auto_check_desc: "TableMinus の起動時にバックグラウンドで GitHub Releases を確認します。",
     updates_status_label: "アップデート状態",
     updates_status_idle: "アップデートの確認準備完了",
     updates_status_checking: "アップデートを確認中...",
-    updates_status_up_to_date: "DataForge は最新です",
+    updates_status_up_to_date: "TableMinus は最新です",
     updates_status_available_tpl: "バージョン v{version} が利用可能です",
     updates_status_downloading_tpl: "アップデートをダウンロード中... {percent}%",
     updates_status_ready_tpl: "v{version} のダウンロード完了 — 再起動して適用",
@@ -5157,14 +5157,14 @@ const JA_JP: Strings = Strings {
 
     // Update Modal
     update_modal_title: "ソフトウェアアップデート",
-    update_available_subtitle: "新しいバージョンの DataForge をダウンロードしてインストールできます。",
+    update_available_subtitle: "新しいバージョンの TableMinus をダウンロードしてインストールできます。",
     update_current_version: "現在のバージョン",
     update_new_version: "新しいバージョン",
     update_release_notes: "更新内容",
     update_download_install: "ダウンロードして更新",
     update_downloading_progress: "アップデートパッケージをダウンロード中...",
     update_ready_title: "インストールの準備完了",
-    update_ready_desc: "アップデートが検証されました。DataForge は新しいバージョンを適用して再起動します。",
+    update_ready_desc: "アップデートが検証されました。TableMinus は新しいバージョンを適用して再起動します。",
     update_apply_restart: "適用して再起動",
     update_later: "後で",
     update_retry: "再試行",
@@ -5382,7 +5382,7 @@ const JA_JP: Strings = Strings {
 };
 
 const ES_ES: Strings = Strings {
-    app_title: "DataForge",
+    app_title: "TableMinus",
     connections_library: "Conexiones",
     settings: "Configuración",
     workspace: "Espacio de trabajo",
@@ -5550,7 +5550,7 @@ const ES_ES: Strings = Strings {
     behavior_card_title: "Sesión, Ejecución y Seguridad",
     behavior_card_desc: "Controla la restauración al iniciar y las protecciones del Modo seguro.",
     restore_tabs_label: "Restaurar pestañas al iniciar",
-    restore_tabs_desc: "Reabre automáticamente pestañas y ventanas de conexión previas al abrir DataForge.",
+    restore_tabs_desc: "Reabre automáticamente pestañas y ventanas de conexión previas al abrir TableMinus.",
     safe_mode_prompt_label: "Confirmaciones en Modo seguro",
     safe_mode_prompt_desc: "Exige aprobación explícita antes de confirmar ediciones por lotes o escrituras.",
     fetch_limit_label: "Límite de filas por página",
@@ -5577,7 +5577,7 @@ const ES_ES: Strings = Strings {
     diag_copy_path: "Copiar ruta",
     diag_runtime_title: "Compilación y Entorno Conectado",
     diag_runtime_desc: "Metadatos del binario y telemetría de la sesión activa.",
-    diag_app_label: "Aplicación DataForge",
+    diag_app_label: "Aplicación TableMinus",
     diag_platform_label: "Plataforma",
     diag_engine_label: "Motor activo",
     diag_endpoint_label: "Endpoint activo",
@@ -5672,7 +5672,7 @@ const ES_ES: Strings = Strings {
     target_endpoint_fallback: "servidor de destino",
     cmd_palette_placeholder: "Buscar acciones, conexiones, tablas, pestañas o consultas...",
     cmd_palette_empty: "No hay comandos ni objetos coincidentes",
-    cmd_palette_label: "Paleta de comandos de DataForge",
+    cmd_palette_label: "Paleta de comandos de TableMinus",
     cmd_group_actions: "Acciones",
     cmd_group_view: "Ver",
     cmd_group_navigation: "Navegación",
@@ -6182,11 +6182,11 @@ const ES_ES: Strings = Strings {
     updates_mode_velopack: "Administrado por Velopack",
     updates_mode_standalone: "Independiente",
     updates_auto_check_label: "Buscar actualizaciones automáticamente al iniciar",
-    updates_auto_check_desc: "Consulta GitHub Releases en segundo plano al abrir DataForge.",
+    updates_auto_check_desc: "Consulta GitHub Releases en segundo plano al abrir TableMinus.",
     updates_status_label: "Estado de actualización",
     updates_status_idle: "Listo para buscar actualizaciones",
     updates_status_checking: "Buscando actualizaciones...",
-    updates_status_up_to_date: "DataForge está actualizado",
+    updates_status_up_to_date: "TableMinus está actualizado",
     updates_status_available_tpl: "La versión v{version} está disponible",
     updates_status_downloading_tpl: "Descargando actualización... {percent}%",
     updates_status_ready_tpl: "v{version} descargada — reinicie para aplicar",
@@ -6203,14 +6203,14 @@ const ES_ES: Strings = Strings {
 
     // Update Modal
     update_modal_title: "Actualización de software",
-    update_available_subtitle: "Hay una nueva versión de DataForge lista para descargar e instalar.",
+    update_available_subtitle: "Hay una nueva versión de TableMinus lista para descargar e instalar.",
     update_current_version: "Versión actual",
     update_new_version: "Nueva versión",
     update_release_notes: "Novedades",
     update_download_install: "Descargar y actualizar",
     update_downloading_progress: "Descargando paquete de actualización...",
     update_ready_title: "Listo para instalar",
-    update_ready_desc: "La actualización ha sido verificada. DataForge aplicará la nueva versión y se reiniciará.",
+    update_ready_desc: "La actualización ha sido verificada. TableMinus aplicará la nueva versión y se reiniciará.",
     update_apply_restart: "Aplicar y reiniciar",
     update_later: "Más tarde",
     update_retry: "Reintentar",
@@ -6428,7 +6428,7 @@ const ES_ES: Strings = Strings {
 };
 
 const FR_FR: Strings = Strings {
-    app_title: "DataForge",
+    app_title: "TableMinus",
     connections_library: "Connexions",
     settings: "Paramètres",
     workspace: "Espace de travail",
@@ -6623,7 +6623,7 @@ const FR_FR: Strings = Strings {
     diag_copy_path: "Copier le chemin",
     diag_runtime_title: "Compilation & Environnement connecté",
     diag_runtime_desc: "Métadonnées binaires authentiques et télémétrie de session.",
-    diag_app_label: "Application DataForge",
+    diag_app_label: "Application TableMinus",
     diag_platform_label: "Plateforme",
     diag_engine_label: "Moteur actif",
     diag_endpoint_label: "Hôte actif",
@@ -6718,7 +6718,7 @@ const FR_FR: Strings = Strings {
     target_endpoint_fallback: "hôte cible",
     cmd_palette_placeholder: "Rechercher commandes, connexions, tables, onglets ou requêtes...",
     cmd_palette_empty: "Aucune commande ou objet correspondant",
-    cmd_palette_label: "Palette de commandes DataForge",
+    cmd_palette_label: "Palette de commandes TableMinus",
     cmd_group_actions: "Actions",
     cmd_group_view: "Affichage",
     cmd_group_navigation: "Navigation",
@@ -7228,11 +7228,11 @@ const FR_FR: Strings = Strings {
     updates_mode_velopack: "Géré par Velopack",
     updates_mode_standalone: "Autonome",
     updates_auto_check_label: "Vérifier automatiquement les mises à jour au démarrage",
-    updates_auto_check_desc: "Interroge GitHub Releases en arrière-plan à l'ouverture de DataForge.",
+    updates_auto_check_desc: "Interroge GitHub Releases en arrière-plan à l'ouverture de TableMinus.",
     updates_status_label: "État des mises à jour",
     updates_status_idle: "Prêt à vérifier les mises à jour",
     updates_status_checking: "Recherche de mises à jour...",
-    updates_status_up_to_date: "DataForge est à jour",
+    updates_status_up_to_date: "TableMinus est à jour",
     updates_status_available_tpl: "La version v{version} est disponible",
     updates_status_downloading_tpl: "Téléchargement de la mise à jour... {percent}%",
     updates_status_ready_tpl: "v{version} téléchargée — redémarrez pour appliquer",
@@ -7249,14 +7249,14 @@ const FR_FR: Strings = Strings {
 
     // Update Modal
     update_modal_title: "Mise à jour logicielle",
-    update_available_subtitle: "Une nouvelle version de DataForge est prête à être téléchargée et installée.",
+    update_available_subtitle: "Une nouvelle version de TableMinus est prête à être téléchargée et installée.",
     update_current_version: "Version actuelle",
     update_new_version: "Nouvelle version",
     update_release_notes: "Nouveautés",
     update_download_install: "Télécharger et mettre à jour",
     update_downloading_progress: "Téléchargement du paquet de mise à jour...",
     update_ready_title: "Prêt à installer",
-    update_ready_desc: "La mise à jour a été vérifiée. DataForge va appliquer la nouvelle version et redémarrer.",
+    update_ready_desc: "La mise à jour a été vérifiée. TableMinus va appliquer la nouvelle version et redémarrer.",
     update_apply_restart: "Appliquer et redémarrer",
     update_later: "Plus tard",
     update_retry: "Réessayer",
@@ -7481,7 +7481,7 @@ pub fn init_locale(preferred: Option<&str>) -> Locale {
     {
         return locale;
     }
-    for env_key in ["DATAFORGE_LANG", "LC_ALL", "LANG"] {
+    for env_key in ["TABLEMINUS_LANG", "LC_ALL", "LANG"] {
         if let Ok(val) = std::env::var(env_key)
             && let Some(locale) = Locale::from_code(&val)
         {
@@ -7491,7 +7491,7 @@ pub fn init_locale(preferred: Option<&str>) -> Locale {
     Locale::EnUs
 }
 
-/// Returns the backing `dataforge-services` [`LocaleTable`] for `locale`.
+/// Returns the backing `tableminus-services` [`LocaleTable`] for `locale`.
 #[must_use]
 pub fn diagnostics_locale_table(locale: Locale) -> LocaleTable {
     LocaleTable::for_locale_tag(locale.code())
@@ -7506,7 +7506,7 @@ mod tests {
         assert_eq!(Locale::ALL.len(), 6);
         for locale in Locale::ALL {
             let s = Strings::for_locale(locale);
-            assert_eq!(s.app_title, "DataForge");
+            assert_eq!(s.app_title, "TableMinus");
             assert!(!s.settings.is_empty());
             assert!(!s.about_security_title.is_empty());
             assert!(!s.about_license_title.is_empty());
@@ -7522,7 +7522,7 @@ mod tests {
             assert!(s.updates_status_error_tpl.contains("{error}"));
             let diag = diagnostics_locale_table(locale);
             assert_eq!(diag.locale(), locale.code());
-            assert_eq!(diag.get("app.name"), "DataForge");
+            assert_eq!(diag.get("app.name"), "TableMinus");
             assert_eq!(Locale::from_code(locale.code()), Some(locale));
         }
     }
