@@ -2240,177 +2240,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 
 [[package]]
-name = "dataforge-e2e"
-version = "0.1.4"
-dependencies = [
- "async-trait",
- "chrono",
- "csv",
- "dataforge-gfx",
- "dataforge-services",
- "dataforge-state",
- "dataforge-windows-platform",
- "duckdb",
- "futures",
- "plist",
- "secrecy",
- "serde_json",
- "tablepro-core",
- "tablepro-driver-cassandra",
- "tablepro-driver-clickhouse",
- "tablepro-driver-duckdb",
- "tablepro-driver-mongodb",
- "tablepro-driver-mssql",
- "tablepro-driver-mysql",
- "tablepro-driver-postgres",
- "tablepro-driver-redis",
- "tablepro-driver-sqlite",
- "tablepro-foreign-import",
- "tablepro-session",
- "tablepro-ssh",
- "tablepro-storage",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "dataforge-gfx"
-version = "0.1.4"
-dependencies = [
- "thiserror 2.0.20",
- "tracing",
- "windows 0.61.3",
- "windows-numerics 0.2.0",
-]
-
-[[package]]
-name = "dataforge-services"
-version = "0.1.4"
-dependencies = [
- "async-trait",
- "chrono",
- "csv",
- "dataforge-state",
- "dataforge-windows-platform",
- "duckdb",
- "futures",
- "secrecy",
- "serde",
- "serde_json",
- "tablepro-ai",
- "tablepro-cli",
- "tablepro-core",
- "tablepro-driver-cassandra",
- "tablepro-driver-clickhouse",
- "tablepro-driver-duckdb",
- "tablepro-driver-mongodb",
- "tablepro-driver-mssql",
- "tablepro-driver-mysql",
- "tablepro-driver-postgres",
- "tablepro-driver-redis",
- "tablepro-driver-sqlite",
- "tablepro-foreign-import",
- "tablepro-mcp",
- "tablepro-net",
- "tablepro-session",
- "tablepro-ssh",
- "tablepro-storage",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "url",
- "uuid",
- "zip",
-]
-
-[[package]]
-name = "dataforge-state"
-version = "0.1.4"
-dependencies = [
- "chrono",
- "proptest",
- "serde",
- "serde_json",
- "tablepro-account",
- "tablepro-core",
- "tablepro-foreign-import",
- "tablepro-session",
- "tablepro-storage",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "dataforge-windows-app"
-version = "0.1.4"
-dependencies = [
- "async-channel",
- "dataforge-gfx",
- "dataforge-services",
- "dataforge-state",
- "dataforge-windows-platform",
- "futures",
- "herogpui",
- "raw-window-handle",
- "secrecy",
- "serde",
- "serde_json",
- "tablepro-ai",
- "tablepro-cli",
- "tablepro-core",
- "tablepro-foreign-import",
- "tablepro-mcp",
- "tablepro-session",
- "tablepro-ssh",
- "tablepro-storage",
- "tempfile",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "velopack",
- "windows 0.61.3",
- "windows-numerics 0.2.0",
-]
-
-[[package]]
-name = "dataforge-windows-platform"
-version = "0.1.4"
-dependencies = [
- "async-trait",
- "futures",
- "secrecy",
- "serde",
- "serde_json",
- "tablepro-account",
- "tablepro-ai",
- "tablepro-cli",
- "tablepro-core",
- "tablepro-foreign-import",
- "tablepro-net",
- "tablepro-storage",
- "tempfile",
- "thiserror 2.0.20",
- "tokio",
- "tracing",
- "url",
- "uuid",
- "windows 0.61.3",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "deadpool"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9520,6 +9349,178 @@ checksum = "8e1d1b10ced5ca923a1fcb8d03e96b8d3268065d724548c0211415ff6ac6bac4"
 dependencies = [
  "core-foundation-sys",
  "libc",
+]
+
+[[package]]
+name = "tableminus-e2e"
+version = "0.1.4"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "csv",
+ "duckdb",
+ "futures",
+ "plist",
+ "secrecy",
+ "serde_json",
+ "tableminus-gfx",
+ "tableminus-services",
+ "tableminus-state",
+ "tableminus-windows-platform",
+ "tablepro-core",
+ "tablepro-driver-cassandra",
+ "tablepro-driver-clickhouse",
+ "tablepro-driver-duckdb",
+ "tablepro-driver-mongodb",
+ "tablepro-driver-mssql",
+ "tablepro-driver-mysql",
+ "tablepro-driver-postgres",
+ "tablepro-driver-redis",
+ "tablepro-driver-sqlite",
+ "tablepro-foreign-import",
+ "tablepro-session",
+ "tablepro-ssh",
+ "tablepro-storage",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "tableminus-gfx"
+version = "0.1.4"
+dependencies = [
+ "thiserror 2.0.20",
+ "tracing",
+ "windows 0.61.3",
+ "windows-numerics 0.2.0",
+]
+
+[[package]]
+name = "tableminus-services"
+version = "0.1.4"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "csv",
+ "duckdb",
+ "futures",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tableminus-state",
+ "tableminus-windows-platform",
+ "tablepro-ai",
+ "tablepro-cli",
+ "tablepro-core",
+ "tablepro-driver-cassandra",
+ "tablepro-driver-clickhouse",
+ "tablepro-driver-duckdb",
+ "tablepro-driver-mongodb",
+ "tablepro-driver-mssql",
+ "tablepro-driver-mysql",
+ "tablepro-driver-postgres",
+ "tablepro-driver-redis",
+ "tablepro-driver-sqlite",
+ "tablepro-foreign-import",
+ "tablepro-mcp",
+ "tablepro-net",
+ "tablepro-session",
+ "tablepro-ssh",
+ "tablepro-storage",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+ "zip",
+]
+
+[[package]]
+name = "tableminus-state"
+version = "0.1.4"
+dependencies = [
+ "chrono",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tablepro-account",
+ "tablepro-core",
+ "tablepro-foreign-import",
+ "tablepro-session",
+ "tablepro-storage",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "tableminus-windows-app"
+version = "0.1.4"
+dependencies = [
+ "async-channel",
+ "flate2",
+ "futures",
+ "herogpui",
+ "raw-window-handle",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tableminus-gfx",
+ "tableminus-services",
+ "tableminus-state",
+ "tableminus-windows-platform",
+ "tablepro-ai",
+ "tablepro-cli",
+ "tablepro-core",
+ "tablepro-foreign-import",
+ "tablepro-mcp",
+ "tablepro-session",
+ "tablepro-ssh",
+ "tablepro-storage",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "velopack",
+ "windows 0.61.3",
+ "windows-numerics 0.2.0",
+]
+
+[[package]]
+name = "tableminus-windows-platform"
+version = "0.1.4"
+dependencies = [
+ "async-trait",
+ "futures",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "tablepro-account",
+ "tablepro-ai",
+ "tablepro-cli",
+ "tablepro-core",
+ "tablepro-foreign-import",
+ "tablepro-net",
+ "tablepro-storage",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+ "windows 0.61.3",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
