@@ -20,17 +20,17 @@ use windows_sys::Win32::Security::Credentials::{
 use crate::credential_parts::{self, Layout, PartStore, Stored};
 use crate::error::to_wide_null;
 
-/// Default target prefix for DataForge credentials in Windows Credential Manager.
-pub const DEFAULT_CREDENTIAL_PREFIX: &str = "DataForge";
+/// Default target prefix for TableMinus credentials in Windows Credential Manager.
+pub const DEFAULT_CREDENTIAL_PREFIX: &str = "TableMinus";
 
 /// Attribute keyword used to track multi-part secret chunks.
-pub const LAYOUT_KEYWORD: &str = "DataForge_Parts";
+pub const LAYOUT_KEYWORD: &str = "TableMinus_Parts";
 
 /// Maximum credential blob size supported by `CredWriteW` (2,560 bytes).
 pub const PART_SIZE: usize = CRED_MAX_CREDENTIAL_BLOB_SIZE as usize;
 
 const COMMENT_UNITS: usize = CRED_MAX_STRING_LENGTH as usize - 1;
-const USER_NAME: &str = "DataForge";
+const USER_NAME: &str = "TableMinus";
 
 static STORE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -55,7 +55,7 @@ impl std::fmt::Debug for WindowsCredentialStore {
 }
 
 impl WindowsCredentialStore {
-    /// Creates a credential store scoped under `prefix` (e.g. `"DataForge"`).
+    /// Creates a credential store scoped under `prefix` (e.g. `"TableMinus"`).
     pub fn new(prefix: impl Into<String>) -> Self {
         Self {
             prefix: prefix.into(),
@@ -455,7 +455,7 @@ impl RefreshTokenVault for WindowsCredentialStore {
             write_secret_string(
                 &target,
                 token.expose_secret(),
-                "DataForge account refresh token",
+                "TableMinus account refresh token",
             )
         })
         .await
