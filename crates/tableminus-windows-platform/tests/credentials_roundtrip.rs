@@ -1,5 +1,5 @@
-use tableminus_windows_platform::{PART_SIZE, WindowsCredentialStore};
 use secrecy::{ExposeSecret, SecretString};
+use tableminus_windows_platform::{PART_SIZE, WindowsCredentialStore};
 use tablepro_account::RefreshTokenVault;
 use tablepro_ai::ApiKeyVault;
 use tablepro_core::AiProvider;
