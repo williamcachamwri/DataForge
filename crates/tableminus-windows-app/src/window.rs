@@ -4,8 +4,8 @@
 use std::ffi::c_void;
 use std::sync::Arc;
 
-use dataforge_gfx::context::{D2dContext, RenderSurface};
-use dataforge_windows_platform::detect_theme_or_default;
+use tableminus_gfx::context::{D2dContext, RenderSurface};
+use tableminus_windows_platform::detect_theme_or_default;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{BeginPaint, EndPaint, InvalidateRect, PAINTSTRUCT};
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress, LoadLibraryW};
@@ -38,7 +38,7 @@ struct WindowState {
     ipc_inbox: Arc<IpcInbox>,
 }
 
-/// Pure Win32 + Direct2D desktop window for DataForge.
+/// Pure Win32 + Direct2D desktop window for TableMinus.
 pub struct MainWindow {
     hwnd: HWND,
     _state: Box<WindowState>,
@@ -55,7 +55,7 @@ impl MainWindow {
 
     /// Creates the Win32 `MainWindow` and its Direct2D `RenderSurface`.
     pub fn create(controller: AppController, ipc_inbox: Arc<IpcInbox>) -> Result<Self> {
-        let class_name = to_wide_null("DataForgeMainWindow");
+        let class_name = to_wide_null("TableMinusMainWindow");
         let title = to_wide_null(controller.strings.app_title);
 
         // SAFETY: `GetModuleHandleW(None)` returns the current executable's HINSTANCE.
