@@ -1,10 +1,10 @@
 //! Connections Library and Connection Form (SSH/TLS/SSPI, URL parser, foreign import).
 
-use dataforge_gfx::Result;
-use dataforge_gfx::context::{FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign};
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_gfx::palette::ThemePalette;
-use dataforge_state::library::{
+use tableminus_gfx::Result;
+use tableminus_gfx::context::{FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign};
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_gfx::palette::ThemePalette;
+use tableminus_state::library::{
     ConnectionsLibraryModel, ForeignImportReport, LibraryConnection, connection_from_url,
     parse_connection_url,
 };
@@ -91,7 +91,7 @@ impl ConnectionFormDraft {
     }
 }
 
-/// Maps a `tablepro-core` driver id string to a [`dataforge_gfx::glyphs::EngineKind`].
+/// Maps a `tablepro-core` driver id string to a [`tableminus_gfx::glyphs::EngineKind`].
 #[must_use]
 pub fn engine_from_driver_id(driver_id: &str) -> EngineKind {
     let lower = driver_id.to_ascii_lowercase();
