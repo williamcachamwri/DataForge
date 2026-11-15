@@ -343,12 +343,13 @@ pub fn dark_chrome_theme() -> Theme {
         .background(recessed)
         .surface(chrome, fg)
         .surface_levels(recessed, elevated)
+        .role(herogpui::core::Color::Default, elevated, fg)
         .overlay(elevated, fg)
         .border(hairline)
         .separator(hairline)
         .field(editor, fg)
         .field_border(hairline)
-        .backdrop(rgba_hsla(0, 0, 0, 0.42).into())
+        .backdrop(rgba_hsla(0, 0, 0, 0.55).into())
         .build()
 }
 
@@ -782,7 +783,7 @@ mod tests {
             dark.colors.border,
             Hsla::from(rgba_hsla(255, 255, 255, 0.08))
         );
-        assert_eq!(dark.colors.backdrop, Hsla::from(rgba_hsla(0, 0, 0, 0.42)));
+        assert_eq!(dark.colors.backdrop, Hsla::from(rgba_hsla(0, 0, 0, 0.55)));
 
         let light = light_chrome_theme();
         assert_eq!(light.id.as_ref(), LIGHT_THEME_ID);
