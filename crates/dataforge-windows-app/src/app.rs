@@ -1039,6 +1039,17 @@ fn restored_tab_item(saved: &SavedTabSnapshot, index: usize) -> TabItem {
     }
 }
 
+/// Helper to build a sample [`SidebarSectionKind`] header row.
+#[must_use]
+pub fn make_sidebar_section(kind: SidebarSectionKind, title: &str, count: usize) -> SidebarRow {
+    SidebarRow::SectionHeader {
+        kind,
+        title: title.to_owned(),
+        expanded: true,
+        count,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1099,16 +1110,5 @@ mod tests {
         );
         assert_eq!(reader.editor_sql_text(), "SELECT id, email FROM users;");
         Ok(())
-    }
-}
-
-/// Helper to build a sample [`SidebarSectionKind`] header row.
-#[must_use]
-pub fn make_sidebar_section(kind: SidebarSectionKind, title: &str, count: usize) -> SidebarRow {
-    SidebarRow::SectionHeader {
-        kind,
-        title: title.to_owned(),
-        expanded: true,
-        count,
     }
 }
