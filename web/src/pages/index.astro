@@ -78,7 +78,7 @@ const release = await getBuildReleaseInfo();
       <div class="mt-10 sm:mt-14 border border-[var(--rule)] bg-[var(--stage-bg)] overflow-hidden">
         <img
           src="/images/sql-editor-10m.jpg"
-          alt="DataForge SQL Editor querying 10 million indexed rows in SQLite on Windows"
+          alt="TableMinus SQL Editor querying 10 million indexed rows in SQLite on Windows"
           loading="eager"
           decoding="async"
           class="block w-full h-auto object-cover select-none"
@@ -95,7 +95,7 @@ const release = await getBuildReleaseInfo();
   <Footer release={release} />
 
   <script>
-    import { initDataForgeMotion } from '../scripts/motion';
-    initDataForgeMotion();
+    import { initTableMinusMotion } from '../scripts/motion';
+    initTableMinusMotion();
   </script>
 </Layout>
