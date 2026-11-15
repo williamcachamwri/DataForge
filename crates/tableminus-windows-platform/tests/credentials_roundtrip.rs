@@ -1,4 +1,4 @@
-use dataforge_windows_platform::{PART_SIZE, WindowsCredentialStore};
+use tableminus_windows_platform::{PART_SIZE, WindowsCredentialStore};
 use secrecy::{ExposeSecret, SecretString};
 use tablepro_account::RefreshTokenVault;
 use tablepro_ai::ApiKeyVault;
@@ -9,7 +9,7 @@ use uuid::Uuid;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 fn test_store() -> WindowsCredentialStore {
-    WindowsCredentialStore::new(format!("DataForgeTest-{}", Uuid::new_v4()))
+    WindowsCredentialStore::new(format!("TableMinusTest-{}", Uuid::new_v4()))
 }
 
 #[tokio::test]
@@ -165,7 +165,7 @@ async fn secret_items_api_key_vault_and_refresh_token_vault_roundtrip() -> TestR
 
 #[tokio::test]
 async fn concurrent_credential_writes_all_hold() -> TestResult {
-    let base_prefix = format!("DataForgeTest-{}", Uuid::new_v4());
+    let base_prefix = format!("TableMinusTest-{}", Uuid::new_v4());
     let id = Uuid::new_v4();
 
     let results = futures::future::join_all((0..8).map(|index| {
