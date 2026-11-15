@@ -1,5 +1,5 @@
 [package]
-name = "dataforge-e2e"
+name = "tableminus-e2e"
 version = "0.1.4"
 edition.workspace = true
 rust-version.workspace = true
@@ -10,10 +10,10 @@ publish.workspace = true
 async-trait.workspace = true
 chrono.workspace = true
 csv.workspace = true
-dataforge-gfx.workspace = true
-dataforge-services.workspace = true
-dataforge-state.workspace = true
-dataforge-windows-platform.workspace = true
+tableminus-gfx.workspace = true
+tableminus-services.workspace = true
+tableminus-state.workspace = true
+tableminus-windows-platform.workspace = true
 duckdb.workspace = true
 futures.workspace = true
 plist.workspace = true
