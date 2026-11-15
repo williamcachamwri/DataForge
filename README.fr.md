@@ -32,21 +32,41 @@ Sur Windows 11 avec une compilation release, le démarrage à froid prend enviro
 
 ## Captures d'écran
 
-### Éditeur SQL, mode Vim et panneau de résultats partagé (requête indexée en `15 ms` sur 10M lignes)
+### Éditeur SQL, graphiques en direct et résultats de requêtes
 
-![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor and Live Charts](docs/screenshots/sql-editor-charts.png)
 
-### Grille de données virtualisée, inspecteur de structure et filtres paramétrés
+### Grille de données virtualisée, agrégats par colonne et filtres paramétrés
 
-![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.png)
+
+### Diagramme ER interactif, relations de clés étrangères et export SVG
+
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram.png)
+
+### Assistant d'importation (CSV, JSON, XLSX) avec mappage automatique des types
+
+![TableMinus Import Wizard](docs/screenshots/import-wizard.png)
+
+### Comparaison de schémas et de données avec script de synchronisation
+
+![TableMinus Schema and Data Compare](docs/screenshots/data-compare.png)
+
+### Générateur de données fictives avec graines déterministes et clés étrangères
+
+![TableMinus Mock Data Generator](docs/screenshots/mock-generator.png)
+
+### Transfert de données multi-moteurs avec aperçu DDL en direct
+
+![TableMinus Cross-Engine Data Transfer](docs/screenshots/data-transfer.png)
+
+### Recherche de métadonnées (Metadata Search)
+
+![TableMinus Metadata Search](docs/screenshots/metadata-search.png)
 
 ### Volet IA limité au schéma (`Ctrl+Shift+A`)
 
 ![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
-
-### Diagramme ER interactif, relations de clés étrangères et export SVG
-
-![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
