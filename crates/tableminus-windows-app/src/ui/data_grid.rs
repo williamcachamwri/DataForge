@@ -9,12 +9,6 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use tableminus_gfx::grid_renderer::{CellKind, GridRow, RowState};
-use tableminus_state::connection_window::ConnectionWindowPhase;
-use tableminus_state::data_grid::{
-    DataGridColumn, DataGridColumnID, GridCoord, GridSelectionAction, MAX_COLUMN_WIDTH,
-    MIN_COLUMN_WIDTH, SortDirection as ModelSortDir,
-};
 use herogpui::components::{
     Button, Chip, ChipLabel, ChipVariant, ContextMenu, Dropdown, DropdownPlacement, Icon, IconName,
     IconSize, Input, InputState, MenuItem, Pagination, PickerItem, Popover, PopoverPlacement,
@@ -30,6 +24,12 @@ use herogpui::gpui::{
 };
 use herogpui::prelude::FluentBuilder;
 use herogpui::theme::ActiveTheme;
+use tableminus_gfx::grid_renderer::{CellKind, GridRow, RowState};
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::data_grid::{
+    DataGridColumn, DataGridColumnID, GridCoord, GridSelectionAction, MAX_COLUMN_WIDTH,
+    MIN_COLUMN_WIDTH, SortDirection as ModelSortDir,
+};
 use tablepro_core::filter::FilterOp;
 use tablepro_core::foreign_key_info::ForeignKeyInfo;
 use tablepro_core::meta::{PagePosition, TableRef};
@@ -1909,7 +1909,10 @@ fn paste_tsv_rows_from_clipboard(
     }
 }
 
-fn render_grid_footer(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_grid_footer(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let page = ws.controller.grid_model.page;
     let (current_page, total_pages_opt) = page.page_info();
