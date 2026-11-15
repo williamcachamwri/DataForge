@@ -32,21 +32,41 @@ On Windows 11 release builds, cold startup runs around `10 ms` (measured `9.21` 
 
 ## Screenshots
 
-### SQL editor, Vim mode, and split results (`15 ms` indexed query on 10M rows)
+### SQL editor, live charts, and query results
 
-![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor and Live Charts](docs/screenshots/sql-editor-charts.png)
 
-### Virtualized data grid, structure inspector, and parameterized filters
+### Virtualized data grid, column aggregates, and parameterized filters
 
-![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.png)
+
+### Interactive ER Diagram, foreign key relations, and SVG export
+
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram.png)
+
+### Import Wizard (CSV, JSON, XLSX) with automatic type mapping
+
+![TableMinus Import Wizard](docs/screenshots/import-wizard.png)
+
+### Schema & Data Compare with diff summary and sync script generation
+
+![TableMinus Schema and Data Compare](docs/screenshots/data-compare.png)
+
+### Mock Data Generator with deterministic seeds and foreign-key ordering
+
+![TableMinus Mock Data Generator](docs/screenshots/mock-generator.png)
+
+### Cross-Engine Data Transfer with live DDL preview
+
+![TableMinus Cross-Engine Data Transfer](docs/screenshots/data-transfer.png)
+
+### Metadata Search palette (`Ctrl+P` / Object Search)
+
+![TableMinus Metadata Search](docs/screenshots/metadata-search.png)
 
 ### Schema-only AI drawer (`Ctrl+Shift+A`)
 
 ![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
-
-### Interactive ER Diagram, foreign key relations, and SVG export
-
-![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
