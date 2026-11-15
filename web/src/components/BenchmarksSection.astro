@@ -1,0 +1,191 @@
+---
+import SectionBand from './SectionBand.astro';
+
+const metrics = [
+  {
+    value: '~10 ms',
+    label: 'Cold startup',
+    sub: '9.21–10.11 ms via --smoke-startup',
+    labelKey: 'benchmarks.metrics.0.label',
+    subKey: 'benchmarks.metrics.0.sub',
+  },
+  {
+    value: '~55 MB',
+    label: 'Process RAM',
+    sub: 'Under 100k–1M row queries',
+    labelKey: 'benchmarks.metrics.1.label',
+    subKey: 'benchmarks.metrics.1.sub',
+  },
+  {
+    value: '24.43 ms',
+    label: '100k grid load',
+    sub: '0.432 ms per 10k scroll frame',
+    labelKey: 'benchmarks.metrics.2.label',
+    subKey: 'benchmarks.metrics.2.sub',
+  },
+  {
+    value: '15 ms',
+    label: '10M indexed query',
+    sub: 'SQLite stress_events_10m',
+    labelKey: 'benchmarks.metrics.3.label',
+    subKey: 'benchmarks.metrics.3.sub',
+  },
+];
+---
+
+<SectionBand as="section" id="benchmarks" bandClass="scroll-mt-[57px]">
+  <div class="px-4 py-10 sm:px-10 sm:py-12 border-b border-[var(--rule)] lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start">
+    <p
+      data-i18n="benchmarks.eyebrow"
+      class="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)] lg:col-span-3 lg:pt-1.5"
+    >
+      Measured Performance
+    </p>
+    <div class="mt-2.5 lg:mt-0 lg:col-span-9">
+      <h2
+        data-i18n="benchmarks.title"
+        class="section-heading text-[var(--foreground)] max-w-2xl"
+      >
+        Built for release speed.
+      </h2>
+      <p
+        data-i18n="benchmarks.subtitle"
+        class="mt-2.5 text-sm sm:text-[15px] leading-relaxed text-[var(--muted)] max-w-2xl"
+      >
+        Every number below is captured from release builds on Windows 11 x64 using --smoke-startup and the dataforge-e2e benchmark harness. Zero Electron shell, zero JVM warmup.
+      </p>
+    </div>
+  </div>
+
+  <!-- 4-Column Real Metrics .cell-grid -->
+  <div class="cell-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-[var(--rule)]">
+    {metrics.map((m) => (
+      <div class="cell-hover p-6 sm:p-8">
+        <div class="font-mono text-[clamp(1.65rem,2.6vw,2.1rem)] font-medium tracking-tight text-[var(--foreground)] tabular-nums">
+          {m.value}
+        </div>
+        <div
+          data-i18n={m.labelKey}
+          class="mt-2 text-sm font-medium text-[var(--accent)]"
+        >
+          {m.label}
+        </div>
+        <div
+          data-i18n={m.subKey}
+          class="mt-1 font-mono text-[11px] text-[var(--dim)]"
+        >
+          {m.sub}
+        </div>
+      </div>
+    ))}
+  </div>
+
+  <!-- Simple 2-Column Comparison .cell-grid: Native Rust / D3D11 vs Electron & JVM -->
+  <div class="cell-grid grid-cols-1 md:grid-cols-2">
+    <div class="p-6 sm:p-10">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h3
+          data-i18n="benchmarks.compare.nativeTitle"
+          class="text-base font-medium tracking-tight text-[var(--foreground)]"
+        >
+          DataForge (Rust / Direct3D 11)
+        </h3>
+        <span
+          data-i18n="benchmarks.compare.nativeBadge"
+          class="rounded-[6px] border border-[var(--accent-border)] bg-[var(--accent-tint)] px-2 py-0.5 font-mono text-[11px] text-[var(--accent)]"
+        >
+          Native Binary
+        </span>
+      </div>
+      <p
+        data-i18n="benchmarks.compare.nativeDesc"
+        class="mt-2.5 text-sm leading-relaxed text-[var(--muted)]"
+      >
+        Single static executable with HeroGPUI over Direct3D 11, DWM backdrop materials, and zero external runtime overhead.
+      </p>
+
+      <div class="mt-6 space-y-4 font-mono text-xs">
+        <div>
+          <div class="flex justify-between text-[var(--foreground)]">
+            <span data-i18n="benchmarks.metrics.0.label">Cold startup</span>
+            <span class="tabular-nums text-[var(--accent)]">~10 ms</span>
+          </div>
+          <div class="mt-1.5 h-1.5 w-full bg-[var(--bar-track)] overflow-hidden">
+            <div class="h-full w-[4%] bg-[var(--accent)]"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[var(--foreground)]">
+            <span data-i18n="benchmarks.metrics.1.label">Process RAM</span>
+            <span class="tabular-nums text-[var(--accent)]">~55 MB</span>
+          </div>
+          <div class="mt-1.5 h-1.5 w-full bg-[var(--bar-track)] overflow-hidden">
+            <div class="h-full w-[7%] bg-[var(--accent)]"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[var(--foreground)]">
+            <span data-i18n="benchmarks.metrics.2.label">100k grid load</span>
+            <span class="tabular-nums text-[var(--accent)]">24.43 ms</span>
+          </div>
+          <div class="mt-1.5 h-1.5 w-full bg-[var(--bar-track)] overflow-hidden">
+            <div class="h-full w-[7%] bg-[var(--accent)]"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-6 sm:p-10">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <h3
+          data-i18n="benchmarks.compare.legacyTitle"
+          class="text-base font-medium tracking-tight text-[var(--foreground)]"
+        >
+          Electron &amp; JVM Clients
+        </h3>
+        <span
+          data-i18n="benchmarks.compare.legacyBadge"
+          class="rounded-[6px] border border-[var(--rule)] bg-[var(--surface)] px-2 py-0.5 font-mono text-[11px] text-[var(--dim)]"
+        >
+          Runtime Overhead
+        </span>
+      </div>
+      <p
+        data-i18n="benchmarks.compare.legacyDesc"
+        class="mt-2.5 text-sm leading-relaxed text-[var(--muted)]"
+      >
+        Bundled Chromium or JVM heaps routinely consume ~480–890 MB RAM and ~1.8–3.4 s before the first query tab opens.
+      </p>
+
+      <div class="mt-6 space-y-4 font-mono text-xs">
+        <div>
+          <div class="flex justify-between text-[var(--muted)]">
+            <span data-i18n="benchmarks.metrics.0.label">Cold startup</span>
+            <span class="tabular-nums">~1,850–3,400 ms</span>
+          </div>
+          <div class="mt-1.5 h-1.5 w-full bg-[var(--bar-track)] overflow-hidden">
+            <div class="h-full w-full bg-[var(--bar-muted)]"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[var(--muted)]">
+            <span data-i18n="benchmarks.metrics.1.label">Process RAM</span>
+            <span class="tabular-nums">~480–890 MB</span>
+          </div>
+          <div class="mt-1.5 h-1.5 w-full bg-[var(--bar-track)] overflow-hidden">
+            <div class="h-full w-full bg-[var(--bar-muted)]"></div>
+          </div>
+        </div>
+        <div>
+          <div class="flex justify-between text-[var(--muted)]">
+            <span data-i18n="benchmarks.metrics.2.label">100k grid load</span>
+            <span class="tabular-nums">~310–420 ms</span>
+          </div>
+          <div class="mt-1.5 h-1.5 w-full bg-[var(--bar-track)] overflow-hidden">
+            <div class="h-full w-full bg-[var(--bar-muted)]"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</SectionBand>
