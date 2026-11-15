@@ -14,6 +14,7 @@ use crate::accessibility::KeyCommand;
 use crate::app::AppController;
 use dataforge_gfx::glyphs::EngineKind;
 use dataforge_state::connection_window::ConnectionWindowPhase;
+use dataforge_windows_platform::EnvironmentKind;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::meta::TableRef;
 
@@ -39,6 +40,15 @@ pub fn render_status_bar(
         .phase(ws.controller.active_workspace)
         .cloned();
     let active_result = ws.active_tab_result().cloned();
+    let env_accent = matches!(phase, Some(ConnectionWindowPhase::Connected))
+        .then(|| ws.controller.active_connection_id())
+        .flatten()
+        .map(|id| ws.controller.connection_environment(id))
+        .filter(|env| matches!(env, EnvironmentKind::Production | EnvironmentKind::Staging));
+    let (top_border_px, top_border_color) = match env_accent {
+        Some(env) => (2.0, super::library::env_color_hsla(env)),
+        None => (HAIRLINE_BORDER_PX, hairline_border_color(cx)),
+    };
 
     div()
         .id("workspace-status-bar")
@@ -51,8 +61,8 @@ pub fn render_status_bar(
         .px(px(10.0))
         .gap(px(10.0))
         .bg(muted_surface_bg(cx))
-        .border_t(px(HAIRLINE_BORDER_PX))
-        .border_color(hairline_border_color(cx))
+        .border_t(px(top_border_px))
+        .border_color(top_border_color)
         .text_size(px(11.5))
         .text_color(colors.muted)
         .child(render_left_status(ws, &phase, cx))
@@ -97,6 +107,14 @@ fn render_left_status(
         }
     };
     left = left.child(phase_node);
+
+    if controller.restoring_connection_id.is_some() {
+        left = left.child(render_phase_spinner(
+            "status-bar-restore-spin",
+            s.session_restoring_connection,
+            colors.accent.color,
+        ));
+    }
 
     let sub_view_label = match ws.workspace_pane.sub_view {
         WorkspaceSubView::SqlEditor => s.sql_editor_label,
@@ -231,6 +249,10 @@ fn render_connected_left_status(
         .gap(px(8.0))
         .min_w(px(0.0))
         .child(conn);
+    if let Some(conn_id) = controller.active_connection_id() {
+        let env = controller.connection_environment(conn_id);
+        row = row.child(super::library::render_env_badge(env, &controller.strings));
+    }
     if controller.active_safe_mode() != SafeModeLevel::Off {
         row = row.child(
             Chip::new()
