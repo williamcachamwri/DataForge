@@ -17,6 +17,7 @@ use crate::app::{AppController, ScreenMode};
 use crate::views::library::engine_from_driver_id;
 use dataforge_gfx::glyphs::EngineKind;
 use dataforge_state::connection_window::ConnectionWindowPhase;
+use dataforge_windows_platform::EnvironmentKind;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::meta::ObjectScope;
 
@@ -95,6 +96,29 @@ pub fn render_toolbar(
         })
         .child(render_left_actions(&ws.controller.strings, &state, cx))
         .child(render_right_controls(&ws.controller, &phase, window, cx));
+
+    let env_accent = state
+        .is_connected
+        .then(|| ws.controller.active_connection_id())
+        .flatten()
+        .map(|id| ws.controller.connection_environment(id))
+        .filter(|env| matches!(env, EnvironmentKind::Production | EnvironmentKind::Staging));
+
+    if let Some(env) = env_accent {
+        return div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .w_full()
+                    .h(px(2.0))
+                    .flex_shrink_0()
+                    .bg(super::library::env_color_hsla(env)),
+            )
+            .child(bar)
+            .into_any_element();
+    }
 
     bar.into_any_element()
 }
@@ -572,14 +596,19 @@ fn render_right_controls(
             .into_any_element(),
     };
 
-    div()
+    let mut right = div()
         .id("toolbar-right-cluster")
         .flex()
         .items_center()
         .gap(px(6.0))
-        .flex_shrink_0()
-        .child(status_node)
-        .into_any_element()
+        .flex_shrink_0();
+    if controller.restoring_connection_id.is_some() {
+        right = right.child(render_right_spinner_chip(
+            "toolbar-restore-spin",
+            s.session_restoring_connection,
+        ));
+    }
+    right.child(status_node).into_any_element()
 }
 
 fn render_right_spinner_chip(id: &'static str, label: &'static str) -> AnyElement {
@@ -604,6 +633,18 @@ fn render_connected_right_controls(
         .items_center()
         .gap(px(6.0))
         .flex_shrink_0();
+
+    if controller.restoring_connection_id.is_some() {
+        right = right.child(render_right_spinner_chip(
+            "toolbar-conn-restore-spin",
+            controller.strings.session_restoring_connection,
+        ));
+    }
+
+    if let Some(conn_id) = controller.active_connection_id() {
+        let env = controller.connection_environment(conn_id);
+        right = right.child(super::library::render_env_badge(env, &controller.strings));
+    }
 
     if controller.active_safe_mode() != SafeModeLevel::Off {
         right = right.child(
