@@ -215,11 +215,13 @@ fn render_top_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
         .gap(px(10.0))
         .child(
             div()
+                .min_w_0()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap(px(10.0))
                 .child(
-                    div().w(px(230.0)).child(
+                    div().w(px(210.0)).min_w(px(140.0)).child(
                         Select::new("qb-base-table-select", table_items)
                             .variant(FieldVariant::Secondary)
                             .placeholder(s.qb_add_table)
@@ -952,8 +954,9 @@ fn render_sql_preview_pane(
     let sql_for_copy = preview_sql.clone();
 
     div()
-        .w(px(380.0))
-        .flex_shrink_0()
+        .w(px(340.0))
+        .min_w(px(240.0))
+        .max_w(px(380.0))
         .min_h_0()
         .p(px(14.0))
         .flex()
@@ -962,8 +965,10 @@ fn render_sql_preview_pane(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .justify_between()
+                .gap(px(6.0))
                 .child(
                     Chip::new()
                         .variant(ChipVariant::Soft)
@@ -1009,7 +1014,7 @@ fn render_sql_preview_pane(
                 } else {
                     div()
                         .text_color(cx.colors().muted)
-                        .child("-- Select a table to compose SQL")
+                        .child(s.qb_select_table_hint)
                         .into_any_element()
                 }),
         )
@@ -1028,6 +1033,7 @@ fn render_sql_preview_actions(
     let sql_for_open = preview_sql;
     div()
         .flex()
+        .flex_wrap()
         .items_center()
         .gap(px(8.0))
         .child(
