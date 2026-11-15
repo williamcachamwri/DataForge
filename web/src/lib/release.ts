@@ -10,7 +10,7 @@ export interface ReleaseInfo {
 }
 
 export const GITHUB_OWNER = 'williamcachamwri';
-export const GITHUB_REPO = 'DataForge';
+export const GITHUB_REPO = 'TableMinus';
 export const REPO_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`;
 export const RELEASES_PAGE_URL = `${REPO_URL}/releases`;
 
@@ -27,8 +27,8 @@ function normalizeTag(raw: string): { version: string; tag: string } | null {
 
 function readCargoFallbackTag(): { version: string; tag: string } {
   const candidates = [
-    path.resolve(process.cwd(), '../crates/dataforge-windows-app/Cargo.toml'),
-    path.resolve(process.cwd(), 'crates/dataforge-windows-app/Cargo.toml'),
+    path.resolve(process.cwd(), '../crates/tableminus-windows-app/Cargo.toml'),
+    path.resolve(process.cwd(), 'crates/tableminus-windows-app/Cargo.toml'),
   ];
 
   for (const candidate of candidates) {
@@ -55,7 +55,7 @@ async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<
       signal: controller.signal,
       headers: {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'DataForge-Web-Build',
+        'User-Agent': 'TableMinus-Web-Build',
       },
     });
     if (!res.ok) return null;
