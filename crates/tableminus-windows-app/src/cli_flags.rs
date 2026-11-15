@@ -1,11 +1,11 @@
-//! Pre-GUI CLI flags (`--version`, `--help`, and `--smoke-startup`) for `dataforge.exe`.
+//! Pre-GUI CLI flags (`--version`, `--help`, and `--smoke-startup`) for `tableminus.exe`.
 
 use std::ffi::OsString;
 use std::io::Write;
 use std::time::Instant;
 
-use dataforge_services::REGISTERED_ENGINE_IDS;
-use dataforge_windows_platform::AppSettings;
+use tableminus_services::REGISTERED_ENGINE_IDS;
+use tableminus_windows_platform::AppSettings;
 
 use crate::app::AppController;
 
@@ -26,16 +26,16 @@ pub fn handle_app_flags(args: &[OsString], out: &mut dyn Write) -> AppFlagOutcom
 
     match first {
         "--version" | "-V" => {
-            let _ = writeln!(out, "dataforge {}", env!("CARGO_PKG_VERSION"));
+            let _ = writeln!(out, "tableminus {}", env!("CARGO_PKG_VERSION"));
             AppFlagOutcome::Exit(0)
         }
         "--help" | "-h" => {
             let _ = writeln!(
                 out,
-                "DataForge {} — Native Windows Database Workbench\n\n\
+                "TableMinus {} — Native Windows Database Workbench\n\n\
                  USAGE:\n    \
-                     dataforge.exe [OPTIONS] [FILE_OR_URL...]\n    \
-                     dataforge.exe <SUBCOMMAND>\n\n\
+                     tableminus.exe [OPTIONS] [FILE_OR_URL...]\n    \
+                     tableminus.exe <SUBCOMMAND>\n\n\
                  OPTIONS:\n    \
                      -h, --help             Print help information\n    \
                      -V, --version          Print version information\n    \
@@ -60,7 +60,7 @@ fn run_smoke_startup(out: &mut dyn Write) -> AppFlagOutcome {
     let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
     let _ = writeln!(
         out,
-        "dataforge smoke-startup ok: version={} drivers={}/{} locale={:?} elapsed_ms={elapsed_ms:.2}",
+        "tableminus smoke-startup ok: version={} drivers={}/{} locale={:?} elapsed_ms={elapsed_ms:.2}",
         env!("CARGO_PKG_VERSION"),
         driver_count,
         REGISTERED_ENGINE_IDS.len(),
