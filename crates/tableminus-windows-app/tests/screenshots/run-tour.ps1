@@ -58,9 +58,13 @@ c.commit()
 }
 
 $env:TABLEMINUS_SCREENSHOT_DIR = $OutDir
-$args = @()
-if ($Database -and (Test-Path $Database)) { $args += $Database }
-$proc = Start-Process -FilePath $Exe -ArgumentList $args -PassThru
+$tourArgs = @()
+if ($Database -and (Test-Path $Database)) { $tourArgs += $Database }
+$proc = if ($tourArgs.Count -gt 0) {
+    Start-Process -FilePath $Exe -ArgumentList $tourArgs -PassThru
+} else {
+    Start-Process -FilePath $Exe -PassThru
+}
 if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
     $proc.Kill()
     Write-Warning "Tour timed out after $TimeoutSeconds seconds; packing captures taken so far."
