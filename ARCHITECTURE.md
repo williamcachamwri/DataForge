@@ -1,15 +1,15 @@
-# DataForge Architecture
+# TableMinus Architecture
 
-DataForge is organized as a Cargo workspace combining the platform-agnostic TablePro database engine (`core/crates/*`) with six Windows-native crates (`crates/dataforge-*`).
+TableMinus is organized as a Cargo workspace combining the platform-agnostic TablePro database engine (`core/crates/*`) with six Windows-native crates (`crates/tableminus-*`).
 
 ## Crate Dependency Graph
 
 ```mermaid
 flowchart TD
-    APP[dataforge-windows-app] --> GFX[dataforge-gfx]
-    APP --> STATE[dataforge-state]
-    APP --> PLAT[dataforge-windows-platform]
-    APP --> SVC[dataforge-services]
+    APP[tableminus-windows-app] --> GFX[tableminus-gfx]
+    APP --> STATE[tableminus-state]
+    APP --> PLAT[tableminus-windows-platform]
+    APP --> SVC[tableminus-services]
 
     SVC --> STATE
     SVC --> PLAT
@@ -25,7 +25,7 @@ flowchart TD
     STATE --> CORE
     PLAT --> CORE
 
-    E2E[dataforge-e2e] --> STATE
+    E2E[tableminus-e2e] --> STATE
     E2E --> GFX
     E2E --> PLAT
     E2E --> CORE
@@ -35,19 +35,19 @@ flowchart TD
 
 | Crate | Responsibility |
 | --- | --- |
-| `dataforge-windows-platform` | Win32 Credential Manager, Named Pipe IPC, Registry theme/machine-ID, KnownFolders paths, foreign app discovery |
-| `dataforge-state` | Headless deterministic state machines: connection phases, data grid, SQL editor, tab strip, library, themes |
-| `dataforge-gfx` | Direct3D 11 + DXGI + Direct2D/DirectWrite GPU rendering, virtualized grid/editor renderers, 11 adaptive vector glyphs |
-| `dataforge-services` | `AppRuntime`, `SessionManager`, `DriverRegistry`, atomic export, import bridge, MCP host, AI assistant, diagnostics |
-| `dataforge-windows-app` | Win32 window shell, Per-Monitor DPI v2, UIA baseline, keyboard shortcuts, workbench views, modal dialogs |
-| `dataforge-e2e` | End-to-end integration tests across drivers, SQLite/DuckDB, foreign import, state/gfx/platform, startup, and containers |
+| `tableminus-windows-platform` | Win32 Credential Manager, Named Pipe IPC, Registry theme/machine-ID, KnownFolders paths, foreign app discovery |
+| `tableminus-state` | Headless deterministic state machines: connection phases, data grid, SQL editor, tab strip, library, themes |
+| `tableminus-gfx` | Direct3D 11 + DXGI + Direct2D/DirectWrite GPU rendering, virtualized grid/editor renderers, 11 adaptive vector glyphs |
+| `tableminus-services` | `AppRuntime`, `SessionManager`, `DriverRegistry`, atomic export, import bridge, MCP host, AI assistant, diagnostics |
+| `tableminus-windows-app` | Win32 window shell, Per-Monitor DPI v2, UIA baseline, keyboard shortcuts, workbench views, modal dialogs |
+| `tableminus-e2e` | End-to-end integration tests across drivers, SQLite/DuckDB, foreign import, state/gfx/platform, startup, and containers |
 
 ## Core vs. Windows Shell Separation
 
-1. **`core/crates/*` (TablePro Engine)**: Remains strictly cross-platform and unmodified by DataForge UI changes. Exposes `DatabaseDriver`, `Session`, `DriverConnector`, `SecretVault`, `StoragePaths`, `ResultSink`, `ForeignImport`, `AiAssistant`, and `McpServer`.
-2. **`crates/dataforge-state`**: Mirrors UI-facing state machines in pure Rust with zero Win32 or GPU dependencies, enabling deterministic unit testing of every transition without creating an HWND.
-3. **`crates/dataforge-windows-platform`**: Implements TablePro platform traits (`SecretVault` via `WindowsCredentialStore`, `ForeignHost` via `ForeignPlatform`, `CliHost` via `WindowsCliHost`) and Windows-specific IPC/Registry seams.
-4. **`crates/dataforge-gfx`**: Owns Direct3D 11 / DXGI / Direct2D / DirectWrite device resources and translates `dataforge-state` models + `ThemePalette` into GPU draw calls.
+1. **`core/crates/*` (TablePro Engine)**: Remains strictly cross-platform and unmodified by TableMinus UI changes. Exposes `DatabaseDriver`, `Session`, `DriverConnector`, `SecretVault`, `StoragePaths`, `ResultSink`, `ForeignImport`, `AiAssistant`, and `McpServer`.
+2. **`crates/tableminus-state`**: Mirrors UI-facing state machines in pure Rust with zero Win32 or GPU dependencies, enabling deterministic unit testing of every transition without creating an HWND.
+3. **`crates/tableminus-windows-platform`**: Implements TablePro platform traits (`SecretVault` via `WindowsCredentialStore`, `ForeignHost` via `ForeignPlatform`, `CliHost` via `WindowsCliHost`) and Windows-specific IPC/Registry seams.
+4. **`crates/tableminus-gfx`**: Owns Direct3D 11 / DXGI / Direct2D / DirectWrite device resources and translates `tableminus-state` models + `ThemePalette` into GPU draw calls.
 
 ## Runtime & Session Lifecycle
 
@@ -55,13 +55,13 @@ flowchart TD
 Win32 UI Thread (MainWindow / AppController)
    │  dispatches user intents & polls non-blocking updates
    ▼
-dataforge-services::AppRuntime (Tokio multi-thread runtime)
+tableminus-services::AppRuntime (Tokio multi-thread runtime)
    │  owns DriverRegistry (9 drivers), SessionManager, McpServerController
    ▼
 tablepro-session::Session (per-connection actor + HealthMonitor)
    │  DriverConnector -> InProcessSsh / TLS -> DatabaseDriver
    ▼
-ResultSink / RunEventAccumulator -> dataforge-state -> dataforge-gfx
+ResultSink / RunEventAccumulator -> tableminus-state -> tableminus-gfx
 ```
 
 - **Cancellation & Attempt Fencing**: Every connection attempt carries an `attempt_token` (`u64`) and `CancellationToken`; late completions from superseded attempts are discarded cleanly.
