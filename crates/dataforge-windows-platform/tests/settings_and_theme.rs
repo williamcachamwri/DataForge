@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use dataforge_windows_platform::{
     AppSettings, EditorFont, EnvironmentKind, FontSpec, McpSettings, ThemePreference,
-    WindowGeometry, WindowsTheme, apps_use_light_theme, detect_reduced_motion, detect_theme,
-    detect_theme_or_default, is_high_contrast, theme_from_flags,
+    WindowControlsStyle, WindowGeometry, WindowsTheme, apps_use_light_theme, detect_reduced_motion,
+    detect_theme, detect_theme_or_default, is_high_contrast, theme_from_flags,
 };
 use tempfile::TempDir;
 
@@ -27,6 +27,7 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
     let custom = AppSettings {
         theme: ThemePreference::Dark,
         window_backdrop: dataforge_windows_platform::WindowBackdropPreference::GaussianBlur,
+        window_controls: WindowControlsStyle::Windows,
         content_theme_id: Some("builtin.tokyo_night".to_owned()),
         syntax_palette_id: Some("builtin.dracula".to_owned()),
         editor_font: EditorFont {
@@ -96,6 +97,7 @@ fn settings_load_backcompat_defaults_missing_value_font() -> TestResult {
 
     let loaded = AppSettings::load(&path)?;
     assert_eq!(loaded.theme, ThemePreference::Dark);
+    assert_eq!(loaded.window_controls, WindowControlsStyle::MacOs);
     assert_eq!(loaded.editor_font.family, "Consolas");
     assert_eq!(loaded.value_font, FontSpec::default());
     assert!(!loaded.restore_session);
@@ -126,5 +128,46 @@ fn theme_detection_succeeds_and_flags_map_deterministically() -> TestResult {
     assert_eq!(theme_from_flags(false, None), WindowsTheme::Light);
     assert!(WindowsTheme::Dark.is_dark());
     assert!(WindowsTheme::HighContrast.is_high_contrast());
+    Ok(())
+}
+
+#[test]
+fn settings_window_controls_serialization_and_backcompat() -> TestResult {
+    let dir = TempDir::new()?;
+    let path = dir.path().join("settings.json");
+
+    // Default is MacOs and serializes as "mac_os".
+    let default_settings = AppSettings::default();
+    assert_eq!(default_settings.window_controls, WindowControlsStyle::MacOs);
+    default_settings.save_atomic(&path)?;
+    let raw_default = std::fs::read_to_string(&path)?;
+    assert!(raw_default.contains("\"window_controls\": \"mac_os\""));
+
+    // Windows variant serializes as "windows" and round-trips.
+    let windows_settings = AppSettings {
+        window_controls: WindowControlsStyle::Windows,
+        ..AppSettings::default()
+    };
+    windows_settings.save_atomic(&path)?;
+    let raw_windows = std::fs::read_to_string(&path)?;
+    assert!(raw_windows.contains("\"window_controls\": \"windows\""));
+    assert_eq!(
+        AppSettings::load(&path)?.window_controls,
+        WindowControlsStyle::Windows
+    );
+
+    // Explicit "mac_os" deserializes cleanly.
+    std::fs::write(&path, r#"{ "window_controls": "mac_os" }"#)?;
+    assert_eq!(
+        AppSettings::load(&path)?.window_controls,
+        WindowControlsStyle::MacOs
+    );
+
+    // Legacy settings without `window_controls` default to MacOs.
+    std::fs::write(&path, r#"{ "theme": "system", "restore_session": true }"#)?;
+    assert_eq!(
+        AppSettings::load(&path)?.window_controls,
+        WindowControlsStyle::MacOs
+    );
     Ok(())
 }
