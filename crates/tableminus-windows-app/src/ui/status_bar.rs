@@ -12,13 +12,13 @@ use herogpui::theme::ActiveTheme;
 
 use crate::accessibility::KeyCommand;
 use crate::app::AppController;
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_windows_platform::EnvironmentKind;
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_windows_platform::EnvironmentKind;
 use tablepro_core::SafeModeLevel;
 use tablepro_core::meta::TableRef;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{
@@ -28,9 +28,9 @@ use super::theme::{
 /// Renders the slim `26px` precision status footer driven by real controller and tab state.
 #[must_use]
 pub fn render_status_bar(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let numeric_font = value_gpui_font(&ws.controller.settings);
@@ -77,9 +77,9 @@ pub fn render_status_bar(
 }
 
 fn render_left_status(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     phase: &Option<ConnectionWindowPhase>,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let controller = &ws.controller;
     let colors = cx.colors().clone();
@@ -139,9 +139,9 @@ fn render_left_status(
 }
 
 fn append_connected_left_details(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     mut left: herogpui::gpui::Stateful<herogpui::gpui::Div>,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> herogpui::gpui::Stateful<herogpui::gpui::Div> {
     let controller = &ws.controller;
     let s = &controller.strings;
@@ -213,7 +213,7 @@ fn append_connected_left_details(
 
 fn render_connected_left_status(
     controller: &AppController,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let engine = detected_engine(controller);
@@ -307,11 +307,11 @@ fn render_phase_dot(
 }
 
 fn render_right_metrics(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     phase: &Option<ConnectionWindowPhase>,
     active_result: Option<&super::shell_state::QueryTabResultState>,
     numeric_font: herogpui::gpui::Font,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let controller = &ws.controller;
@@ -416,7 +416,7 @@ fn render_query_timing_metric(
     controller: &AppController,
     active_result: Option<&super::shell_state::QueryTabResultState>,
     numeric_font: herogpui::gpui::Font,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     let res = active_result?;
     if res.running {
@@ -462,7 +462,7 @@ fn render_pending_edits_chip(pending_edits: usize, controller: &AppController) -
 fn render_pagination_controls(
     controller: &AppController,
     numeric_font: herogpui::gpui::Font,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let page = controller.status_bar.current_page.max(1);
@@ -556,7 +556,7 @@ fn render_pagination_controls(
 fn render_cursor_and_vim(
     controller: &AppController,
     numeric_font: herogpui::gpui::Font,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let (line, col) = controller
@@ -604,7 +604,7 @@ fn format_table_ref(table: &TableRef) -> String {
 
 fn render_panel_quick_toggles(
     controller: &AppController,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let inspector_on = controller.layout_config.inspector_visible;
