@@ -5,13 +5,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_services::import_bridge::{SUPPORTED_IMPORT_APPS, parse_connection_url};
-use dataforge_state::library::{
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_services::import_bridge::{SUPPORTED_IMPORT_APPS, parse_connection_url};
+use tableminus_state::library::{
     ForeignImportReport, LibraryConnection, LibraryConnectionId, LibraryGroupId, LibraryOutlineRow,
     LibraryRowID, LibrarySection,
 };
-use dataforge_windows_platform::{EnvironmentKind, foreign_app_dirs};
+use tableminus_windows_platform::{EnvironmentKind, foreign_app_dirs};
 use herogpui::components::{
     Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant,
     Checkbox, Chip, ChipLabel, ChipVariant, Color, FieldVariant, Form, Icon, IconName, IconSize,
@@ -43,7 +43,7 @@ use tablepro_storage::{
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::ToastSeverity;
 use super::theme::{
@@ -127,9 +127,9 @@ pub struct LibraryScreenState {
 }
 
 impl LibraryScreenState {
-    /// Initializes library screen state owned by [`DataForgeWorkspace`].
+    /// Initializes library screen state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let defaults = ConnectionFormDraft::default();
         Self {
             url_draft: defaults.url_input.clone(),
@@ -272,9 +272,9 @@ impl LibraryScreenState {
 /// Renders the Connections Library and Connection Form screen.
 #[must_use]
 pub fn render_library_screen(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     hydrate_library_if_needed(ws);
     if ws.controller.connection_form != ws.library_ui.last_synced_draft {
@@ -300,7 +300,7 @@ pub fn render_library_screen(
         .into_any_element()
 }
 
-fn hydrate_library_if_needed(ws: &mut DataForgeWorkspace) {
+fn hydrate_library_if_needed(ws: &mut TableMinusWorkspace) {
     if ws.library_ui.hydrated_from_store {
         return;
     }
@@ -314,7 +314,7 @@ fn hydrate_library_if_needed(ws: &mut DataForgeWorkspace) {
     apply_connection_list_to_state(ws, &list);
 }
 
-fn apply_connection_list_to_state(ws: &mut DataForgeWorkspace, list: &ConnectionList) {
+fn apply_connection_list_to_state(ws: &mut TableMinusWorkspace, list: &ConnectionList) {
     let tag_names: HashMap<Uuid, String> = list
         .tags
         .iter()
@@ -365,14 +365,14 @@ fn apply_connection_list_to_state(ws: &mut DataForgeWorkspace, list: &Connection
     }
 }
 
-fn ensure_inventories_scanned(ws: &mut DataForgeWorkspace) {
+fn ensure_inventories_scanned(ws: &mut TableMinusWorkspace) {
     if ws.library_ui.inventories_scanned {
         return;
     }
     rescan_foreign_inventories(ws);
 }
 
-fn rescan_foreign_inventories(ws: &mut DataForgeWorkspace) {
+fn rescan_foreign_inventories(ws: &mut TableMinusWorkspace) {
     ws.library_ui.inventories_scanned = true;
     match foreign_app_dirs() {
         Ok(dirs) => {
@@ -390,7 +390,7 @@ fn rescan_foreign_inventories(ws: &mut DataForgeWorkspace) {
 fn render_library_rail_title_row(
     s: &Strings,
     total_count: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let count_pill = div()
         .flex_shrink_0()
@@ -438,8 +438,8 @@ fn render_library_rail_title_row(
 }
 
 fn render_library_rail(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let total_count = ws.controller.library.storage().connections.len();
@@ -500,8 +500,8 @@ fn render_library_rail(
 }
 
 fn render_library_rail_body(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     if ws.controller.library.storage().connections.is_empty() {
         let s = &ws.controller.strings;
@@ -563,7 +563,7 @@ fn render_library_rail_body(
         .into_any_element()
 }
 
-fn render_empty_library_state(s: &Strings, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_empty_library_state(s: &Strings, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
     let card = Card::new()
         .variant(CardVariant::Secondary)
@@ -634,8 +634,8 @@ fn render_empty_library_state(s: &Strings, cx: &mut Context<DataForgeWorkspace>)
 }
 
 fn render_no_matching_connections(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let has_query = !ws.controller.library.search_query.trim().is_empty();
@@ -675,7 +675,7 @@ fn render_no_matching_connections(
 }
 
 fn build_listbox_items(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
 ) -> (Vec<ListBoxItem>, HashMap<SharedString, ListRowMeta>) {
     let mut items = Vec::new();
     let mut meta_map = HashMap::new();
@@ -883,8 +883,8 @@ fn render_listbox_row(
 }
 
 fn render_detail_pane(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let body = if ws.library_ui.active_tab.as_ref() == TAB_IMPORT {
         render_foreign_importers_tab(ws, cx)
@@ -943,7 +943,7 @@ fn render_detail_header_actions(
     conn_id: &str,
     is_favorite: bool,
     delete_armed: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let star_id = conn_id.to_owned();
@@ -1001,8 +1001,8 @@ fn render_detail_header_actions(
 }
 
 fn render_detail_header(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -1095,8 +1095,8 @@ fn render_detail_header(
 }
 
 fn render_configure_tab(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let mut root = div().flex().flex_col().gap(px(16.0));
     if let Some(err) = ws.controller.connection_form.last_error.clone() {
@@ -1125,8 +1125,8 @@ fn render_configure_tab(
 }
 
 fn render_url_parser_card(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     Card::new()
@@ -1178,8 +1178,8 @@ fn render_url_parser_card(
 }
 
 fn render_identity_card(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
@@ -1241,8 +1241,8 @@ fn render_identity_card(
 }
 
 fn render_engine_select(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -1292,8 +1292,8 @@ fn render_engine_select(
 }
 
 fn render_color_select(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = ws.controller.strings.clone();
     let mut items = vec![PickerItem::new("0", s.no_tag_color)];
@@ -1352,8 +1352,8 @@ fn render_color_select(
 }
 
 fn render_environment_select(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = ws.controller.strings.clone();
     let items: Vec<PickerItem> = EnvironmentKind::ALL
@@ -1404,8 +1404,8 @@ fn render_environment_select(
 }
 
 fn render_file_endpoint_fields(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     div()
@@ -1444,8 +1444,8 @@ fn render_file_endpoint_fields(
 }
 
 fn render_host_port_row(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     div()
@@ -1485,8 +1485,8 @@ fn render_host_port_row(
 }
 
 fn render_credentials_row(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let mut password_input = Input::new(&ws.library_ui.password_input)
@@ -1525,8 +1525,8 @@ fn render_credentials_row(
 }
 
 fn render_network_endpoint_fields(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
@@ -1581,8 +1581,8 @@ fn render_network_endpoint_fields(
 }
 
 fn render_auth_mode_select(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let modes = [
@@ -1618,7 +1618,7 @@ fn render_auth_mode_select(
         .into_any_element()
 }
 
-fn render_safety_card(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_safety_card(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let is_network = !matches!(draft.engine, EngineKind::Sqlite | EngineKind::Duckdb);
@@ -1702,8 +1702,8 @@ fn render_safety_card(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
 }
 
 fn render_advanced_disclosures(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_network = !matches!(
         ws.controller.connection_form.engine,
@@ -1749,7 +1749,7 @@ fn render_accordion_section(
     is_expanded: bool,
     panel: AnyElement,
     show_separator: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let reduced_motion = is_reduced_motion(cx);
@@ -1820,7 +1820,7 @@ fn render_accordion_section(
     section.into_any_element()
 }
 
-fn render_tls_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_tls_panel(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let modes = [
         (TlsMode::Disable, s.tls_mode_disable),
@@ -1905,8 +1905,8 @@ fn render_tls_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
 }
 
 fn render_ssh_bastion_fields(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     div()
@@ -1962,7 +1962,7 @@ fn render_ssh_bastion_fields(
         .into_any_element()
 }
 
-fn render_ssh_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_ssh_panel(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let mut pass_input = Input::new(&ws.library_ui.ssh_passphrase_input)
@@ -2027,8 +2027,8 @@ fn render_ssh_panel(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace
 }
 
 fn render_options_panel(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     div()
@@ -2114,8 +2114,8 @@ fn render_options_panel(
 }
 
 fn render_test_alert(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     let s = &ws.controller.strings;
     if ws.library_ui.test_in_flight {
@@ -2168,7 +2168,7 @@ fn render_test_alert(
     Some(alert.into_any_element())
 }
 
-fn render_action_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_action_bar(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let testing = ws.library_ui.test_in_flight;
     let test_btn = Button::new("library-test-btn")
@@ -2233,8 +2233,8 @@ fn render_action_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
 }
 
 fn render_foreign_importers_tab(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let mut root = div().flex().flex_col().gap(px(14.0)).child(
@@ -2366,7 +2366,7 @@ fn render_importer_card(
     app: ForeignApp,
     inv: Inventory,
     s: &Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let (count_summary, pwd_note, btn_label, windows_supported, can_import) =
         importer_card_copy(app, &inv, s);
@@ -2450,7 +2450,7 @@ fn path_browse_row(
     button_id: &'static str,
     target: BrowseTarget,
     browse_label: &'static str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .flex()
@@ -2477,9 +2477,9 @@ fn path_browse_row(
 }
 
 fn select_saved_connection(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     conn_id: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if let Err(err) = ws.controller.hydrate_connection_form_from_library(conn_id) {
         let title = ws.controller.strings.failed_to_load_connection;
@@ -2520,9 +2520,9 @@ fn select_saved_connection(
 }
 
 fn probe_stored_secrets(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     conn_id: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Ok(uuid) = Uuid::parse_str(conn_id) else {
         return;
@@ -2532,7 +2532,7 @@ fn probe_stored_secrets(
     };
     let expected_id = conn_id.to_owned();
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let creds = services.credentials.clone();
             drop(services.runtime.spawn(async move {
@@ -2562,9 +2562,9 @@ fn probe_stored_secrets(
 }
 
 fn apply_engine_change(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     next_engine: EngineKind,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let prev_default = default_port_for_engine(ws.controller.connection_form.engine);
     let next_default = default_port_for_engine(next_engine);
@@ -2587,9 +2587,9 @@ fn apply_engine_change(
 }
 
 fn trigger_parse_url(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     raw_url: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let s = ws.controller.strings.clone();
     let trimmed = raw_url.trim();
@@ -2674,7 +2674,7 @@ fn trigger_parse_url(
     }
 }
 
-fn save_current_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn save_current_connection(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let conn_id = ws
         .library_ui
         .selected_connection_id
@@ -2715,7 +2715,7 @@ fn save_current_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
 }
 
 fn build_saved_connection_record(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     conn_id: &str,
     _is_favorite: bool,
     cx: &App,
@@ -2811,10 +2811,10 @@ fn build_saved_connection_record(
 }
 
 fn apply_saved_secrets_outcome(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     conn_id_str: &str,
     outcome: Result<(), String>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let s = ws.controller.strings.clone();
     match outcome {
@@ -2855,10 +2855,10 @@ fn apply_saved_secrets_outcome(
 }
 
 fn persist_saved_connection_and_secrets(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     saved: SavedConnection,
     is_favorite: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let s = ws.controller.strings.clone();
     let Some(services) = ws.controller.services.clone() else {
@@ -2896,7 +2896,7 @@ fn persist_saved_connection_and_secrets(
     let db_label = saved.secret_target(SecretKind::DatabasePassword);
     let ssh_label = saved.secret_target(SecretKind::SshPassphrase);
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let creds = services.credentials.clone();
             drop(services.runtime.spawn(async move {
@@ -2939,9 +2939,9 @@ fn persist_saved_connection_and_secrets(
 }
 
 fn toggle_saved_favorite(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     conn_id: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let now_fav = ws.controller.toggle_library_favorite(conn_id);
     if let Some(services) = ws.controller.services.as_ref()
@@ -2959,9 +2959,9 @@ fn toggle_saved_favorite(
 }
 
 fn handle_delete_press(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     conn_id: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if ws.library_ui.delete_armed_for.as_deref() != Some(conn_id) {
         ws.library_ui.delete_armed_for = Some(conn_id.to_owned());
@@ -3003,7 +3003,7 @@ fn handle_delete_press(
     cx.notify();
 }
 
-fn trigger_test_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn trigger_test_connection(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let s = &ws.controller.strings;
     let Some(services) = ws.controller.services.clone() else {
         ws.library_ui.test_outcome = Some(Err(s.service_runtime_not_init.to_owned()));
@@ -3045,7 +3045,7 @@ fn trigger_test_connection(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
     };
 
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let svc = services.clone();
             drop(services.runtime.spawn(async move {
@@ -3157,7 +3157,7 @@ async fn run_test_connection_async(
     })
 }
 
-fn trigger_connect_current(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn trigger_connect_current(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let typed_password = ws.library_ui.password_input.read(cx).value().to_owned();
     let saved_uuid = ws
         .library_ui
@@ -3181,7 +3181,7 @@ fn trigger_connect_current(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
     };
 
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let creds = services.credentials.clone();
             drop(services.runtime.spawn(async move {
@@ -3203,9 +3203,9 @@ fn trigger_connect_current(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
 }
 
 fn start_connect_and_switch(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     password: Option<SecretString>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.connection_form.last_error = None;
     match ws.controller.connect_from_draft_async(password) {
@@ -3228,9 +3228,9 @@ fn start_connect_and_switch(
 }
 
 fn connect_saved_connection_blocking(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     conn_id: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match ws.controller.connect_library_item_blocking(conn_id) {
         Ok(()) => {
@@ -3250,7 +3250,7 @@ fn connect_saved_connection_blocking(
     }
 }
 
-fn trigger_open_local_file(prompt: &'static str, cx: &mut Context<DataForgeWorkspace>) {
+fn trigger_open_local_file(prompt: &'static str, cx: &mut Context<TableMinusWorkspace>) {
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
         directories: false,
@@ -3259,7 +3259,7 @@ fn trigger_open_local_file(prompt: &'static str, cx: &mut Context<DataForgeWorks
     });
 
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(paths))) = rx.await else {
                 return;
             };
@@ -3299,9 +3299,9 @@ enum BrowseTarget {
 }
 
 fn trigger_browse_path(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     target: BrowseTarget,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let s = &ws.controller.strings;
     let prompt = match target {
@@ -3319,7 +3319,7 @@ fn trigger_browse_path(
     });
 
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(paths))) = rx.await else {
                 return;
             };
@@ -3357,9 +3357,9 @@ fn trigger_browse_path(
 }
 
 fn trigger_foreign_import(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     app: ForeignApp,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if app.picked_file_extensions().is_none() {
         run_foreign_import(ws, app, None, cx);
@@ -3378,7 +3378,7 @@ fn trigger_foreign_import(
         prompt: Some(prompt.into()),
     });
     cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(paths))) = rx.await else {
                 return;
             };
@@ -3394,10 +3394,10 @@ fn trigger_foreign_import(
 }
 
 fn run_foreign_import(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     app: ForeignApp,
     picked_file: Option<PathBuf>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let s = ws.controller.strings.clone();
     let existing_ids: HashSet<LibraryConnectionId> = ws
@@ -3445,7 +3445,7 @@ fn run_foreign_import(
 }
 
 fn persist_newly_imported_connections(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     previous_ids: &HashSet<LibraryConnectionId>,
 ) {
     let Some(services) = ws.controller.services.as_ref() else {
