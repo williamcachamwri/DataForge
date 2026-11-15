@@ -4,16 +4,16 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use dataforge_services::import_bridge::{
+use tableminus_services::import_bridge::{
     SUPPORTED_IMPORT_APPS, foreign_inventory, import_from_app, import_from_app_with_dirs,
     parse_connection_url,
 };
-use dataforge_state::connection_window::AttemptToken;
-use dataforge_state::library::{
+use tableminus_state::connection_window::AttemptToken;
+use tableminus_state::library::{
     ForeignImportReport, LibraryConnection, LibraryConnectionId, LibraryGroup, LibraryGroupId,
     connection_from_url,
 };
-use dataforge_windows_platform::ForeignAppDirs;
+use tableminus_windows_platform::ForeignAppDirs;
 use secrecy::SecretString;
 use tablepro_core::credentials::{SecretKind, SecretLookup, SecretVault};
 use tablepro_core::{AuthMode as CoreAuthMode, TlsMode as CoreTlsMode};
@@ -92,7 +92,7 @@ impl AppController {
             .drop_connection(&LibraryConnectionId(id.to_owned()), group, target_index)
     }
 
-    /// Parses a connection URL via `dataforge_services::import_bridge::parse_connection_url`
+    /// Parses a connection URL via `tableminus_services::import_bridge::parse_connection_url`
     /// and populates `connection_form`.
     pub fn parse_and_apply_connection_url(&mut self, raw_url: &str) -> Result<LibraryConnection> {
         let parsed = parse_connection_url(raw_url)?;
