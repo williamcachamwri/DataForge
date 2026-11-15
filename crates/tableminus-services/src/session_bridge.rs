@@ -1,14 +1,14 @@
-//! Session manager bridging `dataforge-state` models to `tablepro_session::Session`.
+//! Session manager bridging `tableminus-state` models to `tablepro_session::Session`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use dataforge_state::connection_window::{
+use tableminus_state::connection_window::{
     AttemptToken, ConnectionUnavailableView, ConnectionWindowPhaseMachine, WorkspaceId,
 };
-use dataforge_state::data_grid::{DataGridModel, RowID, SortDirection};
-use dataforge_state::tabs::TabStripModel;
+use tableminus_state::data_grid::{DataGridModel, RowID, SortDirection};
+use tableminus_state::tabs::TabStripModel;
 use tablepro_core::browse::{
     BrowsePage, PageRequest, PageSpec, RowKeyLayout, SortKey, build_count, read_page, split_page,
 };
@@ -402,7 +402,7 @@ impl SessionManager {
             .map_err(|err| ServiceError::Session(err.to_string()))
     }
 
-    /// Commits pending [`TableEdits`](dataforge_state::data_grid::TableEdits) in `grid` to the database.
+    /// Commits pending [`TableEdits`](tableminus_state::data_grid::TableEdits) in `grid` to the database.
     ///
     /// # Errors
     ///
@@ -465,7 +465,7 @@ impl SessionManager {
         Ok(report)
     }
 
-    /// Discards all uncommitted [`TableEdits`](dataforge_state::data_grid::TableEdits) in `grid`.
+    /// Discards all uncommitted [`TableEdits`](tableminus_state::data_grid::TableEdits) in `grid`.
     pub fn rollback_table_edits(grid: &mut DataGridModel) {
         grid.edits.rollback();
     }
@@ -633,9 +633,9 @@ impl BrowseOperationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dataforge_state::connection_window::ConnectionWindowPhase;
-    use dataforge_state::data_grid::{DataGridColumnID, DataGridLayoutScope};
-    use dataforge_state::tabs::TabKind;
+    use tableminus_state::connection_window::ConnectionWindowPhase;
+    use tableminus_state::data_grid::{DataGridColumnID, DataGridLayoutScope};
+    use tableminus_state::tabs::TabKind;
     use tablepro_core::column::{ColumnDefault, ColumnType, ResultColumn};
 
     #[tokio::test]
@@ -676,7 +676,7 @@ mod tests {
 
         let strip = manager.tab_strip_mut(ws);
         let _tab = strip.open_query_tab(
-            dataforge_state::tabs::TabConnectionId("local".to_owned()),
+            tableminus_state::tabs::TabConnectionId("local".to_owned()),
             Some("SELECT 1"),
         );
         assert_eq!(strip.tabs().len(), 1);
