@@ -16,14 +16,14 @@ interface ReleaseCache {
   ts: number;
 }
 
-const THEME_STORAGE_KEY = 'dataforge-theme';
-const LOCALE_STORAGE_KEY = 'dataforge-locale';
-const RELEASE_CACHE_KEY = 'dataforge-release-cache';
+const THEME_STORAGE_KEY = 'tableminus-theme';
+const LOCALE_STORAGE_KEY = 'tableminus-locale';
+const RELEASE_CACHE_KEY = 'tableminus-release-cache';
 const RELEASE_CACHE_TTL_MS = 10 * 60 * 1000;
 const GITHUB_RELEASES_API =
-  'https://api.github.com/repos/williamcachamwri/DataForge/releases/latest';
+  'https://api.github.com/repos/williamcachamwri/TableMinus/releases/latest';
 const GITHUB_TAGS_API =
-  'https://api.github.com/repos/williamcachamwri/DataForge/tags?per_page=1';
+  'https://api.github.com/repos/williamcachamwri/TableMinus/tags?per_page=1';
 const INDICATOR_BASE_W = 120;
 
 let currentLocale: Locale = DEFAULT_LOCALE;
@@ -287,7 +287,7 @@ async function syncLiveReleaseInfo(): Promise<void> {
       nextTag = tag;
       nextUrl =
         latest.html_url ||
-        `https://github.com/williamcachamwri/DataForge/releases/tag/${encodeURIComponent(tag)}`;
+        `https://github.com/williamcachamwri/TableMinus/releases/tag/${encodeURIComponent(tag)}`;
     }
   }
 
@@ -297,7 +297,7 @@ async function syncLiveReleaseInfo(): Promise<void> {
       const tag = normalizeTag(tags[0].name);
       if (tag) {
         nextTag = tag;
-        nextUrl = `https://github.com/williamcachamwri/DataForge/releases/tag/${encodeURIComponent(tag)}`;
+        nextUrl = `https://github.com/williamcachamwri/TableMinus/releases/tag/${encodeURIComponent(tag)}`;
       }
     }
   }
@@ -393,7 +393,7 @@ function initInstallSwitcherAndCopy(): void {
   }
 }
 
-export function initDataForgeMotion(): void {
+export function initTableMinusMotion(): void {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   initThemeToggle();
