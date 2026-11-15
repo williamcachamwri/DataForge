@@ -1,0 +1,232 @@
+---
+import { ChevronDown, Download, Github, Globe, Menu, Moon, Sun, X } from 'lucide-astro';
+import { LOCALES } from '../i18n/translations';
+import type { ReleaseInfo } from '../lib/release';
+
+interface Props {
+  release: ReleaseInfo;
+}
+
+const { release } = Astro.props;
+---
+
+<header class="sticky top-0 z-40 w-full border-b border-[var(--rule)] bg-[var(--nav-bg)] backdrop-blur-md">
+  <div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 border-x border-[var(--rule)] px-4 sm:px-6">
+    <!-- Brand + Version Pill (shrink-0 so it never collides with nav links) -->
+    <a
+      href="#"
+      class="flex shrink-0 items-center gap-2.5 text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded-[6px]"
+    >
+      <img
+        src="/images/dataforge_logo.png"
+        alt="DataForge logo"
+        width="24"
+        height="24"
+        class="h-6 w-6 shrink-0 rounded-[5px]"
+      />
+      <span class="text-sm font-semibold tracking-tight whitespace-nowrap">DataForge</span>
+      <span
+        data-release-version
+        class="hidden sm:inline-flex shrink-0 items-center rounded-[6px] border border-[var(--rule)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[11px] font-medium text-[var(--muted)] tabular-nums"
+      >
+        {release.tag}
+      </span>
+    </a>
+
+    <!-- Primary Desktop Navigation -->
+    <nav aria-label="Primary" class="hidden lg:flex shrink-0 items-center gap-6 text-[13px] font-medium">
+      <a href="#workbench" data-i18n="nav.workbench" class="nav-link whitespace-nowrap">Workbench</a>
+      <a href="#drivers" data-i18n="nav.drivers" class="nav-link whitespace-nowrap">Drivers</a>
+      <a href="#benchmarks" data-i18n="nav.benchmarks" class="nav-link whitespace-nowrap">Benchmarks</a>
+      <a href="#cli" data-i18n="nav.cli" class="nav-link whitespace-nowrap">CLI &amp; Shortcuts</a>
+    </nav>
+
+    <!-- Right Controls -->
+    <div class="flex shrink-0 items-center gap-2">
+      <!-- Desktop / Tablet 6-Locale Switcher -->
+      <div class="relative hidden md:block" data-lang-menu>
+        <button
+          type="button"
+          id="lang-toggle"
+          aria-haspopup="listbox"
+          aria-expanded="false"
+          aria-label="Select language"
+          class="icon-btn inline-flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-medium cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+        >
+          <Globe class="h-3.5 w-3.5 shrink-0" />
+          <span id="lang-current-short" class="font-mono text-[11px] tracking-tight">EN</span>
+          <ChevronDown class="h-3 w-3 opacity-70 transition-transform duration-150" data-lang-chevron />
+        </button>
+
+        <div
+          id="lang-dropdown"
+          role="listbox"
+          aria-label="Language"
+          hidden
+          class="absolute right-0 mt-1.5 w-44 rounded-[6px] border border-[var(--rule-strong)] bg-[var(--surface)] p-1 shadow-xl z-50"
+        >
+          {LOCALES.map((loc) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={loc.code === 'en' ? 'true' : 'false'}
+              data-locale-option={loc.code}
+              class="lang-option flex w-full items-center justify-between rounded-[4px] px-2.5 py-2 text-left text-xs cursor-pointer"
+            >
+              <span class="font-medium text-[var(--foreground)]">{loc.nativeName}</span>
+              <span class="font-mono text-[10px] text-[var(--dim)]">{loc.short}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <!-- Dark / Light Theme Toggle -->
+      <button
+        type="button"
+        id="theme-toggle"
+        aria-label="Toggle color theme"
+        title="Toggle color theme"
+        class="icon-btn hidden md:inline-flex h-9 w-9 items-center justify-center rounded-[6px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      >
+        <Sun class="theme-icon-sun h-4 w-4" />
+        <Moon class="theme-icon-moon h-4 w-4" />
+      </button>
+
+      <!-- GitHub Icon Link -->
+      <a
+        href={release.repoUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="GitHub Repository"
+        title="GitHub Repository"
+        class="icon-btn hidden sm:inline-flex h-9 w-9 items-center justify-center rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      >
+        <Github class="h-4 w-4" />
+      </a>
+
+      <!-- Download CTA -->
+      <a
+        href={release.releaseUrl}
+        data-release-link
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-primary inline-flex min-h-[40px] md:min-h-[36px] items-center gap-1.5 rounded-[6px] px-3 py-1.5 text-xs font-medium tracking-tight whitespace-nowrap"
+      >
+        <Download class="h-3.5 w-3.5 shrink-0" />
+        <span>
+          <span data-i18n="nav.download">Download</span>
+          <span data-release-version class="hidden sm:inline font-mono">{release.tag}</span>
+        </span>
+      </a>
+
+      <!-- Mobile / Tablet Slide-Down Menu Trigger -->
+      <button
+        type="button"
+        id="mobile-menu-toggle"
+        aria-controls="mobile-menu-panel"
+        aria-expanded="false"
+        aria-label="Open navigation menu"
+        data-i18n-aria-label="nav.menuOpen"
+        class="icon-btn lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-[6px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+      >
+        <Menu id="mobile-menu-icon-open" class="h-4 w-4" />
+        <X id="mobile-menu-icon-close" class="h-4 w-4 hidden" />
+      </button>
+    </div>
+  </div>
+
+  <!-- Clean Slide-Down Mobile Menu inside Continuous Vertical Rails -->
+  <div
+    id="mobile-menu-panel"
+    hidden
+    class="lg:hidden border-t border-[var(--rule)] bg-[var(--background)]"
+  >
+    <div class="mx-auto max-w-6xl border-x border-[var(--rule)]">
+      <nav aria-label="Mobile" class="divide-y divide-[var(--rule)]">
+        <a
+          href="#workbench"
+          data-mobile-nav-link
+          data-i18n="nav.workbench"
+          class="nav-link flex min-h-[46px] items-center justify-between px-4 sm:px-6 text-sm font-medium"
+        >
+          Workbench
+        </a>
+        <a
+          href="#drivers"
+          data-mobile-nav-link
+          data-i18n="nav.drivers"
+          class="nav-link flex min-h-[46px] items-center justify-between px-4 sm:px-6 text-sm font-medium"
+        >
+          Drivers
+        </a>
+        <a
+          href="#benchmarks"
+          data-mobile-nav-link
+          data-i18n="nav.benchmarks"
+          class="nav-link flex min-h-[46px] items-center justify-between px-4 sm:px-6 text-sm font-medium"
+        >
+          Benchmarks
+        </a>
+        <a
+          href="#cli"
+          data-mobile-nav-link
+          data-i18n="nav.cli"
+          class="nav-link flex min-h-[46px] items-center justify-between px-4 sm:px-6 text-sm font-medium"
+        >
+          CLI &amp; Shortcuts
+        </a>
+        <a
+          href={release.repoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-mobile-nav-link
+          class="nav-link flex min-h-[46px] items-center justify-between px-4 sm:px-6 text-sm font-medium"
+        >
+          <span class="inline-flex items-center gap-2">
+            <Github class="h-4 w-4" />
+            <span data-i18n="nav.github">GitHub</span>
+          </span>
+          <span class="font-mono text-[11px] text-[var(--dim)]">↗</span>
+        </a>
+      </nav>
+
+      <div class="border-t border-[var(--rule)] px-4 sm:px-6 py-4 space-y-4">
+        <!-- 6-Locale Switcher -->
+        <div class="grid grid-cols-3 sm:grid-cols-6 gap-1.5" role="listbox" aria-label="Language">
+          {LOCALES.map((loc) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={loc.code === 'en' ? 'true' : 'false'}
+              data-locale-option={loc.code}
+              class="df-seg-btn flex min-h-[40px] flex-col items-center justify-center rounded-[6px] border border-[var(--rule)] px-2 py-1 text-center cursor-pointer"
+            >
+              <span class="font-mono text-[11px] font-semibold text-[var(--foreground)]">{loc.short}</span>
+              <span class="text-[10px] text-[var(--dim)] truncate max-w-full">{loc.nativeName}</span>
+            </button>
+          ))}
+        </div>
+
+        <!-- Theme Toggle -->
+        <div class="flex items-center justify-between gap-3">
+          <span
+            data-i18n="nav.appearance"
+            class="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--dim)]"
+          >
+            Appearance
+          </span>
+          <button
+            type="button"
+            id="mobile-theme-toggle"
+            aria-label="Toggle color theme"
+            class="icon-btn inline-flex min-h-[40px] items-center gap-2 rounded-[6px] px-3 text-xs font-medium cursor-pointer"
+          >
+            <Sun class="theme-icon-sun h-4 w-4" />
+            <Moon class="theme-icon-moon h-4 w-4" />
+            <span id="mobile-theme-label" class="font-mono text-[11px]">Dark mode</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
