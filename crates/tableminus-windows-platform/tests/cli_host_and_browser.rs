@@ -1,6 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 
-use dataforge_windows_platform::{
+use tableminus_windows_platform::{
     AppSettings, McpSettings, SingleInstanceLock, WindowsCliHost, WindowsCredentialStore,
     validate_http_url,
 };
@@ -17,12 +17,12 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 #[tokio::test]
 async fn cli_host_reads_settings_runtime_files_and_credential_token() -> TestResult {
     let dir = TempDir::new()?;
-    let paths = StoragePaths::under(dir.path(), "dataforge", "app.dataforge.DataForge");
+    let paths = StoragePaths::under(dir.path(), "tableminus", "app.tableminus.TableMinus");
     std::fs::create_dir_all(&paths.config)?;
     std::fs::create_dir_all(&paths.runtime)?;
 
-    let prefix = format!("DataForgeTest-{}", Uuid::new_v4());
-    let mutex_name = format!(r"Local\DataForge-HostTest-{}", Uuid::new_v4());
+    let prefix = format!("TableMinusTest-{}", Uuid::new_v4());
+    let mutex_name = format!(r"Local\TableMinus-HostTest-{}", Uuid::new_v4());
     let host = WindowsCliHost::new(paths.clone())
         .with_app_version("1.2.3-test")
         .with_mutex_name(&mutex_name)
@@ -74,7 +74,7 @@ async fn cli_host_reads_settings_runtime_files_and_credential_token() -> TestRes
 #[test]
 fn cli_host_verify_peer_accepts_own_loopback_connection_and_rejects_foreign() -> TestResult {
     let dir = TempDir::new()?;
-    let paths = StoragePaths::under(dir.path(), "dataforge", "app.dataforge.DataForge");
+    let paths = StoragePaths::under(dir.path(), "tableminus", "app.tableminus.TableMinus");
     let host = WindowsCliHost::new(paths);
 
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
@@ -98,7 +98,7 @@ fn cli_host_verify_peer_accepts_own_loopback_connection_and_rejects_foreign() ->
 
 #[test]
 fn validate_http_url_allows_http_and_https_only() -> TestResult {
-    validate_http_url(&Url::parse("https://dataforge.example/oauth/callback")?)?;
+    validate_http_url(&Url::parse("https://tableminus.example/oauth/callback")?)?;
     validate_http_url(&Url::parse("http://127.0.0.1:45871/auth")?)?;
 
     assert!(validate_http_url(&Url::parse("file:///C:/Windows/System32/calc.exe")?).is_err());
