@@ -5,13 +5,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tableminus_gfx::glyphs::EngineKind;
-use tableminus_services::import_bridge::{SUPPORTED_IMPORT_APPS, parse_connection_url};
-use tableminus_state::library::{
-    ForeignImportReport, LibraryConnection, LibraryConnectionId, LibraryGroupId, LibraryOutlineRow,
-    LibraryRowID, LibrarySection,
-};
-use tableminus_windows_platform::{EnvironmentKind, foreign_app_dirs};
 use herogpui::components::{
     Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, CardVariant,
     Checkbox, Chip, ChipLabel, ChipVariant, Color, FieldVariant, Form, Icon, IconName, IconSize,
@@ -29,6 +22,13 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 use secrecy::{ExposeSecret, SecretString};
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_services::import_bridge::{SUPPORTED_IMPORT_APPS, parse_connection_url};
+use tableminus_state::library::{
+    ForeignImportReport, LibraryConnection, LibraryConnectionId, LibraryGroupId, LibraryOutlineRow,
+    LibraryRowID, LibrarySection,
+};
+use tableminus_windows_platform::{EnvironmentKind, foreign_app_dirs};
 use tablepro_core::credentials::{CredentialInteraction, SecretKind, SecretLookup, SecretVault};
 use tablepro_core::{
     AiPolicy, AuthMode as CoreAuthMode, ClientIdentity, ExternalAccess, NetworkOptions,
@@ -1618,7 +1618,10 @@ fn render_auth_mode_select(
         .into_any_element()
 }
 
-fn render_safety_card(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_safety_card(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let draft = &ws.controller.connection_form;
     let is_network = !matches!(draft.engine, EngineKind::Sqlite | EngineKind::Duckdb);
@@ -2168,7 +2171,10 @@ fn render_test_alert(
     Some(alert.into_any_element())
 }
 
-fn render_action_bar(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_action_bar(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let testing = ws.library_ui.test_in_flight;
     let test_btn = Button::new("library-test-btn")
