@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Bumps DataForge workspace crate versions, updates Cargo.lock and CHANGELOG.md,
+    Bumps TableMinus workspace crate versions, updates Cargo.lock and CHANGELOG.md,
     and optionally creates a release commit, annotated tag, and git push.
 
 .EXAMPLE
@@ -30,7 +30,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$RepoUrl = 'https://github.com/williamcachamwri/DataForge'
+$RepoUrl = 'https://github.com/williamcachamwri/TableMinus'
 $SemVerRegex = '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$'
 
 function Write-Utf8NoBom {
@@ -284,10 +284,10 @@ try {
         }
     }
 
-    $appCargoPath = Join-Path $repoRoot 'crates\dataforge-windows-app\Cargo.toml'
+    $appCargoPath = Join-Path $repoRoot 'crates\tableminus-windows-app\Cargo.toml'
     $currentVersion = Get-PackageVersion -CargoTomlPath $appCargoPath
     if ($currentVersion -notmatch $SemVerRegex) {
-        throw "Current version '$currentVersion' in crates/dataforge-windows-app/Cargo.toml is not valid SemVer."
+        throw "Current version '$currentVersion' in crates/tableminus-windows-app/Cargo.toml is not valid SemVer."
     }
 
     if ($PSCmdlet.ParameterSetName -eq 'Version') {
@@ -323,14 +323,14 @@ try {
 
     $crateCargoFiles = @(
         Get-ChildItem -Path (Join-Path $repoRoot 'crates') -Filter 'Cargo.toml' -File -Recurse |
-            Where-Object { $_.Directory.Name -like 'dataforge-*' } |
+            Where-Object { $_.Directory.Name -like 'tableminus-*' } |
             Sort-Object FullName
     )
     if ($crateCargoFiles.Count -eq 0) {
-        throw 'No crates/dataforge-*/Cargo.toml files found.'
+        throw 'No crates/tableminus-*/Cargo.toml files found.'
     }
 
-    Write-Host "Bumping DataForge version: $currentVersion -> $newVersion"
+    Write-Host "Bumping TableMinus version: $currentVersion -> $newVersion"
     foreach ($file in $crateCargoFiles) {
         $rel = $file.FullName.Substring($repoRoot.Length + 1)
         $crateVer = Get-PackageVersion -CargoTomlPath $file.FullName
