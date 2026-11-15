@@ -1,9 +1,5 @@
 //! Visual Schema & DDL Designer for creating and altering tables, indexes, and foreign keys.
 
-use tableminus_services::{
-    AlterTableOp, ColumnSpec, CreateTableSpec, DatabaseEngine, ForeignKeySpec, IndexSpec,
-    build_alter_table_sql, build_create_table_sql, split_sql_script_statements,
-};
 use herogpui::components::{
     Alert, Button, Checkbox, Chip, ChipLabel, ChipVariant, FieldVariant, Icon, IconName, IconSize,
     Input, InputState, PickerItem, Select, Separator, Switch, TabItem, Tabs, TabsSize, TabsVariant,
@@ -16,6 +12,10 @@ use herogpui::gpui::{
     Styled, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::{
+    AlterTableOp, ColumnSpec, CreateTableSpec, DatabaseEngine, ForeignKeySpec, IndexSpec,
+    build_alter_table_sql, build_create_table_sql, split_sql_script_statements,
+};
 use tablepro_core::column::ColumnDefault;
 use tablepro_core::ddl::TableDefinition;
 use tablepro_core::meta::{ObjectInfo, ObjectKind};
@@ -1019,7 +1019,10 @@ fn render_index_row(
         .into_any_element()
 }
 
-fn render_fks_section(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+fn render_fks_section(
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
     let mut section = div().flex().flex_col().gap(px(8.0)).child(
@@ -1264,7 +1267,10 @@ fn switch_designer_mode(
     }
 }
 
-fn maybe_auto_load_alter_target(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
+fn maybe_auto_load_alter_target(
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
     if ws.schema_designer_ui.mode != SchemaDesignerMode::AlterTable {
         return;
     }
