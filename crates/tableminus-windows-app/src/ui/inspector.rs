@@ -9,9 +9,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use dataforge_gfx::grid_renderer::{CellKind, RowState};
-use dataforge_state::connection_window::WorkspaceId;
-use dataforge_state::data_grid::RowID;
+use tableminus_gfx::grid_renderer::{CellKind, RowState};
+use tableminus_state::connection_window::WorkspaceId;
+use tableminus_state::data_grid::RowID;
 use herogpui::components::anim::{Curve, Edge, Motion, entering_from};
 use herogpui::components::{
     Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input, InputState, Scrollbar,
@@ -36,7 +36,7 @@ use tablepro_core::meta::TableRef;
 use tablepro_core::value::Value;
 use tablepro_session::operation::{OperationError, OperationKind};
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::{push_error_toast, push_success_toast};
 use super::theme::{
     COMPACT_GAP_PX, CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, drawer_duration,
@@ -237,9 +237,9 @@ pub struct InspectorViewState {
 }
 
 impl InspectorViewState {
-    /// Initializes inspector drawer state owned by [`DataForgeWorkspace`].
+    /// Initializes inspector drawer state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let editor_input = cx.new(|cx| InputState::new(cx));
         let json_node_input = cx.new(|cx| InputState::new(cx));
         Self {
@@ -329,13 +329,13 @@ impl InspectorViewState {
         image
     }
 
-    fn trigger_copy_feedback(&mut self, text: String, cx: &mut Context<DataForgeWorkspace>) {
+    fn trigger_copy_feedback(&mut self, text: String, cx: &mut Context<TableMinusWorkspace>) {
         cx.write_to_clipboard(ClipboardItem::new_string(text));
         self.copied_gen = self.copied_gen.wrapping_add(1);
         let generation = self.copied_gen;
         self.copied_feedback = true;
         self.copy_reset_task = Some(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 cx.background_executor()
                     .timer(Duration::from_millis(1400))
                     .await;
@@ -351,7 +351,7 @@ impl InspectorViewState {
     }
 }
 
-fn ensure_metadata_sync(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn ensure_metadata_sync(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let key = (
         ws.controller.active_workspace,
         ws.controller.active_table.clone(),
@@ -377,7 +377,7 @@ fn ensure_metadata_sync(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeW
     let runtime = services.runtime.clone();
     let sessions = services.sessions.clone();
     ws.inspector_ui.metadata_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let result = runtime
                 .spawn(async move {
                     let session = {
@@ -422,9 +422,9 @@ fn ensure_metadata_sync(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeW
 /// Renders the non-blocking `300px` right-hand Row Inspector drawer.
 #[must_use]
 pub fn render_inspector(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     ensure_metadata_sync(ws, cx);
     let inspected = resolve_inspected_cell(ws);
@@ -472,9 +472,9 @@ pub fn render_inspector(
 }
 
 fn render_header(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     has_cell: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let table_label = ws.controller.active_table.as_ref().map(|t| t.name.clone());
@@ -595,9 +595,9 @@ fn render_empty_state(s: &crate::i18n::Strings, cx: &App) -> AnyElement {
 }
 
 fn render_cell_body(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let scroll_handle = ws.inspector_ui.scroll_handle.clone();
     let header_block = render_column_header_block(cell, &ws.controller.strings, cx);
@@ -719,7 +719,7 @@ fn render_mode_segmented_strip(
     active_mode: RichViewerMode,
     col_idx: usize,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let mut strip = div()
@@ -797,7 +797,7 @@ fn render_copy_button(
     copied: bool,
     payload: String,
     s: &crate::i18n::Strings,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     Button::new(id)
@@ -834,9 +834,9 @@ fn render_copy_button(
 }
 
 fn render_rich_value_viewer(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let active_mode = ws.inspector_ui.viewer_mode;
     let strip = render_mode_segmented_strip(active_mode, cell.col_idx, &ws.controller.strings, cx);
@@ -859,9 +859,9 @@ fn render_rich_value_viewer(
 }
 
 fn render_text_mode_panel(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let value_font = value_gpui_font(&ws.controller.settings);
@@ -940,9 +940,9 @@ fn render_text_mode_panel(
 }
 
 fn render_json_tree_panel(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let parsed = parse_json_value(&cell.value, &cell.full_text);
     let Some(root) = parsed else {
@@ -1035,7 +1035,7 @@ fn render_json_format_apply_btn(
     cell: &InspectedCell,
     pretty_for_apply: String,
     apply_label: &'static str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let row_idx = cell.row_idx;
     let col_idx = cell.col_idx;
@@ -1073,10 +1073,10 @@ fn render_json_format_apply_btn(
 }
 
 fn render_json_toolbar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
     root: &serde_json::Value,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let pretty = ws.inspector_ui.raw_pretty_mode;
@@ -1177,7 +1177,7 @@ fn render_json_chevron(
     node: &FlatJsonNode,
     idx: usize,
     muted_color: Hsla,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     if !node.kind.is_container() {
         return div()
@@ -1225,13 +1225,13 @@ fn render_json_chevron(
 }
 
 fn render_json_tree_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
     node: &FlatJsonNode,
     idx: usize,
     editable: bool,
     value_font: herogpui::gpui::Font,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let guides = render_json_indent_guides(node.depth, with_alpha(colors.border, 0.75));
@@ -1307,12 +1307,12 @@ fn render_json_tree_row(
 }
 
 fn render_json_node_value_el(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     _cell: &InspectedCell,
     node: &FlatJsonNode,
     idx: usize,
     editable: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let (display_text, color, is_italic) = json_node_display(&node.kind, &ws.content_palette);
     let base = div()
@@ -1354,11 +1354,11 @@ fn render_json_node_value_el(
 }
 
 fn render_json_inline_node_editor(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
     root: &serde_json::Value,
     value_font: herogpui::gpui::Font,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let Some((path_str, segments)) = ws.inspector_ui.json_editing_path.clone() else {
@@ -1461,11 +1461,11 @@ fn render_json_inline_node_editor(
 }
 
 fn render_json_inline_editor_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
     root: &serde_json::Value,
     segments: Vec<JsonPathSegment>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let btn_root = root.clone();
     let btn_col_info = cell.col_info.clone();
@@ -1518,7 +1518,7 @@ fn render_json_inline_editor_actions(
     reason = "explicit cell context avoids wrapping single-use edit struct"
 )]
 fn commit_json_node_edit(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     mut root: serde_json::Value,
     segments: &[JsonPathSegment],
     draft: &str,
@@ -1527,7 +1527,7 @@ fn commit_json_node_edit(
     col_info: &ColumnInfo,
     edit_ctx: EditContext,
     orig_val: &Value,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let parsed_val = match parse_json_node_edit(draft) {
         Ok(v) => v,
@@ -1580,9 +1580,9 @@ fn commit_json_node_edit(
 }
 
 fn render_hex_mode_panel(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let Some((bytes, source_kind)) = extract_bytes_for_hex(&cell.value, &cell.full_text) else {
         return render_viewer_fallback_panel(
@@ -1613,12 +1613,12 @@ fn render_hex_mode_panel(
 }
 
 fn render_hex_toolbar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
     bytes: &[u8],
     source_kind: HexSourceKind,
     bpr: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -1694,7 +1694,7 @@ fn render_hex_toolbar(
 }
 
 fn render_hex_dump_table(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     bytes: &[u8],
     bpr: usize,
     cx: &App,
@@ -1779,9 +1779,9 @@ fn render_hex_dump_table(
 }
 
 fn render_image_mode_panel(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let Some(bytes) = extract_binary_or_image_payload(&cell.value, &cell.full_text) else {
         let fallback_label = if cell.is_null {
@@ -1833,7 +1833,7 @@ fn render_image_header_bar(
     bytes: &[u8],
     suggested_name: String,
     export_label: &'static str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let export_bytes = bytes.to_vec();
@@ -1889,7 +1889,7 @@ fn render_image_header_bar(
 }
 
 fn render_image_preview_surface(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     meta: Option<ImageMetadata>,
     bytes: &[u8],
     cx: &App,
@@ -1967,7 +1967,7 @@ fn render_image_metadata_rows(
 fn render_binary_header_summary(
     bytes: &[u8],
     content_palette: &super::theme::ContentThemePalette,
-    settings: &dataforge_windows_platform::AppSettings,
+    settings: &tableminus_windows_platform::AppSettings,
     cx: &App,
 ) -> AnyElement {
     let colors = cx.colors().clone();
@@ -2054,7 +2054,7 @@ fn render_viewer_fallback_panel(
     col_idx: usize,
     s: &crate::i18n::Strings,
     is_alert: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let (bg, border, text_color) = if is_alert {
@@ -2117,15 +2117,15 @@ fn render_viewer_fallback_panel(
 }
 
 fn trigger_export_binary(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     bytes: Vec<u8>,
     suggested_name: String,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let start_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let rx = cx.prompt_for_new_path(&start_dir, Some(&suggested_name));
     ws.inspector_ui.export_binary_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let Ok(Ok(Some(path))) = rx.await else {
                 return;
             };
@@ -2154,9 +2154,9 @@ fn trigger_export_binary(
 }
 
 fn render_fk_jump_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     if let Some(fk) = cell.outbound_fk.as_ref() {
         let target_label = if let Some(schema) = fk.key.ref_schema.as_ref() {
@@ -2225,12 +2225,12 @@ fn render_fk_jump_row(
 }
 
 fn jump_to_foreign_key(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     source_table: &TableRef,
     fk: &OutboundForeignKey,
     columns: &[ResultColumn],
     values: &[Value],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let reference = match RowReference::referenced(source_table, fk, columns, values) {
         Ok(r) => r,
@@ -2282,9 +2282,9 @@ fn jump_to_foreign_key(
 }
 
 fn render_inline_editor_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let row_idx = cell.row_idx;
@@ -2352,9 +2352,9 @@ fn render_inline_editor_section(
 }
 
 fn render_inline_editor_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cell: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let row_idx = cell.row_idx;
     let col_idx = cell.col_idx;
@@ -2408,9 +2408,9 @@ fn render_inline_editor_actions(
 }
 
 fn render_row_summary_list(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     active: &InspectedCell,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let value_font = value_gpui_font(&ws.controller.settings);
@@ -2501,7 +2501,7 @@ fn render_row_summary_list(
 }
 
 fn apply_inspector_cell_edit(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     row_idx: usize,
     col_idx: usize,
     new_value: Value,
@@ -2535,7 +2535,7 @@ fn format_display_value(cell: &InspectedCell, pretty: bool) -> String {
         .unwrap_or_else(|_| cell.full_text.clone())
 }
 
-fn resolve_inspected_cell(ws: &DataForgeWorkspace) -> Option<InspectedCell> {
+fn resolve_inspected_cell(ws: &TableMinusWorkspace) -> Option<InspectedCell> {
     let (row_idx, mut col_idx) = ws.controller.grid_selection.focused?;
     let total_rows =
         ws.controller.grid_raw_rows.len() + ws.controller.grid_model.edits.inserted_rows.len();
@@ -2631,7 +2631,7 @@ fn resolve_inspected_cell(ws: &DataForgeWorkspace) -> Option<InspectedCell> {
     })
 }
 
-fn build_result_columns(ws: &DataForgeWorkspace) -> Vec<ResultColumn> {
+fn build_result_columns(ws: &TableMinusWorkspace) -> Vec<ResultColumn> {
     if !ws.controller.grid_raw_columns.is_empty() {
         return ws.controller.grid_raw_columns.clone();
     }
@@ -2643,7 +2643,7 @@ fn build_result_columns(ws: &DataForgeWorkspace) -> Vec<ResultColumn> {
 }
 
 fn extract_row_values(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     row_idx: usize,
     col_len: usize,
 ) -> (Vec<Value>, Vec<Value>, bool, bool, Option<RowID>) {
@@ -2698,7 +2698,7 @@ fn extract_row_values(
     }
 }
 
-fn resolve_column_info(ws: &DataForgeWorkspace, name: &str, rcol_type: &ColumnType) -> ColumnInfo {
+fn resolve_column_info(ws: &TableMinusWorkspace, name: &str, rcol_type: &ColumnType) -> ColumnInfo {
     if let Some(info) = ws
         .inspector_ui
         .cached_columns
