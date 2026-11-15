@@ -1320,7 +1320,7 @@ fn render_cardinality_badge(
     reason = "ER card renderer consumes positioned node, zoom/pan transform, and focus flags"
 )]
 fn render_er_table_card(
-    _ws: &DataForgeWorkspace,
+    ws: &DataForgeWorkspace,
     node: &ErTableNode,
     zoom: f32,
     pan_x: f32,
@@ -1329,6 +1329,7 @@ fn render_er_table_card(
     is_primary_focus: bool,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
+    let s = &ws.controller.strings;
     let colors = cx.colors().clone();
     let sx = node.x * zoom + pan_x;
     let sy = node.y * zoom + pan_y;
@@ -1397,9 +1398,35 @@ fn render_er_table_card(
             }),
         )
         .child(render_er_card_header(
-            node, header_h, title_sz, header_bg, &colors,
+            node,
+            header_h,
+            title_sz,
+            header_bg,
+            s.er_ref_badge,
+            &colors,
         ));
 
+    card = card.child(render_er_card_rows(
+        node,
+        row_h,
+        col_sz,
+        zoom,
+        s.er_fk_badge,
+        s.er_more_suffix,
+        &colors,
+    ));
+    card.into_any_element()
+}
+
+fn render_er_card_rows(
+    node: &ErTableNode,
+    row_h: f32,
+    col_sz: f32,
+    zoom: f32,
+    fk_badge: &'static str,
+    more_suffix: &'static str,
+    colors: &herogpui::theme::ThemeColors,
+) -> AnyElement {
     let mut rows_col = div()
         .flex_1()
         .min_h_0()
@@ -1407,7 +1434,9 @@ fn render_er_table_card(
         .flex_col()
         .py(px(3.0 * zoom));
     for col in node.columns.iter().take(MAX_VISIBLE_COLS) {
-        rows_col = rows_col.child(render_er_column_row(col, row_h, col_sz, zoom, &colors));
+        rows_col = rows_col.child(render_er_column_row(
+            col, row_h, col_sz, zoom, fk_badge, colors,
+        ));
     }
     if node.columns.len() > MAX_VISIBLE_COLS {
         let extra = node.columns.len() - MAX_VISIBLE_COLS;
@@ -1419,12 +1448,10 @@ fn render_er_table_card(
                 .items_center()
                 .text_size(px((10.5 * zoom).clamp(7.0, 14.0)))
                 .text_color(colors.muted)
-                .child(format!("+{extra} more")),
+                .child(format!("+{extra} {more_suffix}")),
         );
     }
-
-    card = card.child(rows_col);
-    card.into_any_element()
+    rows_col.into_any_element()
 }
 
 fn render_er_card_header(
@@ -1432,6 +1459,7 @@ fn render_er_card_header(
     header_h: f32,
     title_sz: f32,
     header_bg: Hsla,
+    ref_badge: &'static str,
     colors: &herogpui::theme::ThemeColors,
 ) -> AnyElement {
     div()
@@ -1481,7 +1509,7 @@ fn render_er_card_header(
                             .text_size(px((title_sz - 2.5).max(7.5)))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(colors.success.color)
-                            .child("REF"),
+                            .child(ref_badge),
                     )
                 })
                 .child(
@@ -1504,6 +1532,7 @@ fn render_er_column_row(
     row_h: f32,
     col_sz: f32,
     zoom: f32,
+    fk_badge: &'static str,
     colors: &herogpui::theme::ThemeColors,
 ) -> AnyElement {
     let pk_color = colors.warning.color;
@@ -1534,7 +1563,7 @@ fn render_er_column_row(
                             .text_size(px((col_sz - 2.0).max(7.0)))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(fk_color)
-                            .child("FK"),
+                            .child(fk_badge),
                     )
                 })
                 .child(
