@@ -1,6 +1,6 @@
 //! Inline connection-unavailable, connecting, reconnecting, and auth-failed banners.
 
-use dataforge_state::connection_window::{ConnectionUnavailableView, ConnectionWindowPhase};
+use tableminus_state::connection_window::{ConnectionUnavailableView, ConnectionWindowPhase};
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Color, Icon, IconName, IconSize, Size, Spinner,
     SpinnerSize, Variant,
@@ -10,7 +10,7 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::ToastSeverity;
 use super::theme::{
@@ -23,9 +23,9 @@ use crate::app::ScreenMode;
 /// connecting, or reconnecting. Returns `None` when connected or idle.
 #[must_use]
 pub fn render_unavailable_banner(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     let phase = ws
         .controller
@@ -48,7 +48,7 @@ pub fn render_unavailable_banner(
 pub fn render_unavailable_card(
     title: &str,
     detail: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let mut alert = Alert::new(title.to_owned()).status(Color::Default);
     if !detail.trim().is_empty() {
@@ -68,9 +68,9 @@ pub fn render_unavailable_card(
 }
 
 fn render_connecting_banner(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     reconnecting: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -154,9 +154,9 @@ fn render_connecting_banner(
 }
 
 fn render_error_banner(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     view: &ConnectionUnavailableView,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &ws.controller.strings;
@@ -255,7 +255,7 @@ fn render_error_banner(
     banner_shell("workspace-unavailable-banner", alert, cx)
 }
 
-fn banner_shell(id: &'static str, alert: Alert, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn banner_shell(id: &'static str, alert: Alert, cx: &Context<TableMinusWorkspace>) -> AnyElement {
     div()
         .id(id)
         .w_full()
@@ -268,7 +268,7 @@ fn banner_shell(id: &'static str, alert: Alert, cx: &Context<DataForgeWorkspace>
         .into_any_element()
 }
 
-fn active_target_summary(ws: &DataForgeWorkspace) -> String {
+fn active_target_summary(ws: &TableMinusWorkspace) -> String {
     let form = &ws.controller.connection_form;
     let host = if !ws.controller.toolbar_status.host.trim().is_empty() {
         ws.controller.toolbar_status.host.trim()
