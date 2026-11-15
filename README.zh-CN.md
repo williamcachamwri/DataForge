@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="crates/dataforge-windows-app/assets/dataforge_logo.png" alt="DataForge Logo" width="112" height="112" />
+<img src="crates/tableminus-windows-app/assets/tableminus_logo.png" alt="TableMinus Logo" width="112" height="112" />
 
-# DataForge
+# TableMinus
 
 **基于 Rust 与 Direct3D 11 构建的 Windows 原生 SQL 与数据库工作台。**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/release.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#概述)
 [![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#支持的数据库)
@@ -24,9 +24,9 @@
 
 ## 概述
 
-DataForge 是一款用 Rust 编写的 Windows 原生 SQL 与数据库工作台。界面通过 [HeroGPUI](https://github.com/williamcachamwri/DataForge) 直接在 Direct3D 11 上渲染，底层基于开源的 [TablePro](https://github.com/TableProApp/TablePro) Rust 数据库内核，不依赖 Electron 或 JVM。
+TableMinus 是一款用 Rust 编写的 Windows 原生 SQL 与数据库工作台。界面通过 [HeroGPUI](https://github.com/williamcachamwri/TableMinus) 直接在 Direct3D 11 上渲染，底层基于开源的 [TablePro](https://github.com/TableProApp/TablePro) Rust 数据库内核，不依赖 Electron 或 JVM。
 
-在 Windows 11 的 release 构建中，冷启动时间约为 `10 ms`（通过 `--smoke-startup` 加载全部 9 个驱动实测为 `9.21` 到 `10.11 ms`）；在 `100k`、`500k` 和 `1M` 行压力查询期间，进程内存占用稳定在 `~55 MB` 左右。在 `dataforge-e2e` SQLite 测试套件中，向数据网格加载 `100k` 行耗时 `24.43 ms`，滚动 `10k` 帧耗时 `0.432 ms`。
+在 Windows 11 的 release 构建中，冷启动时间约为 `10 ms`（通过 `--smoke-startup` 加载全部 9 个驱动实测为 `9.21` 到 `10.11 ms`）；在 `100k`、`500k` 和 `1M` 行压力查询期间，进程内存占用稳定在 `~55 MB` 左右。在 `tableminus-e2e` SQLite 测试套件中，向数据网格加载 `100k` 行耗时 `24.43 ms`，滚动 `10k` 帧耗时 `0.432 ms`。
 
 ---
 
@@ -34,25 +34,25 @@ DataForge 是一款用 Rust 编写的 Windows 原生 SQL 与数据库工作台�
 
 ### SQL 编辑器、Vim 模式与分栏结果面板（1000 万行索引查询 `15 ms`）
 
-![DataForge SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
 
 ### 虚拟化数据网格、结构检查器与参数化筛选
 
-![DataForge Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
 
 ### 仅发送 Schema 的 AI 抽屉（`Ctrl+Shift+A`）
 
-![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
+![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
 ### 交互式 ER 关系图、外键连线与 SVG 导出
 
-![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
 ## 支持的数据库
 
-DataForge 将 9 个数据库驱动直接编译进 `dataforge.exe`，无需额外配置 ODBC 驱动或插件：
+TableMinus 将 9 个数据库驱动直接编译进 `tableminus.exe`，无需额外配置 ODBC 驱动或插件：
 
 | 数据库 | 驱动 Crate | 说明 |
 | :--- | :--- | :--- |
@@ -92,17 +92,17 @@ AI 侧边抽屉（`Ctrl+Shift+A`）可连接本地 Ollama（`http://127.0.0.1:11
 
 - `list_connections`、`connect`、`list_databases`、`list_schemas`、`list_tables`、`describe_table`、`get_table_ddl`、`browse_table`、`count_rows`、`execute_query`、`export_data`
 
-其中 `execute_query` 会严格遵循各个连接的 External Clients 与安全模式配置，任何写入语句执行前都必须在 DataForge 界面内由用户确认。
+其中 `execute_query` 会严格遵循各个连接的 External Clients 与安全模式配置，任何写入语句执行前都必须在 TableMinus 界面内由用户确认。
 
 ### 主题、窗口材质与多语言
 
-DataForge 内置 14 套主题（`Dark`、`Light`、`High Contrast`、`Gaussian Glass Dark`、`Gaussian Glass Light`、`Tokyo Night`、`Dracula`、`Catppuccin Mocha`、`One Dark Pro`、`Nord`、`Monokai Pro`、`Gruvbox Dark`、`GitHub Light`、`Catppuccin Latte`）。界面主题与代码语法配色可独立搭配，也支持导入 VS Code 的 `.json` 配色主题。
+TableMinus 内置 14 套主题（`Dark`、`Light`、`High Contrast`、`Gaussian Glass Dark`、`Gaussian Glass Light`、`Tokyo Night`、`Dracula`、`Catppuccin Mocha`、`One Dark Pro`、`Nord`、`Monokai Pro`、`Gruvbox Dark`、`GitHub Light`、`Catppuccin Latte`）。界面主题与代码语法配色可独立搭配，也支持导入 VS Code 的 `.json` 配色主题。
 
 在 Windows 11 上，主窗口支持 DWM `Gaussian Blur`、`Mica`、`Mica Alt` 与 `Opaque` 四种背景材质，同时所有浮动浮层保持完全不透明（`1.0` alpha）以确保文字清晰可读。减弱动态效果选项会读取系统的 `SPI_GETCLIENTAREAANIMATION` 设置，在系统关闭动画时跳过抽屉和弹窗过渡。所有界面文本、菜单、对话框、提示与驱动诊断信息均已本地化为 6 种语言：`en-US`、`vi-VN`、`zh-CN`、`ja-JP`、`es-ES` 与 `fr-FR`。
 
 ### 命令行用法
 
-`dataforge.exe` 同时承担桌面启动器与脚本化 CLI（`tablepro-cli`）的角色。直接传入 `.sqlite`、`.db`、`.duckdb`、`.sql` 文件路径或连接 URL（`postgresql://...`）时，会通过 Named Pipe IPC 在当前运行窗口中打开（传入 `-n` / `--new-window` 可新建窗口）。
+`tableminus.exe` 同时承担桌面启动器与脚本化 CLI（`tablepro-cli`）的角色。直接传入 `.sqlite`、`.db`、`.duckdb`、`.sql` 文件路径或连接 URL（`postgresql://...`）时，会通过 Named Pipe IPC 在当前运行窗口中打开（传入 `-n` / `--new-window` 可新建窗口）。
 
 顶层参数：
 - `--version`（`-V`）打印版本号并退出。
@@ -113,25 +113,25 @@ DataForge 内置 14 套主题（`Dark`、`Light`、`High Contrast`、`Gaussian G
 
 ```powershell
 # 执行只读查询并以 JSON Lines 格式输出
-.\target\release\dataforge.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
+.\target\release\tableminus.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
 
 # 查看数据表的 CREATE TABLE DDL
-.\target\release\dataforge.exe describe -c Staging --ddl users
+.\target\release\tableminus.exe describe -c Staging --ddl users
 ```
 
 ---
 
 ## 下载与安装
 
-系统要求：**Windows 10 或 Windows 11（x64）**。预编译安装包发布在 [GitHub Releases](https://github.com/williamcachamwri/DataForge/releases)：
+系统要求：**Windows 10 或 Windows 11（x64）**。预编译安装包发布在 [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases)：
 
-- **安装程序（`DataForge-win-Setup.exe`）**：安装到 `%LocalAppData%` 并创建开始菜单与桌面快捷方式，无需 UAC 管理员权限。内置 Velopack 后台增量更新，可在 **Settings -> About** 中配置。
-- **便携版（`DataForge-win-Portable.zip`）**：解压到任意目录即可直接运行 `dataforge.exe`，不会修改安装器状态。
+- **安装程序（`TableMinus-win-Setup.exe`）**：安装到 `%LocalAppData%` 并创建开始菜单与桌面快捷方式，无需 UAC 管理员权限。内置 Velopack 后台增量更新，可在 **Settings -> About** 中配置。
+- **便携版（`TableMinus-win-Portable.zip`）**：解压到任意目录即可直接运行 `tableminus.exe`，不会修改安装器状态。
 
 每次发布均附带 `SHA256SUMS.txt`，可在 PowerShell 中校验文件哈希：
 
 ```powershell
-Get-FileHash .\DataForge-win-Setup.exe -Algorithm SHA256
+Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
 ```
 
 ---
@@ -178,24 +178,24 @@ Get-FileHash .\DataForge-win-Setup.exe -Algorithm SHA256
 ### 构建与测试命令
 
 ```powershell
-# 确认没有正在运行的 dataforge.exe 占用 target\release\dataforge.exe
-Get-Process dataforge -ErrorAction SilentlyContinue
+# 确认没有正在运行的 tableminus.exe 占用 target\release\tableminus.exe
+Get-Process tableminus -ErrorAction SilentlyContinue
 
 # 以 release 模式进行类型检查和编译
-cargo check --release -j 1 -p dataforge-windows-app
-cargo build --release -j 1 -p dataforge-windows-app
+cargo check --release -j 1 -p tableminus-windows-app
+cargo build --release -j 1 -p tableminus-windows-app
 
 # 运行无界面启动检查并启动应用
-.\target\release\dataforge.exe --smoke-startup
-.\target\release\dataforge.exe
+.\target\release\tableminus.exe --smoke-startup
+.\target\release\tableminus.exe
 ```
 
 Release 测试套件：
 
 ```powershell
 cargo test --release -j 1 -p tablepro-core filter
-cargo test --release -j 1 -p dataforge-e2e --test startup_perf_e2e -- --nocapture
-cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture
 ```
 
 ### 工作区结构
@@ -213,12 +213,12 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 | `core/crates/foreign-import` | `tablepro-foreign-import`：从其他数据库客户端导入连接 |
 | `core/crates/account` | `tablepro-account`：账号与凭据 trait |
 | `core/crates/drivers/*` | 9 个数据库驱动（`postgres`、`mysql`、`sqlite`、`duckdb`、`mssql`、`clickhouse`、`cassandra`、`mongodb`、`redis`） |
-| `crates/dataforge-gfx` | 矢量图标与数据库引擎图标 |
-| `crates/dataforge-state` | 编辑器状态、自动补全、网格模型、标签页与 14 套内置主题 |
-| `crates/dataforge-services` | 异步 Tokio 运行时、会话/AI/MCP 调度与多语言诊断信息 |
-| `crates/dataforge-windows-platform` | 设置 JSON 持久化、Win32 凭据管理器、DWM 与减弱动态辅助 |
-| `crates/dataforge-windows-app` | HeroGPUI（Direct3D 11）桌面应用、Velopack 更新器与 6 种语言包 |
-| `crates/dataforge-e2e` | SQLite、DuckDB、启动耗时与网格渲染端到端基准测试 |
+| `crates/tableminus-gfx` | 矢量图标与数据库引擎图标 |
+| `crates/tableminus-state` | 编辑器状态、自动补全、网格模型、标签页与 14 套内置主题 |
+| `crates/tableminus-services` | 异步 Tokio 运行时、会话/AI/MCP 调度与多语言诊断信息 |
+| `crates/tableminus-windows-platform` | 设置 JSON 持久化、Win32 凭据管理器、DWM 与减弱动态辅助 |
+| `crates/tableminus-windows-app` | HeroGPUI（Direct3D 11）桌面应用、Velopack 更新器与 6 种语言包 |
+| `crates/tableminus-e2e` | SQLite、DuckDB、启动耗时与网格渲染端到端基准测试 |
 
 ---
 
@@ -226,4 +226,4 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 
 欢迎提交 Pull Request、问题反馈或翻译修正。构建规范与 GPUI 注意事项请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)，版本更新记录见 [CHANGELOG.md](CHANGELOG.md)，行为准则见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)，安全漏洞请按 [SECURITY.md](SECURITY.md) 指引私下反馈。
 
-DataForge 采用 [LICENSE](LICENSE)（GNU Affero General Public License v3.0）与 [LICENSE-MIT](LICENSE-MIT)（MIT，保留对上游内核 [TableProApp/TablePro](https://github.com/TableProApp/TablePro) 的署名）双协议授权。
+TableMinus 采用 [LICENSE](LICENSE)（GNU Affero General Public License v3.0）与 [LICENSE-MIT](LICENSE-MIT)（MIT，保留对上游内核 [TableProApp/TablePro](https://github.com/TableProApp/TablePro) 的署名）双协议授权。
