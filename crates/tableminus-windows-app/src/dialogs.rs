@@ -8,7 +8,7 @@ use windows::core::PCWSTR;
 
 use crate::i18n::Strings;
 
-/// Prompt dialog variants required by DataForge connection and safety flows.
+/// Prompt dialog variants required by TableMinus connection and safety flows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DialogKind {
     /// Verify an unknown or changed SSH host key fingerprint.
