@@ -32,21 +32,41 @@ Trên bản dựng release ở Windows 11, thời gian khởi động lạnh đo
 
 ## Ảnh chụp màn hình
 
-### Trình soạn thảo SQL, chế độ Vim và khung kết quả chia đôi (truy vấn có chỉ mục trên 10M dòng trong `15 ms`)
+### Trình soạn thảo SQL, biểu đồ trực tiếp và kết quả truy vấn
 
-![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor and Live Charts](docs/screenshots/sql-editor-charts.png)
 
-### Lưới dữ liệu ảo hóa, trình xem cấu trúc và bộ lọc tham số hóa
+### Lưới dữ liệu ảo hóa, tổng hợp cột và bộ lọc tham số hóa
 
-![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.png)
+
+### Sơ đồ ER tương tác, quan hệ khóa ngoại và xuất SVG
+
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram.png)
+
+### Trình hướng dẫn nhập dữ liệu (CSV, JSON, XLSX) tự động ánh xạ kiểu
+
+![TableMinus Import Wizard](docs/screenshots/import-wizard.png)
+
+### So sánh Schema & Dữ liệu kèm tóm tắt khác biệt và tạo script đồng bộ
+
+![TableMinus Schema and Data Compare](docs/screenshots/data-compare.png)
+
+### Trình tạo dữ liệu giả lập với seed cố định và thứ tự khóa ngoại
+
+![TableMinus Mock Data Generator](docs/screenshots/mock-generator.png)
+
+### Truyền dữ liệu liên cơ sở dữ liệu kèm xem trước DDL trực tiếp
+
+![TableMinus Cross-Engine Data Transfer](docs/screenshots/data-transfer.png)
+
+### Tìm kiếm siêu dữ liệu (`Ctrl+P` / Metadata Search)
+
+![TableMinus Metadata Search](docs/screenshots/metadata-search.png)
 
 ### Ngăn trợ lý AI chỉ đọc schema (`Ctrl+Shift+A`)
 
 ![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
-
-### Sơ đồ ER tương tác, quan hệ khóa ngoại và xuất SVG
-
-![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
