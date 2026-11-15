@@ -336,14 +336,26 @@ fn render_rail_tools(
         ))
         .child(tool_button(
             "rail-tool-compare",
-            s.compare_title.into(),
-            IconName::ArrowLeftRight,
+            WorkspaceToolView::Compare.label(s),
+            WorkspaceToolView::Compare.icon(),
             WorkspaceToolView::Compare,
         ))
         .child(tool_button(
+            "rail-tool-mock-generator",
+            WorkspaceToolView::MockGenerator.label(s),
+            WorkspaceToolView::MockGenerator.icon(),
+            WorkspaceToolView::MockGenerator,
+        ))
+        .child(tool_button(
+            "rail-tool-data-transfer",
+            WorkspaceToolView::DataTransfer.label(s),
+            WorkspaceToolView::DataTransfer.icon(),
+            WorkspaceToolView::DataTransfer,
+        ))
+        .child(tool_button(
             "rail-tool-admin",
-            format!("{} & {}", s.admin_title, s.admin_scheduled_tasks).into(),
-            IconName::ShieldCheck,
+            WorkspaceToolView::Admin.label(s),
+            WorkspaceToolView::Admin.icon(),
             WorkspaceToolView::Admin,
         ))
         .child(render_rail_toggle(
@@ -355,11 +367,10 @@ fn render_rail_tools(
             cx,
             cx.listener(|ws, _, window, cx| {
                 if ws.metadata_search_ui.open {
-                    ws.metadata_search_ui.close_modal();
+                    ws.metadata_search_ui.close_modal_animated(cx);
                 } else {
                     ws.metadata_search_ui.open_modal(window, cx);
                 }
-                cx.notify();
             }),
         ))
         .into_any_element()
