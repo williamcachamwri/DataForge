@@ -13,26 +13,26 @@ use herogpui::gpui::{
 use herogpui::theme::ActiveTheme;
 
 use crate::app::{AppController, ScreenMode};
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_windows_platform::WindowControlsStyle;
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_windows_platform::WindowControlsStyle;
 use tablepro_core::SafeModeLevel;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::theme::{
     CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, hairline_border_color, is_reduced_motion,
 };
 
-/// Renders the custom `DataForge` title bar wired with macOS-style traffic lights
+/// Renders the custom `TableMinus` title bar wired with macOS-style traffic lights
 /// or native Windows 11 caption buttons (per `settings.window_controls`),
 /// branding, live connection status, quick command search trigger, and an isolated
 /// empty drag area so clicks on controls are never swallowed by `WM_NCHITTEST`.
 #[must_use]
 pub fn render_titlebar(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let hairline = hairline_border_color(cx);
@@ -64,7 +64,7 @@ pub fn render_titlebar(
                 .flex_shrink(1.0)
                 .pl(px(if is_windows_controls { 0.0 } else { 4.0 }))
                 .child(
-                    img(ImageSource::Image(crate::branding::dataforge_logo_image()))
+                    img(ImageSource::Image(crate::branding::tableminus_logo_image()))
                         .w(px(18.0))
                         .h(px(18.0))
                         .flex_shrink_0(),
@@ -94,7 +94,7 @@ pub fn render_titlebar(
         ));
 
     let mut bar = div()
-        .id("dataforge-titlebar")
+        .id("tableminus-titlebar")
         .flex()
         .flex_row()
         .items_center()
@@ -133,9 +133,9 @@ pub fn render_titlebar(
 }
 
 fn request_close_window(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if ws.controller.needs_close_guard() {
         ws.workspace_pane.close_guard_open = true;
@@ -194,7 +194,7 @@ fn traffic_light_dot(
         .into_any_element()
 }
 
-fn render_traffic_lights(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_traffic_lights(skip_anim: bool, cx: &Context<TableMinusWorkspace>) -> AnyElement {
     let close_btn = traffic_light_dot(
         TrafficLightStyle {
             id: "traffic-light-close",
@@ -249,7 +249,7 @@ fn render_traffic_lights(skip_anim: bool, cx: &Context<DataForgeWorkspace>) -> A
 
 fn render_windows_caption_buttons(
     is_maximized: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let hover_bg = with_alpha(colors.foreground, 0.08);
@@ -346,7 +346,7 @@ fn active_engine_kind(controller: &AppController) -> Option<EngineKind> {
         })
 }
 
-fn render_status_pill(controller: &AppController, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_status_pill(controller: &AppController, cx: &Context<TableMinusWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
     let s = &controller.strings;
     match controller.screen_mode {
@@ -396,7 +396,7 @@ fn render_status_pill(controller: &AppController, cx: &Context<DataForgeWorkspac
 fn render_screen_pill(
     icon: IconName,
     label: &'static str,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     Chip::new()
@@ -420,7 +420,7 @@ fn render_spinner_chip(id: &'static str, label: &'static str) -> AnyElement {
 
 fn render_connected_pill(
     controller: &AppController,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let engine = active_engine_kind(controller);
@@ -496,7 +496,7 @@ fn format_connected_label(controller: &AppController) -> String {
 fn render_quick_search_trigger(
     strings: &crate::i18n::Strings,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     Tooltip::new(strings.cmd_palette_tooltip)
