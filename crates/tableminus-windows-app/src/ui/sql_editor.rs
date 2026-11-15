@@ -7,14 +7,6 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 use std::time::Instant;
 
-use tableminus_gfx::editor_renderer::{CursorMode, EditorCursor, EditorSelection};
-use tableminus_services::{FindReplaceOptions, find_matches};
-use tableminus_state::editor::{
-    AutocompleteContext, AutocompleteState, CursorPosition, IncrementalLineHighlighter, Rope,
-    SchemaCompletionItem, SchemaCompletionKind, UndoHistory, VimAction, VimMode, VimMotion,
-    VimOperator, VimState,
-};
-use tableminus_state::tabs::{TabId, TabKind};
 use herogpui::Focusable;
 use herogpui::components::{
     Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input, InputState, ListBox,
@@ -35,6 +27,14 @@ use herogpui::gpui::{
     Window, div, fill, outline, point, px, relative, size,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_gfx::editor_renderer::{CursorMode, EditorCursor, EditorSelection};
+use tableminus_services::{FindReplaceOptions, find_matches};
+use tableminus_state::editor::{
+    AutocompleteContext, AutocompleteState, CursorPosition, IncrementalLineHighlighter, Rope,
+    SchemaCompletionItem, SchemaCompletionKind, UndoHistory, VimAction, VimMode, VimMotion,
+    VimOperator, VimState,
+};
+use tableminus_state::tabs::{TabId, TabKind};
 use tablepro_core::meta::ObjectKind;
 use tablepro_core::sql_syntax::SqlGrammar;
 use tablepro_core::{EditorSessionOptions, ResultEvent, RunOptions, RunSummary};
@@ -2656,7 +2656,10 @@ fn trigger_explain_query(
     }
 }
 
-fn sync_doc_sql_from_controller(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
+fn sync_doc_sql_from_controller(
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
     let updated = ws.controller.editor_sql_text();
     ws.sql_editor_ui.doc.update(cx, |doc, cx| {
         let prev_head = doc.primary_cursor().head;
