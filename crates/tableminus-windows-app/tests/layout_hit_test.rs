@@ -1,13 +1,13 @@
 //! Integration tests for shell layout geometry, proportions, and hit-testing.
 
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_windows_app::app::{AppController, ScreenMode};
-use dataforge_windows_app::i18n::Locale;
-use dataforge_windows_app::shell_layout::{
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_windows_app::app::{AppController, ScreenMode};
+use tableminus_windows_app::i18n::Locale;
+use tableminus_windows_app::shell_layout::{
     ShellHitTarget, ShellLayout, ShellLayoutConfig, metrics,
 };
-use dataforge_windows_app::views::status_bar::TableViewMode;
-use dataforge_windows_platform::{AppSettings, WindowsTheme};
+use tableminus_windows_app::views::status_bar::TableViewMode;
+use tableminus_windows_platform::{AppSettings, WindowsTheme};
 
 #[test]
 fn shell_layout_regions_do_not_overlap_and_cover_viewport() {
