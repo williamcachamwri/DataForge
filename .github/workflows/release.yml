@@ -52,9 +52,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $appCargo = Get-Content -Raw -Path 'crates/dataforge-windows-app/Cargo.toml'
+          $appCargo = Get-Content -Raw -Path 'crates/tableminus-windows-app/Cargo.toml'
           if ($appCargo -notmatch '(?m)^version\s*=\s*"([^"]+)"') {
-            throw 'Could not parse version from crates/dataforge-windows-app/Cargo.toml'
+            throw 'Could not parse version from crates/tableminus-windows-app/Cargo.toml'
           }
           $cargoVersion = $Matches[1]
 
@@ -79,7 +79,7 @@ jobs:
           $tagVersion = $Matches[1]
 
           if ($tagVersion -ne $cargoVersion) {
-            throw "Version mismatch: tag '$tag' ($tagVersion) != crates/dataforge-windows-app/Cargo.toml ($cargoVersion)."
+            throw "Version mismatch: tag '$tag' ($tagVersion) != crates/tableminus-windows-app/Cargo.toml ($cargoVersion)."
           }
 
           Get-ChildItem -Path 'crates' -Filter 'Cargo.toml' -Recurse | ForEach-Object {
@@ -119,24 +119,24 @@ jobs:
       - name: Run unit tests (release)
         run: >
           cargo test --release
-          -p dataforge-windows-platform
-          -p dataforge-state
-          -p dataforge-services
-          -p dataforge-windows-app
+          -p tableminus-windows-platform
+          -p tableminus-state
+          -p tableminus-services
+          -p tableminus-windows-app
           --lib
 
       - name: Run app integration tests (release)
         run: >
           cargo test --release
-          -p dataforge-windows-app
+          -p tableminus-windows-app
           --test startup_shell
           --test layout_hit_test
 
       - name: Build release binary
-        run: cargo build --release -p dataforge-windows-app
+        run: cargo build --release -p tableminus-windows-app
 
       - name: Verify smoke startup
-        run: .\target\release\dataforge.exe --smoke-startup
+        run: .\target\release\tableminus.exe --smoke-startup
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
@@ -162,7 +162,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
           New-Item -ItemType Directory -Force -Path '.\velopack-out' | Out-Null
 
-          Copy-Item -Path '.\target\release\dataforge.exe' -Destination $stageDir
+          Copy-Item -Path '.\target\release\tableminus.exe' -Destination $stageDir
           Copy-Item -Path '.\README.md' -Destination $stageDir
           Copy-Item -Path '.\LICENSE' -Destination $stageDir
           Copy-Item -Path '.\LICENSE-MIT' -Destination $stageDir
@@ -181,13 +181,13 @@ jobs:
       - name: Pack Velopack installer, portable archive, and delta packages
         run: >
           vpk pack
-          --packId DataForge
+          --packId TableMinus
           --packVersion ${{ steps.meta.outputs.version }}
           --packDir ./release-stage
-          --mainExe dataforge.exe
-          --packTitle DataForge
+          --mainExe tableminus.exe
+          --packTitle TableMinus
           --packAuthors williamcachamwri
-          --icon crates/dataforge-windows-app/assets/dataforge.ico
+          --icon crates/tableminus-windows-app/assets/tableminus.ico
           --outputDir ./velopack-out
 
       - name: Generate SHA256SUMS.txt
@@ -222,8 +222,8 @@ jobs:
           $installNotes = @"
           ## Windows Installation
 
-          - **Installer (Recommended)**: Download ``DataForge-win-Setup.exe`` for desktop/Start Menu integration and automatic delta updates via Velopack.
-          - **Portable Archive**: Download ``DataForge-win-Portable.zip``, extract anywhere, and run ``dataforge.exe`` directly with no installation required.
+          - **Installer (Recommended)**: Download ``TableMinus-win-Setup.exe`` for desktop/Start Menu integration and automatic delta updates via Velopack.
+          - **Portable Archive**: Download ``TableMinus-win-Portable.zip``, extract anywhere, and run ``tableminus.exe`` directly with no installation required.
           - **Checksums**: Verify download integrity against ``SHA256SUMS.txt``.
 
           ---
@@ -239,7 +239,7 @@ jobs:
         if: ${{ steps.meta.outputs.dry_run == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: dataforge-${{ steps.meta.outputs.tag }}-dry-run
+          name: tableminus-${{ steps.meta.outputs.tag }}-dry-run
           path: |
             velopack-out/*
             SHA256SUMS.txt
@@ -250,7 +250,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: DataForge ${{ steps.meta.outputs.tag }}
+          name: TableMinus ${{ steps.meta.outputs.tag }}
           body_path: release-notes.md
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           draft: false
