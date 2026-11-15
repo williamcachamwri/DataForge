@@ -32,21 +32,41 @@ Windows 11 のリリースビルドでは、コールドスタートが約 `10 m
 
 ## スクリーンショット
 
-### SQL エディタ、Vim モード、分割結果ペイン（1,000 万行のインデックス付きクエリ `15 ms`）
+### SQL エディタ、ライブチャート、クエリ結果
 
-![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor and Live Charts](docs/screenshots/sql-editor-charts.png)
 
-### 仮想化データグリッド、構造インスペクタ、パラメータ化フィルタ
+### 仮想化データグリッド、列集計、パラメータ化フィルタ
 
-![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.png)
+
+### インタラクティブ ER 図、外部キーリレーション、SVG エクスポート
+
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram.png)
+
+### インポートウィザード（CSV / JSON / XLSX）と自動型マッピング
+
+![TableMinus Import Wizard](docs/screenshots/import-wizard.png)
+
+### スキーマ・データ比較と同期スクリプト生成
+
+![TableMinus Schema and Data Compare](docs/screenshots/data-compare.png)
+
+### モックデータ生成（決定的シードと外部キー順序対応）
+
+![TableMinus Mock Data Generator](docs/screenshots/mock-generator.png)
+
+### クロスエンジンデータ転送とライブ DDL プレビュー
+
+![TableMinus Cross-Engine Data Transfer](docs/screenshots/data-transfer.png)
+
+### メタデータ検索パレット（Metadata Search）
+
+![TableMinus Metadata Search](docs/screenshots/metadata-search.png)
 
 ### スキーマ情報のみを送る AI ドロワー（`Ctrl+Shift+A`）
 
 ![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
-
-### インタラクティブ ER 図、外部キーリレーション、SVG エクスポート
-
-![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
