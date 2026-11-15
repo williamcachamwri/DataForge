@@ -300,7 +300,7 @@ fn render_compare_controls(
                 .size(HeroSize::Sm)
                 .is_icon_only(true)
                 .is_disabled(!can_run)
-                .aria_label("Swap source and target")
+                .aria_label(s.compare_swap_label)
                 .on_press(cx.listener(|ws, _, _w, cx| {
                     std::mem::swap(
                         &mut ws.compare_ui.source_table,
@@ -449,15 +449,15 @@ fn render_schema_summary_bar(
                 HeroColor::Warning,
             ))
             .child(diff_chip(
-                format!("+ {} Added", counts.added),
+                format!("+ {} {}", counts.added, s.compare_added_label),
                 HeroColor::Success,
             ))
             .child(diff_chip(
-                format!("- {} Removed", counts.removed),
+                format!("- {} {}", counts.removed, s.compare_removed_label),
                 HeroColor::Danger,
             ))
             .child(diff_chip(
-                format!("~ {} Modified", counts.modified),
+                format!("~ {} {}", counts.modified, s.compare_modified_label),
                 HeroColor::Accent,
             ));
     }
@@ -500,10 +500,16 @@ fn render_data_summary_bar(
                 s.compare_differences.to_owned(),
                 HeroColor::Warning,
             ))
-            .child(diff_chip(format!("+ {added} Added"), HeroColor::Success))
-            .child(diff_chip(format!("- {removed} Removed"), HeroColor::Danger))
             .child(diff_chip(
-                format!("~ {modified} Modified"),
+                format!("+ {added} {}", s.compare_added_label),
+                HeroColor::Success,
+            ))
+            .child(diff_chip(
+                format!("- {removed} {}", s.compare_removed_label),
+                HeroColor::Danger,
+            ))
+            .child(diff_chip(
+                format!("~ {modified} {}", s.compare_modified_label),
                 HeroColor::Accent,
             ))
             .child(diff_chip(
@@ -563,13 +569,16 @@ struct SchemaDiffItem {
     color: HeroColor,
 }
 
-fn collect_schema_diff_items(report: &SchemaDiffReport) -> Vec<SchemaDiffItem> {
+fn collect_schema_diff_items(
+    report: &SchemaDiffReport,
+    s: &crate::i18n::Strings,
+) -> Vec<SchemaDiffItem> {
     let mut items = Vec::new();
     let push_names = |items: &mut Vec<SchemaDiffItem>,
                       names: &[String],
                       badge: &'static str,
                       kind: &'static str,
-                      detail: &'static str,
+                      detail: &str,
                       color: HeroColor| {
         for name in names {
             items.push(SchemaDiffItem {
@@ -582,28 +591,31 @@ fn collect_schema_diff_items(report: &SchemaDiffReport) -> Vec<SchemaDiffItem> {
         }
     };
 
+    let added_detail = format!("{}: {}", s.compare_added_label, s.compare_target);
+    let removed_detail = format!("{}: {}", s.compare_removed_label, s.compare_target);
+
     push_names(
         &mut items,
         &report.added_columns,
         "+",
-        "COLUMN",
-        "Add to target",
+        s.struct_col_column,
+        s.schema_add_column,
         HeroColor::Success,
     );
     push_names(
         &mut items,
         &report.removed_columns,
         "-",
-        "COLUMN",
-        "Only in target",
+        s.struct_col_column,
+        s.schema_drop_column,
         HeroColor::Danger,
     );
     for diff in &report.modified_columns {
         items.push(SchemaDiffItem {
             badge: "~",
-            kind: "COLUMN",
+            kind: s.struct_col_column,
             name: diff.column_name.clone(),
-            detail: format_column_diff(diff),
+            detail: format_column_diff(diff, s),
             color: HeroColor::Accent,
         });
     }
@@ -611,32 +623,32 @@ fn collect_schema_diff_items(report: &SchemaDiffReport) -> Vec<SchemaDiffItem> {
         &mut items,
         &report.added_indexes,
         "+",
-        "INDEX",
-        "Add to target",
+        s.indexes_label,
+        &added_detail,
         HeroColor::Success,
     );
     push_names(
         &mut items,
         &report.removed_indexes,
         "-",
-        "INDEX",
-        "Only in target",
+        s.indexes_label,
+        &removed_detail,
         HeroColor::Danger,
     );
     push_names(
         &mut items,
         &report.added_foreign_keys,
         "+",
-        "FK",
-        "Add to target",
+        s.er_fk_badge,
+        &added_detail,
         HeroColor::Success,
     );
     push_names(
         &mut items,
         &report.removed_foreign_keys,
         "-",
-        "FK",
-        "Only in target",
+        s.er_fk_badge,
+        &removed_detail,
         HeroColor::Danger,
     );
     items
@@ -667,7 +679,7 @@ fn render_schema_diff_list(
             .into_any_element();
     }
 
-    for (idx, item) in collect_schema_diff_items(report).into_iter().enumerate() {
+    for (idx, item) in collect_schema_diff_items(report, s).into_iter().enumerate() {
         list = list.child(render_diff_row(
             idx,
             item.badge,
@@ -713,33 +725,53 @@ fn render_data_diff_list(ws: &DataForgeWorkspace, report: &DataDiffReport, cx: &
         .take(MAX_DISPLAYED_DATA_ROWS);
 
     for (idx, entry) in entries.enumerate() {
-        list = list.child(render_data_diff_entry(idx, entry, cx));
+        list = list.child(render_data_diff_entry(idx, entry, s, cx));
     }
     list.into_any_element()
 }
 
-fn render_data_diff_entry(idx: usize, entry: &RowDiffEntry, cx: &App) -> AnyElement {
-    let pk = format!("PK({})", entry.primary_key.join(", "));
+fn render_data_diff_entry(
+    idx: usize,
+    entry: &RowDiffEntry,
+    s: &crate::i18n::Strings,
+    cx: &App,
+) -> AnyElement {
+    let pk = format!(
+        "{} ({})",
+        s.schema_primary_key,
+        entry.primary_key.join(", ")
+    );
     let (badge, tag, detail, color) = match entry.kind {
         dataforge_services::RowDiffKind::OnlyInSource => (
             "+",
-            "INSERT",
-            format!("Source: [{}]", entry.source_values.join(", ")),
+            s.compare_added_label,
+            format!(
+                "{}: [{}]",
+                s.compare_source_prefix,
+                entry.source_values.join(", ")
+            ),
             HeroColor::Success,
         ),
         dataforge_services::RowDiffKind::OnlyInTarget => (
             "-",
-            "DELETE",
-            format!("Target: [{}]", entry.target_values.join(", ")),
+            s.compare_removed_label,
+            format!(
+                "{}: [{}]",
+                s.compare_target_prefix,
+                entry.target_values.join(", ")
+            ),
             HeroColor::Danger,
         ),
         dataforge_services::RowDiffKind::Modified => (
             "~",
-            "UPDATE",
+            s.compare_modified_label,
             format!(
-                "Changed: {} | Src [{}] -> Tgt [{}]",
+                "{}: {} | {} [{}] -> {} [{}]",
+                s.compare_modified_label,
                 entry.changed_columns.join(", "),
+                s.compare_source_prefix,
                 entry.source_values.join(", "),
+                s.compare_target_prefix,
                 entry.target_values.join(", ")
             ),
             HeroColor::Accent,
@@ -1040,25 +1072,29 @@ fn format_table_ref(t: &TableRef) -> String {
     }
 }
 
-fn format_column_diff(diff: &ColumnDiff) -> String {
+fn format_column_diff(diff: &ColumnDiff, s: &crate::i18n::Strings) -> String {
     diff.changes
         .iter()
         .map(|c| match c {
             ColumnChangeKind::TypeChanged {
                 source_type,
                 target_type,
-            } => format!("Type: {target_type} -> {source_type}"),
+            } => format!("{}: {target_type} -> {source_type}", s.schema_column_type),
             ColumnChangeKind::NullabilityChanged {
                 source_nullable,
                 target_nullable,
-            } => format!("Nullable: {target_nullable} -> {source_nullable}"),
+            } => format!(
+                "{}: {target_nullable} -> {source_nullable}",
+                s.schema_nullable
+            ),
             ColumnChangeKind::DefaultChanged {
                 source_default,
                 target_default,
             } => format!(
-                "Default: {} -> {}",
-                target_default.as_deref().unwrap_or("NONE"),
-                source_default.as_deref().unwrap_or("NONE")
+                "{}: {} -> {}",
+                s.schema_default_value,
+                target_default.as_deref().unwrap_or(s.none_label),
+                source_default.as_deref().unwrap_or(s.none_label)
             ),
         })
         .collect::<Vec<_>>()
