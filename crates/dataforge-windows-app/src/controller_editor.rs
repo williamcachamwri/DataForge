@@ -6,6 +6,10 @@ use std::time::Instant;
 use dataforge_gfx::editor_renderer::{
     AutocompleteItem, AutocompletePopup, CompletionKind, CursorMode, EditorLine,
 };
+use dataforge_services::{
+    DatabaseEngine, ExplainNode, FindReplaceOptions, find_matches, format_sql,
+    parse_explain_output, replace_all_matches,
+};
 use tablepro_core::column::ResultColumn;
 use tablepro_core::value::Value;
 use tablepro_core::{EditorSessionOptions, ResultEvent, RunOptions, RunSummary};
@@ -13,8 +17,9 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::app::AppController;
+use crate::controller_grid::format_value_cell;
 use crate::controller_types::{QueryHistoryEntry, SavedQueryEntry, SplitPaneMode, VimMode};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 
 impl AppController {
     /// Sets the SQL editor text from `sql`.
@@ -281,5 +286,155 @@ impl AppController {
             SplitPaneMode::Horizontal => SplitPaneMode::Vertical,
             SplitPaneMode::Vertical => SplitPaneMode::Single,
         };
+    }
+
+    /// Formats the active SQL editor buffer using DataForge's dialect-neutral SQL formatter.
+    pub fn format_editor_sql(&mut self) {
+        let formatted = format_sql(&self.editor_sql_text());
+        self.set_editor_sql(&formatted);
+    }
+
+    /// Finds and replaces text in the active SQL editor buffer, returning the replacement count.
+    pub fn find_replace_in_editor(
+        &mut self,
+        find: &str,
+        replace: &str,
+        case_sensitive: bool,
+        whole_word: bool,
+        replace_all: bool,
+    ) -> usize {
+        if find.is_empty() {
+            return 0;
+        }
+        let text = self.editor_sql_text();
+        let options = FindReplaceOptions {
+            case_sensitive,
+            whole_word,
+        };
+        if replace_all {
+            let (updated, count) = replace_all_matches(&text, find, replace, options);
+            if count > 0 {
+                self.set_editor_sql(&updated);
+            }
+            return count;
+        }
+        let matches = find_matches(&text, find, options);
+        let Some(first) = matches.first() else {
+            return 0;
+        };
+        let mut updated = String::with_capacity(text.len() + replace.len());
+        updated.push_str(&text[..first.start]);
+        updated.push_str(replace);
+        updated.push_str(&text[first.end..]);
+        self.set_editor_sql(&updated);
+        1
+    }
+
+    /// Executes an EXPLAIN / EXPLAIN QUERY PLAN query without mutating editor or grid state,
+    /// parses the resulting plan tree, and stores it in `self.last_explain_nodes`.
+    pub fn run_visual_explain_blocking(
+        &mut self,
+        sql: &str,
+        analyze: bool,
+    ) -> Result<Vec<ExplainNode>> {
+        let trimmed = sql.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::InvalidState(
+                "cannot run EXPLAIN on an empty query".to_owned(),
+            ));
+        }
+        let engine = self.active_database_engine();
+        let explain_sql = build_explain_sql(engine, trimmed, analyze);
+        let (cols, raw_rows) = self.execute_query_capture_blocking(&explain_sql)?;
+        let col_names: Vec<String> = cols.iter().map(|c| c.name.clone()).collect();
+        let str_rows: Vec<Vec<String>> = raw_rows
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|cell| format_value_cell(cell).text)
+                    .collect()
+            })
+            .collect();
+        let nodes = parse_explain_output(engine, &col_names, &str_rows);
+        self.last_explain_nodes.clone_from(&nodes);
+        Ok(nodes)
+    }
+}
+
+fn build_explain_sql(engine: DatabaseEngine, trimmed_sql: &str, analyze: bool) -> String {
+    let already_explain = trimmed_sql
+        .split_whitespace()
+        .next()
+        .is_some_and(|w| w.eq_ignore_ascii_case("EXPLAIN"));
+    if already_explain {
+        return trimmed_sql.to_owned();
+    }
+    let prefix = match engine {
+        DatabaseEngine::Sqlite => "EXPLAIN QUERY PLAN ",
+        DatabaseEngine::Postgres => {
+            if analyze {
+                "EXPLAIN (ANALYZE, FORMAT JSON) "
+            } else {
+                "EXPLAIN (FORMAT JSON) "
+            }
+        }
+        DatabaseEngine::Mysql
+        | DatabaseEngine::Duckdb
+        | DatabaseEngine::Clickhouse
+        | DatabaseEngine::Mssql
+        | DatabaseEngine::Generic => {
+            if analyze {
+                "EXPLAIN ANALYZE "
+            } else {
+                "EXPLAIN "
+            }
+        }
+    };
+    format!("{prefix}{trimmed_sql}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dataforge_windows_platform::AppSettings;
+
+    #[test]
+    fn format_and_find_replace_editor_sql() {
+        let mut controller = AppController::with_detected_theme(AppSettings::default());
+        controller.set_editor_sql("select id, name from users where id = 1");
+        controller.format_editor_sql();
+        let formatted = controller.editor_sql_text();
+        assert!(formatted.contains("SELECT"));
+        assert!(formatted.contains("FROM"));
+
+        let replaced_one =
+            controller.find_replace_in_editor("users", "accounts", false, true, false);
+        assert_eq!(replaced_one, 1);
+        assert!(controller.editor_sql_text().contains("accounts"));
+
+        controller.set_editor_sql("SELECT a, a_col FROM a");
+        let replaced_all = controller.find_replace_in_editor("a", "b", true, true, true);
+        assert_eq!(replaced_all, 2);
+        assert_eq!(controller.editor_sql_text(), "SELECT b, a_col FROM b");
+    }
+
+    #[test]
+    fn sqlite_visual_explain_populates_nodes_without_clobbering_grid()
+    -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let db_path = dir.path().join("explain_test.sqlite");
+        std::fs::File::create(&db_path)?;
+
+        let mut controller = AppController::with_detected_theme(AppSettings::default());
+        controller.connect_local_file_blocking(&db_path)?;
+        let _ = controller.execute_sql_script_blocking(
+            "CREATE TABLE items (id INTEGER PRIMARY KEY, label TEXT);",
+        )?;
+
+        let nodes = controller.run_visual_explain_blocking("SELECT id, label FROM items", false)?;
+        assert!(!nodes.is_empty());
+        assert_eq!(controller.last_explain_nodes, nodes);
+        assert!(controller.grid_raw_rows.is_empty());
+        Ok(())
     }
 }
