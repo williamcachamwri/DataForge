@@ -4,12 +4,33 @@ import '../styles/global.css';
 interface Props {
   title?: string;
   description?: string;
+  image?: string;
 }
 
+const SITE = (import.meta.env.PUBLIC_SITE_URL ?? 'https://tableminus.vercel.app').replace(/\/$/, '');
+const REPO = 'https://github.com/williamcachamwri/TableMinus';
+
 const {
-  title = 'DataForge — Native SQL & Database Workbench for Windows',
+  title = 'TableMinus — Native SQL & Database Workbench for Windows',
   description = 'A fast, native SQL and database workbench built in Rust for Windows. HeroGPUI over Direct3D 11, 9 compiled-in drivers, ~10 ms cold startup, ~55 MB RAM.',
+  image = '/og-image.png',
 } = Astro.props;
+
+const canonical = new URL(Astro.url.pathname, `${SITE}/`).toString();
+const imageUrl = new URL(image, `${SITE}/`).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'TableMinus',
+  description,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Windows 10, Windows 11',
+  url: canonical,
+  image: imageUrl,
+  codeRepository: REPO,
+  license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+};
 ---
 
 <!doctype html>
@@ -18,13 +39,37 @@ const {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="keywords" content="TableMinus, SQL client, database workbench, Rust, Windows, SQLite, PostgreSQL, MySQL, DuckDB, ClickHouse" />
     <meta name="theme-color" content="#0C0D10" />
-    <link rel="icon" type="image/png" href="/images/dataforge_logo.png" />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/png" href="/images/tableminus_logo.png" />
+    <link rel="apple-touch-icon" href="/images/tableminus_logo.png" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TableMinus" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={imageUrl} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="TableMinus — native SQL and database workbench for Windows" />
+    <meta property="og:locale" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={imageUrl} />
+
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
     <title>{title}</title>
     <script is:inline>
       (function () {
         var root = document.documentElement;
-        var storageKey = 'dataforge-theme';
+        var storageKey = 'tableminus-theme';
         var theme = null;
         try {
           theme = localStorage.getItem(storageKey);
@@ -40,7 +85,7 @@ const {
         }
 
         try {
-          var savedLocale = localStorage.getItem('dataforge-locale');
+          var savedLocale = localStorage.getItem('tableminus-locale');
           if (savedLocale && /^(en|vi|zh-CN|ja|es|fr)$/.test(savedLocale)) {
             root.setAttribute('lang', savedLocale);
           }
