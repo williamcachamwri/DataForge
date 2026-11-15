@@ -1,6 +1,5 @@
 //! Inline connection-unavailable, connecting, reconnecting, and auth-failed banners.
 
-use tableminus_state::connection_window::{ConnectionUnavailableView, ConnectionWindowPhase};
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Color, Icon, IconName, IconSize, Size, Spinner,
     SpinnerSize, Variant,
@@ -9,6 +8,7 @@ use herogpui::gpui::{
     AnyElement, Context, InteractiveElement, IntoElement, ParentElement, Styled, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_state::connection_window::{ConnectionUnavailableView, ConnectionWindowPhase};
 
 use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
