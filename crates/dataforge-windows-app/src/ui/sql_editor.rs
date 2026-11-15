@@ -8,16 +8,18 @@ use std::ops::Range;
 use std::time::Instant;
 
 use dataforge_gfx::editor_renderer::{CursorMode, EditorCursor, EditorSelection};
+use dataforge_services::{FindReplaceOptions, find_matches};
 use dataforge_state::editor::{
     AutocompleteContext, AutocompleteState, CursorPosition, IncrementalLineHighlighter, Rope,
     SchemaCompletionItem, SchemaCompletionKind, UndoHistory, VimAction, VimMode, VimMotion,
     VimOperator, VimState,
 };
 use dataforge_state::tabs::{TabId, TabKind};
+use herogpui::Focusable;
 use herogpui::components::{
     Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input, InputState, ListBox,
     ListBoxItem, Popover, PopoverPlacement, ResizablePanel, ResizablePanelGroup, TabItem, Tabs,
-    TabsSize, TabsVariant,
+    TabsSize, TabsVariant, Tooltip,
 };
 use herogpui::core::{
     Color as HeroColor, FieldVariant, Orientation as HeroOrientation, SelectionMode,
@@ -157,6 +159,14 @@ pub struct SqlEditorViewState {
     drawer_search_input: Entity<InputState>,
     save_popover_open: bool,
     save_name_input: Entity<InputState>,
+    find_replace_open: bool,
+    find_input: Entity<InputState>,
+    replace_input: Entity<InputState>,
+    case_sensitive: bool,
+    whole_word: bool,
+    match_count: usize,
+    active_match_idx: usize,
+    find_matches_positions: Vec<Range<usize>>,
 }
 
 impl SqlEditorViewState {
@@ -167,6 +177,8 @@ impl SqlEditorViewState {
         let doc = cx.new(|cx| SqlEditorDocEntity::new(weak_ws, cx));
         let drawer_search_input = cx.new(|cx| InputState::new(cx));
         let save_name_input = cx.new(|cx| InputState::new(cx));
+        let find_input = cx.new(|cx| InputState::new(cx));
+        let replace_input = cx.new(|cx| InputState::new(cx));
         Self {
             highlighter: IncrementalLineHighlighter::new(SqlGrammar::PostgreSql),
             doc,
@@ -175,6 +187,14 @@ impl SqlEditorViewState {
             drawer_search_input,
             save_popover_open: false,
             save_name_input,
+            find_replace_open: false,
+            find_input,
+            replace_input,
+            case_sensitive: false,
+            whole_word: false,
+            match_count: 0,
+            active_match_idx: 0,
+            find_matches_positions: Vec::new(),
         }
     }
 
@@ -725,7 +745,7 @@ impl SqlEditorDocEntity {
     fn handle_shortcut_key(
         &mut self,
         ks: &Keystroke,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         let key = ks.key.as_str();
@@ -774,6 +794,19 @@ impl SqlEditorDocEntity {
                 }
                 "d" => {
                     self.select_next_occurrence(cx);
+                    return true;
+                }
+                "f" | "h" => {
+                    let selected = {
+                        let (s, e) = self.primary_cursor().range();
+                        (e > s).then(|| self.rope.slice(s, e))
+                    };
+                    let doc_text = self.rope.text();
+                    if let Some(weak) = self.weak_workspace.clone() {
+                        let _ = weak.update(cx, |ws, cx| {
+                            open_find_replace_with_text(ws, window, &doc_text, selected, cx);
+                        });
+                    }
                     return true;
                 }
                 _ => {}
@@ -1895,6 +1928,8 @@ fn render_editor_panel_body(
             .child(editor_surface)
     };
 
+    let find_replace_bar = render_find_replace_bar(ws, cx);
+
     let root = div()
         .id("workspace-sql-editor")
         .flex_1()
@@ -1903,6 +1938,7 @@ fn render_editor_panel_body(
         .flex()
         .flex_col()
         .child(toolbar)
+        .children(find_replace_bar)
         .child(main_row);
     attach_editor_actions(root, cx).into_any_element()
 }
@@ -1924,13 +1960,18 @@ fn attach_editor_actions(
         ws.sql_editor_ui.save_popover_open = !ws.sql_editor_ui.save_popover_open;
         cx.notify();
     }))
-    .on_action(cx.listener(|ws, _: &actions::EscapeDismiss, _w, cx| {
+    .on_action(cx.listener(|ws, _: &actions::EscapeDismiss, w, cx| {
         if ws.sql_editor_ui.doc.read(cx).autocomplete.is_open {
             ws.sql_editor_ui.doc.update(cx, |doc, cx| {
                 doc.autocomplete.dismiss();
                 doc.suppress_autocomplete = true;
                 cx.notify();
             });
+        } else if ws.sql_editor_ui.find_replace_open {
+            ws.sql_editor_ui.find_replace_open = false;
+            let focus = ws.sql_editor_ui.doc.read(cx).focus_handle.clone();
+            w.focus(&focus, cx);
+            cx.notify();
         } else if ws.sql_editor_ui.save_popover_open {
             ws.sql_editor_ui.save_popover_open = false;
             cx.notify();
@@ -2040,74 +2081,15 @@ fn render_toolbar_left_actions(
     vim_cmd_buf: &str,
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
-    let s = &ws.controller.strings;
-    let run_btn = if is_running {
-        Button::new("sql-cancel-btn")
-            .variant(Variant::DangerSoft)
-            .size(HeroSize::Sm)
-            .child(Icon::new(IconName::Ban).size(IconSize::Xs))
-            .label(s.stop)
-            .on_press(cx.listener(|ws, _e, _w, cx| cancel_active_query(ws, cx)))
-    } else {
-        let label = if has_selection {
-            s.run_selection
-        } else {
-            s.run
-        };
-        Button::new("sql-run-btn")
-            .variant(Variant::Primary)
-            .size(HeroSize::Sm)
-            .child(Icon::new(IconName::Play).size(IconSize::Xs))
-            .label(label)
-            .on_press(cx.listener(move |ws, _e, _w, cx| {
-                trigger_run_query(ws, has_selection, cx);
-            }))
-    };
-
-    let vim_label = if vim_enabled {
-        s.vim_on_label
-    } else {
-        s.vim_off_label
-    };
-    let drawer_count = ws.controller.saved_queries.len() + ws.controller.query_history.len();
-    let drawer_label = if drawer_count > 0 {
-        format!("{} ({drawer_count})", ws.controller.strings.library_label)
-    } else {
-        ws.controller.strings.library_label.to_owned()
-    };
     let save_popover = render_save_query_popover(ws, cx);
-    let drawer_btn = Button::new("sql-drawer-btn")
-        .variant(if ws.sql_editor_ui.show_drawer {
-            Variant::Secondary
-        } else {
-            Variant::Ghost
-        })
-        .size(HeroSize::Sm)
-        .child(Icon::new(IconName::History).size(IconSize::Xs))
-        .label(drawer_label)
-        .on_press(cx.listener(|ws, _e, _w, cx| {
-            ws.sql_editor_ui.show_drawer = !ws.sql_editor_ui.show_drawer;
-            cx.notify();
-        }));
-
-    let vim_btn = Button::new("sql-vim-toggle-btn")
-        .variant(if vim_enabled {
-            Variant::Tertiary
-        } else {
-            Variant::Ghost
-        })
-        .size(HeroSize::Sm)
-        .child(Icon::new(IconName::Terminal).size(IconSize::Xs))
-        .label(vim_label)
-        .on_press(cx.listener(|ws, _e, _w, cx| {
-            ws.controller.toggle_vim_mode();
-            let enabled = ws.controller.vim_mode.is_some();
-            ws.sql_editor_ui.doc.update(cx, |doc, cx| {
-                doc.vim = VimState::new(enabled);
-                cx.notify();
-            });
-            cx.notify();
-        }));
+    let s = &ws.controller.strings;
+    let run_btn = render_toolbar_run_button(is_running, has_selection, s, cx);
+    let find_btn = render_toolbar_find_button(ws.sql_editor_ui.find_replace_open, s, cx);
+    let format_btn = render_toolbar_format_button(s, cx);
+    let explain_btn = render_toolbar_explain_button(false, s, cx);
+    let explain_analyze_btn = render_toolbar_explain_button(true, s, cx);
+    let drawer_btn = render_toolbar_drawer_button(ws, cx);
+    let vim_btn = render_toolbar_vim_button(vim_enabled, s, cx);
 
     let mut left = div()
         .flex()
@@ -2115,6 +2097,10 @@ fn render_toolbar_left_actions(
         .gap(px(6.0))
         .child(run_btn)
         .child(save_popover)
+        .child(find_btn)
+        .child(format_btn)
+        .child(explain_btn)
+        .child(explain_analyze_btn)
         .child(drawer_btn)
         .child(vim_btn);
 
@@ -2134,6 +2120,530 @@ fn render_toolbar_left_actions(
         );
     }
     left.into_any_element()
+}
+
+fn render_toolbar_run_button(
+    is_running: bool,
+    has_selection: bool,
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    if is_running {
+        Button::new("sql-cancel-btn")
+            .variant(Variant::DangerSoft)
+            .size(HeroSize::Sm)
+            .child(Icon::new(IconName::Ban).size(IconSize::Xs))
+            .label(s.stop)
+            .on_press(cx.listener(|ws, _e, _w, cx| cancel_active_query(ws, cx)))
+            .into_any_element()
+    } else {
+        let label = if has_selection {
+            s.run_selection
+        } else {
+            s.run
+        };
+        Button::new("sql-run-btn")
+            .variant(Variant::Primary)
+            .size(HeroSize::Sm)
+            .child(Icon::new(IconName::Play).size(IconSize::Xs))
+            .label(label)
+            .on_press(cx.listener(move |ws, _e, _w, cx| {
+                trigger_run_query(ws, has_selection, cx);
+            }))
+            .into_any_element()
+    }
+}
+
+fn render_toolbar_find_button(
+    is_open: bool,
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let btn = Button::new("sql-find-btn")
+        .variant(if is_open {
+            Variant::Secondary
+        } else {
+            Variant::Ghost
+        })
+        .size(HeroSize::Sm)
+        .child(Icon::new(IconName::Search).size(IconSize::Xs))
+        .on_press(cx.listener(|ws, _e, w, cx| {
+            ws.sql_editor_ui.find_replace_open = !ws.sql_editor_ui.find_replace_open;
+            let focus = if ws.sql_editor_ui.find_replace_open {
+                ws.sql_editor_ui.find_input.read(cx).focus_handle(cx)
+            } else {
+                ws.sql_editor_ui.doc.read(cx).focus_handle.clone()
+            };
+            w.focus(&focus, cx);
+            cx.notify();
+        }));
+    Tooltip::new(format!("{} (Ctrl+F)", s.editor_find))
+        .child(btn)
+        .into_any_element()
+}
+
+fn render_toolbar_format_button(
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    Button::new("sql-format-btn")
+        .variant(Variant::Ghost)
+        .size(HeroSize::Sm)
+        .child(Icon::new(IconName::WandSparkles).size(IconSize::Xs))
+        .label(s.editor_format_sql)
+        .on_press(cx.listener(|ws, _e, _w, cx| {
+            trigger_format_sql(ws, cx);
+        }))
+        .into_any_element()
+}
+
+fn render_toolbar_explain_button(
+    analyze: bool,
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let (id, label) = if analyze {
+        ("sql-explain-analyze-btn", s.explain_analyze)
+    } else {
+        ("sql-explain-btn", s.explain_plan)
+    };
+    let mut btn = Button::new(id).variant(Variant::Ghost).size(HeroSize::Sm);
+    if !analyze {
+        btn = btn.child(Icon::new(IconName::Activity).size(IconSize::Xs));
+    }
+    btn.label(label)
+        .on_press(cx.listener(move |ws, _e, _w, cx| {
+            trigger_explain_query(ws, analyze, cx);
+        }))
+        .into_any_element()
+}
+
+fn render_toolbar_drawer_button(
+    ws: &DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let drawer_count = ws.controller.saved_queries.len() + ws.controller.query_history.len();
+    let drawer_label = if drawer_count > 0 {
+        format!("{} ({drawer_count})", ws.controller.strings.library_label)
+    } else {
+        ws.controller.strings.library_label.to_owned()
+    };
+    Button::new("sql-drawer-btn")
+        .variant(if ws.sql_editor_ui.show_drawer {
+            Variant::Secondary
+        } else {
+            Variant::Ghost
+        })
+        .size(HeroSize::Sm)
+        .child(Icon::new(IconName::History).size(IconSize::Xs))
+        .label(drawer_label)
+        .on_press(cx.listener(|ws, _e, _w, cx| {
+            ws.sql_editor_ui.show_drawer = !ws.sql_editor_ui.show_drawer;
+            cx.notify();
+        }))
+        .into_any_element()
+}
+
+fn render_toolbar_vim_button(
+    vim_enabled: bool,
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let vim_label = if vim_enabled {
+        s.vim_on_label
+    } else {
+        s.vim_off_label
+    };
+    Button::new("sql-vim-toggle-btn")
+        .variant(if vim_enabled {
+            Variant::Tertiary
+        } else {
+            Variant::Ghost
+        })
+        .size(HeroSize::Sm)
+        .child(Icon::new(IconName::Terminal).size(IconSize::Xs))
+        .label(vim_label)
+        .on_press(cx.listener(|ws, _e, _w, cx| {
+            ws.controller.toggle_vim_mode();
+            let enabled = ws.controller.vim_mode.is_some();
+            ws.sql_editor_ui.doc.update(cx, |doc, cx| {
+                doc.vim = VimState::new(enabled);
+                cx.notify();
+            });
+            cx.notify();
+        }))
+        .into_any_element()
+}
+
+fn render_find_replace_bar(
+    ws: &mut DataForgeWorkspace,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> Option<AnyElement> {
+    if !ws.sql_editor_ui.find_replace_open {
+        return None;
+    }
+    let doc_text = ws.sql_editor_ui.current_text(cx);
+    refresh_find_matches_state(ws, &doc_text, cx);
+
+    let s = &ws.controller.strings;
+    let find_input = ws.sql_editor_ui.find_input.clone();
+    let replace_input = ws.sql_editor_ui.replace_input.clone();
+    let count_label = if ws.sql_editor_ui.match_count > 0 {
+        format!(
+            "{} / {}",
+            ws.sql_editor_ui.active_match_idx + 1,
+            ws.sql_editor_ui.match_count
+        )
+    } else {
+        "0".to_owned()
+    };
+
+    let find_group = render_find_input_group(ws, &find_input, &count_label, s, cx);
+    let replace_group = render_replace_input_group(&replace_input, s, cx);
+
+    Some(
+        div()
+            .id("sql-find-replace-bar")
+            .w_full()
+            .px(px(12.0))
+            .py(px(6.0))
+            .flex_shrink_0()
+            .border_b_1()
+            .border_color(theme::hairline_border_color(cx))
+            .bg(theme::panel_surface_bg(cx))
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .justify_between()
+            .gap(px(8.0))
+            .child(find_group)
+            .child(replace_group)
+            .into_any_element(),
+    )
+}
+
+fn render_find_input_group(
+    ws: &DataForgeWorkspace,
+    find_input: &Entity<InputState>,
+    count_label: &str,
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let has_matches = ws.sql_editor_ui.match_count > 0;
+    let case_on = ws.sql_editor_ui.case_sensitive;
+    let word_on = ws.sql_editor_ui.whole_word;
+    div()
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .child(
+            div().w(px(210.0)).child(
+                Input::new(find_input)
+                    .placeholder(s.editor_find)
+                    .height(px(26.0))
+                    .text_size(px(12.0))
+                    .variant(FieldVariant::Secondary)
+                    .on_submit(cx.listener(|ws, _val: &str, _w, cx| {
+                        step_find_match(ws, true, cx);
+                    })),
+            ),
+        )
+        .child(
+            Chip::new()
+                .variant(ChipVariant::Soft)
+                .size(HeroSize::Sm)
+                .color(if has_matches {
+                    HeroColor::Accent
+                } else {
+                    HeroColor::Default
+                })
+                .child(ChipLabel::new().child(count_label.to_owned())),
+        )
+        .child(
+            Button::new("sql-find-prev-btn")
+                .variant(Variant::Ghost)
+                .size(HeroSize::Sm)
+                .is_disabled(!has_matches)
+                .child(Icon::new(IconName::ChevronUp).size(IconSize::Xs))
+                .on_press(cx.listener(|ws, _e, _w, cx| step_find_match(ws, false, cx))),
+        )
+        .child(
+            Button::new("sql-find-next-btn")
+                .variant(Variant::Ghost)
+                .size(HeroSize::Sm)
+                .is_disabled(!has_matches)
+                .child(Icon::new(IconName::ChevronDown).size(IconSize::Xs))
+                .on_press(cx.listener(|ws, _e, _w, cx| step_find_match(ws, true, cx))),
+        )
+        .child(
+            Button::new("sql-find-case-btn")
+                .variant(if case_on {
+                    Variant::Secondary
+                } else {
+                    Variant::Ghost
+                })
+                .size(HeroSize::Sm)
+                .label("Aa")
+                .on_press(cx.listener(|ws, _e, _w, cx| {
+                    ws.sql_editor_ui.case_sensitive = !ws.sql_editor_ui.case_sensitive;
+                    cx.notify();
+                })),
+        )
+        .child(
+            Button::new("sql-find-word-btn")
+                .variant(if word_on {
+                    Variant::Secondary
+                } else {
+                    Variant::Ghost
+                })
+                .size(HeroSize::Sm)
+                .label("W")
+                .on_press(cx.listener(|ws, _e, _w, cx| {
+                    ws.sql_editor_ui.whole_word = !ws.sql_editor_ui.whole_word;
+                    cx.notify();
+                })),
+        )
+        .into_any_element()
+}
+
+fn render_replace_input_group(
+    replace_input: &Entity<InputState>,
+    s: &crate::i18n::Strings,
+    cx: &mut Context<DataForgeWorkspace>,
+) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .child(
+            div().w(px(190.0)).child(
+                Input::new(replace_input)
+                    .placeholder(s.editor_replace)
+                    .height(px(26.0))
+                    .text_size(px(12.0))
+                    .variant(FieldVariant::Secondary)
+                    .on_submit(cx.listener(|ws, _val: &str, _w, cx| {
+                        apply_find_replace(ws, false, cx);
+                    })),
+            ),
+        )
+        .child(
+            Button::new("sql-replace-one-btn")
+                .variant(Variant::Tertiary)
+                .size(HeroSize::Sm)
+                .label(s.editor_replace)
+                .on_press(cx.listener(|ws, _e, _w, cx| apply_find_replace(ws, false, cx))),
+        )
+        .child(
+            Button::new("sql-replace-all-btn")
+                .variant(Variant::Tertiary)
+                .size(HeroSize::Sm)
+                .label(s.editor_replace_all)
+                .on_press(cx.listener(|ws, _e, _w, cx| apply_find_replace(ws, true, cx))),
+        )
+        .child(
+            Button::new("sql-find-close-btn")
+                .variant(Variant::Ghost)
+                .size(HeroSize::Sm)
+                .child(Icon::new(IconName::X).size(IconSize::Xs))
+                .on_press(cx.listener(|ws, _e, w, cx| {
+                    ws.sql_editor_ui.find_replace_open = false;
+                    let focus = ws.sql_editor_ui.doc.read(cx).focus_handle.clone();
+                    w.focus(&focus, cx);
+                    cx.notify();
+                })),
+        )
+        .into_any_element()
+}
+
+fn open_find_replace_with_text(
+    ws: &mut DataForgeWorkspace,
+    window: &mut Window,
+    doc_text: &str,
+    selected: Option<String>,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    ws.sql_editor_ui.find_replace_open = true;
+    if let Some(sel) = selected
+        && !sel.contains('\n')
+        && sel.len() <= 200
+    {
+        ws.sql_editor_ui.find_input.update(cx, |state, cx| {
+            state.set_value(sel);
+            cx.notify();
+        });
+    }
+    refresh_find_matches_state(ws, doc_text, cx);
+    let focus = ws.sql_editor_ui.find_input.read(cx).focus_handle(cx);
+    window.focus(&focus, cx);
+    cx.notify();
+}
+
+fn refresh_find_matches_state(ws: &mut DataForgeWorkspace, doc_text: &str, cx: &App) {
+    let query = ws.sql_editor_ui.find_input.read(cx).value().to_string();
+    let matches = if query.is_empty() {
+        Vec::new()
+    } else {
+        find_matches(
+            doc_text,
+            &query,
+            FindReplaceOptions {
+                case_sensitive: ws.sql_editor_ui.case_sensitive,
+                whole_word: ws.sql_editor_ui.whole_word,
+            },
+        )
+    };
+    ws.sql_editor_ui.match_count = matches.len();
+    if matches.is_empty() {
+        ws.sql_editor_ui.active_match_idx = 0;
+    } else if ws.sql_editor_ui.active_match_idx >= matches.len() {
+        ws.sql_editor_ui.active_match_idx = matches.len() - 1;
+    }
+    ws.sql_editor_ui.find_matches_positions = matches;
+}
+
+fn step_find_match(
+    ws: &mut DataForgeWorkspace,
+    forward: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let doc_text = ws.sql_editor_ui.current_text(cx);
+    refresh_find_matches_state(ws, &doc_text, cx);
+    let count = ws.sql_editor_ui.find_matches_positions.len();
+    if count == 0 {
+        return;
+    }
+    let idx = if forward {
+        (ws.sql_editor_ui.active_match_idx + 1) % count
+    } else if ws.sql_editor_ui.active_match_idx == 0 {
+        count - 1
+    } else {
+        ws.sql_editor_ui.active_match_idx - 1
+    };
+    ws.sql_editor_ui.active_match_idx = idx;
+    if let Some(range) = ws.sql_editor_ui.find_matches_positions.get(idx).cloned() {
+        select_byte_range_in_doc(ws, &doc_text, range, cx);
+    }
+    cx.notify();
+}
+
+fn select_byte_range_in_doc(
+    ws: &mut DataForgeWorkspace,
+    doc_text: &str,
+    range: Range<usize>,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let start_chars = doc_text[..range.start.min(doc_text.len())].chars().count();
+    let end_chars = start_chars
+        + doc_text[range.start.min(doc_text.len())..range.end.min(doc_text.len())]
+            .chars()
+            .count();
+    ws.sql_editor_ui.doc.update(cx, |doc, cx| {
+        doc.cursors = vec![CursorPosition {
+            anchor: start_chars,
+            head: end_chars,
+        }];
+        doc.ensure_primary_caret_visible();
+        cx.notify();
+    });
+}
+
+fn apply_find_replace(
+    ws: &mut DataForgeWorkspace,
+    replace_all: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let find = ws.sql_editor_ui.find_input.read(cx).value().to_string();
+    if find.is_empty() {
+        return;
+    }
+    let replace = ws.sql_editor_ui.replace_input.read(cx).value().to_string();
+    let current = ws.sql_editor_ui.current_text(cx);
+    ws.controller.set_editor_sql(&current);
+    let replaced = ws.controller.find_replace_in_editor(
+        &find,
+        &replace,
+        ws.sql_editor_ui.case_sensitive,
+        ws.sql_editor_ui.whole_word,
+        replace_all,
+    );
+    if replaced > 0 {
+        sync_doc_sql_from_controller(ws, cx);
+        let label = if replace_all {
+            ws.controller.strings.editor_replace_all
+        } else {
+            ws.controller.strings.editor_replace
+        };
+        ws.notify_toast(
+            ToastSeverity::Info,
+            format!("{label}: {replaced}"),
+            None,
+            cx,
+        );
+    }
+    cx.notify();
+}
+
+fn trigger_format_sql(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    let current = ws.sql_editor_ui.current_text(cx);
+    ws.controller.set_editor_sql(&current);
+    ws.controller.format_editor_sql();
+    sync_doc_sql_from_controller(ws, cx);
+    let msg = ws.controller.strings.editor_format_sql;
+    ws.notify_toast(ToastSeverity::Info, msg, None, cx);
+    cx.notify();
+}
+
+fn trigger_explain_query(
+    ws: &mut DataForgeWorkspace,
+    analyze: bool,
+    cx: &mut Context<DataForgeWorkspace>,
+) {
+    let sql = {
+        let doc = ws.sql_editor_ui.doc.read(cx);
+        let (s, e) = doc.primary_cursor().range();
+        if e > s {
+            doc.rope.slice(s, e)
+        } else {
+            doc.rope.text()
+        }
+    };
+    let label = if analyze {
+        ws.controller.strings.explain_analyze
+    } else {
+        ws.controller.strings.explain_plan
+    };
+    match ws.controller.run_visual_explain_blocking(&sql, analyze) {
+        Ok(nodes) => {
+            ws.notify_toast(
+                ToastSeverity::Success,
+                format!("{label}: {} nodes", nodes.len()),
+                None,
+                cx,
+            );
+            cx.notify();
+        }
+        Err(err) => {
+            ws.notify_toast(ToastSeverity::Error, err.to_string(), None, cx);
+        }
+    }
+}
+
+fn sync_doc_sql_from_controller(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+    let updated = ws.controller.editor_sql_text();
+    ws.sql_editor_ui.doc.update(cx, |doc, cx| {
+        let prev_head = doc.primary_cursor().head;
+        doc.rope = Rope::from_text(&updated);
+        let clamped = prev_head.min(doc.rope.len_chars());
+        doc.cursors = vec![CursorPosition::caret(clamped)];
+        doc.rebuild_line_starts();
+        doc.highlighter
+            .invalidate_lines(0, doc.line_starts.len().saturating_sub(1));
+        doc.last_controller_sql = updated.clone();
+        doc.ensure_primary_caret_visible();
+        cx.notify();
+    });
+    refresh_find_matches_state(ws, &updated, cx);
 }
 
 fn render_toolbar_right_status(
