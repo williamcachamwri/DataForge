@@ -1,6 +1,6 @@
-# Direct2D & DirectWrite Rendering Pipeline (`dataforge-gfx`)
+# Direct2D & DirectWrite Rendering Pipeline (`tableminus-gfx`)
 
-`crates/dataforge-gfx` renders the entire DataForge workbench directly onto Win32 `HWND`s using hardware-accelerated Direct2D (`ID2D1HwndRenderTarget`) and DirectWrite (`IDWriteFactory`).
+`crates/tableminus-gfx` renders the entire TableMinus workbench directly onto Win32 `HWND`s using hardware-accelerated Direct2D (`ID2D1HwndRenderTarget`) and DirectWrite (`IDWriteFactory`).
 
 ## 1. Device Context & Resource Budget (`context.rs`)
 
@@ -27,5 +27,5 @@
 
 ## 4. Adaptive Vector Glyphs & Theme Palette (`glyphs.rs`, `palette.rs`)
 
-- **Vector Engine Glyphs (`EngineKind::ALL`)**: All 11 supported engines (`Postgresql`, `Mysql`, `Mariadb`, `Sqlite`, `Duckdb`, `Mssql`, `Clickhouse`, `Cassandra`, `Scylladb`, `Mongodb`, `Redis`) and the DataForge icon are defined in a normalized `16.0 x 16.0` DIP viewbox (`NORMALIZED_VIEWBOX`). A pure-Rust SVG path parser converts path commands into `ID2D1PathGeometry` at any DPI scale.
+- **Vector Engine Glyphs (`EngineKind::ALL`)**: All 11 supported engines (`Postgresql`, `Mysql`, `Mariadb`, `Sqlite`, `Duckdb`, `Mssql`, `Clickhouse`, `Cassandra`, `Scylladb`, `Mongodb`, `Redis`) and the TableMinus icon are defined in a normalized `16.0 x 16.0` DIP viewbox (`NORMALIZED_VIEWBOX`). A pure-Rust SVG path parser converts path commands into `ID2D1PathGeometry` at any DPI scale.
 - **Theme Palette (`ThemePalette`)**: Maps `ThemeMode` (`Light` / `Dark` / `HighContrast`) and imported VS Code themes into `ChromePalette`, `ContentPalette`, `GridPalette`, and `SyntaxPalette`.
