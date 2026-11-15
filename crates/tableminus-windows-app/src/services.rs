@@ -1,5 +1,5 @@
-//! Service layer hub bridging `dataforge-services` (`AppRuntime`, `SessionManager`,
-//! `AiAssistantService`, `DataForgeMcpHost`, `McpServerController`, export/import)
+//! Service layer hub bridging `tableminus-services` (`AppRuntime`, `SessionManager`,
+//! `AiAssistantService`, `TableMinusMcpHost`, `McpServerController`, export/import)
 //! with `AppController` and `MainWindow`.
 
 use std::collections::HashMap;
@@ -7,15 +7,15 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_services::session_bridge::TableQueryOutcome;
-use dataforge_services::{
-    AiAssistantService, AiEndpointConfig, AppRuntime, DataForgeMcpHost, McpServerController,
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_services::session_bridge::TableQueryOutcome;
+use tableminus_services::{
+    AiAssistantService, AiEndpointConfig, AppRuntime, TableMinusMcpHost, McpServerController,
     ServiceError, SessionManager,
 };
-use dataforge_state::connection_window::{AttemptToken, WorkspaceId};
-use dataforge_state::library::LibraryConnection;
-use dataforge_windows_platform::{
+use tableminus_state::connection_window::{AttemptToken, WorkspaceId};
+use tableminus_state::library::LibraryConnection;
+use tableminus_windows_platform::{
     AppSettings, DEFAULT_CREDENTIAL_PREFIX, WindowsCredentialStore, storage_paths,
 };
 use futures::future::BoxFuture;
@@ -189,13 +189,13 @@ impl CredentialPrompter for DialogCredentialPrompter {
     }
 }
 
-/// Central hub owning all `dataforge-services` instances and async event delivery.
+/// Central hub owning all `tableminus-services` instances and async event delivery.
 pub struct ServiceHub {
     pub runtime: Arc<AppRuntime>,
     pub sessions: Arc<RwLock<SessionManager>>,
     pub credentials: Arc<WindowsCredentialStore>,
     pub ai: Option<Arc<AiAssistantService>>,
-    pub mcp_host: Arc<DataForgeMcpHost>,
+    pub mcp_host: Arc<TableMinusMcpHost>,
     pub mcp_server: Mutex<McpServerController>,
     pub connection_store: ConnectionStore,
     pub ai_config: AiEndpointConfig,
@@ -207,7 +207,7 @@ pub struct ServiceHub {
 
 impl ServiceHub {
     /// Initializes the service hub with `AppRuntime` (all 9 drivers), `SessionManager`,
-    /// `WindowsCredentialStore`, `AiAssistantService`, `DataForgeMcpHost`, and `ConnectionStore`.
+    /// `WindowsCredentialStore`, `AiAssistantService`, `TableMinusMcpHost`, and `ConnectionStore`.
     pub fn new(worker_threads: Option<usize>) -> Result<Self, ServiceError> {
         let runtime = Arc::new(AppRuntime::new(worker_threads)?);
         let sessions = Arc::new(RwLock::new(SessionManager::new(runtime.clone())));
@@ -215,10 +215,10 @@ impl ServiceHub {
         let ai = AiAssistantService::new(credentials.clone())
             .ok()
             .map(Arc::new);
-        let mcp_host = Arc::new(DataForgeMcpHost::new(sessions.clone()));
+        let mcp_host = Arc::new(TableMinusMcpHost::new(sessions.clone()));
         let mcp_server = Mutex::new(McpServerController::new(None));
         let paths = storage_paths().unwrap_or_else(|_| {
-            StoragePaths::under(&std::env::temp_dir(), "DataForge", "dev.dataforge.app")
+            StoragePaths::under(&std::env::temp_dir(), "TableMinus", "dev.tableminus.app")
         });
         let connection_store = ConnectionStore::new(&paths);
 
