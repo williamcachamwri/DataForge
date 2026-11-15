@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use dataforge_windows_platform::{
+use tableminus_windows_platform::{
     ForeignHost, ForeignPlatform, PlainHost, derive_machine_id, foreign_app_dirs,
     foreign_app_dirs_for, normalize_machine_guid, read_machine_id, storage_paths,
     storage_paths_for,
@@ -15,15 +15,15 @@ fn storage_paths_resolve_under_local_and_roaming_appdata() -> TestResult {
     assert!(
         paths
             .config
-            .ends_with(Path::new("DataForge").join("config"))
+            .ends_with(Path::new("TableMinus").join("config"))
     );
-    assert!(paths.state.ends_with(Path::new("DataForge").join("state")));
-    assert!(paths.data.ends_with(Path::new("DataForge").join("data")));
-    assert!(paths.cache.ends_with(Path::new("DataForge").join("cache")));
+    assert!(paths.state.ends_with(Path::new("TableMinus").join("state")));
+    assert!(paths.data.ends_with(Path::new("TableMinus").join("data")));
+    assert!(paths.cache.ends_with(Path::new("TableMinus").join("cache")));
     assert!(
         paths
             .runtime
-            .ends_with(Path::new("DataForge").join("runtime"))
+            .ends_with(Path::new("TableMinus").join("runtime"))
     );
 
     // Config/state live under RoamingAppData; data/cache/runtime under LocalAppData.
@@ -35,13 +35,13 @@ fn storage_paths_resolve_under_local_and_roaming_appdata() -> TestResult {
 
 #[test]
 fn storage_paths_for_uses_custom_app_dir_name() -> TestResult {
-    let paths = storage_paths_for("DataForgeDev")?;
+    let paths = storage_paths_for("TableMinusDev")?;
     assert!(
         paths
             .config
-            .ends_with(Path::new("DataForgeDev").join("config"))
+            .ends_with(Path::new("TableMinusDev").join("config"))
     );
-    assert!(paths.data.ends_with(Path::new("DataForgeDev").join("data")));
+    assert!(paths.data.ends_with(Path::new("TableMinusDev").join("data")));
     Ok(())
 }
 
