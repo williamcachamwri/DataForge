@@ -22,12 +22,12 @@ members = [
     "core/crates/drivers/postgres",
     "core/crates/drivers/redis",
     "core/crates/drivers/sqlite",
-    "crates/dataforge-windows-platform",
-    "crates/dataforge-state",
-    "crates/dataforge-gfx",
-    "crates/dataforge-services",
-    "crates/dataforge-windows-app",
-    "crates/dataforge-e2e",
+    "crates/tableminus-windows-platform",
+    "crates/tableminus-state",
+    "crates/tableminus-gfx",
+    "crates/tableminus-services",
+    "crates/tableminus-windows-app",
+    "crates/tableminus-e2e",
 ]
 
 [workspace.package]
@@ -37,10 +37,10 @@ license = "AGPL-3.0-or-later"
 publish = false
 
 [workspace.dependencies]
-dataforge-windows-platform = { path = "crates/dataforge-windows-platform" }
-dataforge-state = { path = "crates/dataforge-state" }
-dataforge-gfx = { path = "crates/dataforge-gfx" }
-dataforge-services = { path = "crates/dataforge-services" }
+tableminus-windows-platform = { path = "crates/tableminus-windows-platform" }
+tableminus-state = { path = "crates/tableminus-state" }
+tableminus-gfx = { path = "crates/tableminus-gfx" }
+tableminus-services = { path = "crates/tableminus-services" }
 tablepro-account = { path = "core/crates/account" }
 tablepro-ai = { path = "core/crates/ai" }
 tablepro-cli = { path = "core/crates/cli" }
