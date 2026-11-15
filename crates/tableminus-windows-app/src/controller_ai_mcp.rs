@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use tableminus_services::{AiAssistantService, AiEndpointConfig};
 use secrecy::SecretString;
+use tableminus_services::{AiAssistantService, AiEndpointConfig};
 use tablepro_ai::{ChatMessage, QueryLanguage, ReplyEvent};
 use tablepro_core::AiProvider;
 use tokio::sync::mpsc;
