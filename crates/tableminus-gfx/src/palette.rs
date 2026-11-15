@@ -1,6 +1,6 @@
 //! Chrome, content, grid, syntax, and Windows High-Contrast color palettes.
 //!
-//! Light and dark chrome tokens match DataForge's reference screenshots
+//! Light and dark chrome tokens match TableMinus's reference screenshots
 //! (`.github/assets/app-light.png` and `.github/assets/app-dark.png`).
 
 use windows::Win32::Graphics::Direct2D::Common::D2D1_COLOR_F;
@@ -243,7 +243,7 @@ impl ThemePalette {
         }
     }
 
-    /// Standard DataForge light palette.
+    /// Standard TableMinus light palette.
     #[must_use]
     pub const fn light() -> Self {
         Self {
@@ -301,7 +301,7 @@ impl ThemePalette {
         }
     }
 
-    /// Standard DataForge dark palette.
+    /// Standard TableMinus dark palette.
     #[must_use]
     pub const fn dark() -> Self {
         Self {
