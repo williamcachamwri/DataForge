@@ -1,4 +1,4 @@
-//! End-to-end parity tests for DataForge workbench tools on a real temporary SQLite DB
+//! End-to-end parity tests for TableMinus workbench tools on a real temporary SQLite DB
 //! via `AppController::connect_local_file_blocking`:
 //! 1. Schema Designer (`build_create_table_sql`, `build_alter_table_sql`, `execute_ddl_statements_blocking`, `fetch_table_definition_blocking`)
 //! 2. Data Import (CSV, JSON Array, NDJSON, XLSX preview + `generate_import_sql_batches`) & SQL Script Runner (`execute_sql_script_blocking`)
@@ -10,15 +10,15 @@
 use std::io::Write;
 use std::path::Path;
 
-use dataforge_services::{
+use tableminus_services::{
     AlterTableOp, ColumnMapping, ColumnSpec, CreateTableSpec, DatabaseEngine, ForeignKeySpec,
     ImportFormat, IndexSpec, JoinClause, JoinKind, VisualQuerySpec, WhereClause,
     build_alter_table_sql, build_create_table_sql, build_visual_query_sql, diff_table_rows,
     diff_table_schemas, generate_import_sql_batches, preview_import_file, read_all_import_rows,
 };
-use dataforge_windows_app::app::AppController;
-use dataforge_windows_app::i18n::Locale;
-use dataforge_windows_platform::{AppSettings, ScheduledTaskRecord, WindowsTheme};
+use tableminus_windows_app::app::AppController;
+use tableminus_windows_app::i18n::Locale;
+use tableminus_windows_platform::{AppSettings, ScheduledTaskRecord, WindowsTheme};
 use tablepro_core::QueryResult;
 use tablepro_core::value::Value;
 use tempfile::TempDir;
