@@ -44,6 +44,10 @@ Trên bản dựng release ở Windows 11, thời gian khởi động lạnh đo
 
 ![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
+### Sơ đồ ER tương tác, quan hệ khóa ngoại và xuất SVG
+
+![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+
 ---
 
 ## Hệ quản trị CSDL được hỗ trợ
