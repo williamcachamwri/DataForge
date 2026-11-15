@@ -3,8 +3,8 @@
 
 use std::sync::Arc;
 
-use tableminus_windows_platform::WindowsCredentialStore;
 use secrecy::SecretString;
+use tableminus_windows_platform::WindowsCredentialStore;
 use tablepro_ai::{
     AiClient, ApiKeyVault, ChatMessage, ChatRequest, Endpoint, QueryLanguage, ReplyEnd, ReplyEvent,
     SchemaContext, TableShape, chat_system_prompt, collect_reply, completion_message,
