@@ -3,11 +3,11 @@
 use herogpui::actions;
 use herogpui::gpui::{self, Action, App, KeyBinding};
 
-/// Focus key context attached to the root [`crate::ui::DataForgeWorkspace`] element.
-pub const WORKSPACE_KEY_CONTEXT: &str = "DataForgeWorkspace";
+/// Focus key context attached to the root [`crate::ui::TableMinusWorkspace`] element.
+pub const WORKSPACE_KEY_CONTEXT: &str = "TableMinusWorkspace";
 
 actions!(
-    dataforge,
+    tableminus,
     [
         NewQueryTab,
         CloseActiveTab,
@@ -39,7 +39,7 @@ fn binding<A: Action>(keys: &'static str, action: A) -> KeyBinding {
     KeyBinding::new(keys, action, Some(WORKSPACE_KEY_CONTEXT))
 }
 
-/// Builds the canonical DataForge Windows keybindings scoped to [`WORKSPACE_KEY_CONTEXT`].
+/// Builds the canonical TableMinus Windows keybindings scoped to [`WORKSPACE_KEY_CONTEXT`].
 #[must_use]
 pub fn workspace_key_bindings() -> Vec<KeyBinding> {
     vec![
@@ -72,7 +72,7 @@ pub fn workspace_key_bindings() -> Vec<KeyBinding> {
     ]
 }
 
-/// Registers all DataForge keyboard shortcuts in GPUI's global keymap.
+/// Registers all TableMinus keyboard shortcuts in GPUI's global keymap.
 pub fn bind_workspace_keys(cx: &mut App) {
     cx.bind_keys(workspace_key_bindings());
 }
