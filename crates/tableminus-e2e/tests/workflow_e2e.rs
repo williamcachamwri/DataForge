@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use secrecy::{ExposeSecret, SecretString};
 use tableminus_e2e::E2eResult;
 use tableminus_gfx::editor_renderer::{
     AutocompleteItem, AutocompletePopup, CompletionKind, EditorLayout, EditorLine,
@@ -24,7 +25,6 @@ use tableminus_state::theme::{
     VsCodeThemeImporter,
 };
 use tableminus_windows_platform::{WindowsCredentialStore, storage_paths_for};
-use secrecy::{ExposeSecret, SecretString};
 use tablepro_core::credentials::{SecretKind, SecretLookup, SecretVault};
 use uuid::Uuid;
 
