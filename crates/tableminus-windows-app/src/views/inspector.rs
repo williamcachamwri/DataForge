@@ -1,10 +1,10 @@
 //! Row Inspector right drawer view.
 
-use dataforge_gfx::Result;
-use dataforge_gfx::context::{
+use tableminus_gfx::Result;
+use tableminus_gfx::context::{
     FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign, point_f,
 };
-use dataforge_gfx::palette::ThemePalette;
+use tableminus_gfx::palette::ThemePalette;
 
 use crate::shell_layout::{Rect, ShellLayout};
 
