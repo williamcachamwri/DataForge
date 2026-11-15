@@ -42,7 +42,9 @@ fn main() {
         return;
     };
 
-    let rc_path = Path::new(&manifest_dir).join("assets").join("tableminus.rc");
+    let rc_path = Path::new(&manifest_dir)
+        .join("assets")
+        .join("tableminus.rc");
     let res_path = Path::new(&out_dir).join("tableminus.res");
 
     if let Some(rc_tool) = find_rc_tool() {
