@@ -1,7 +1,7 @@
 //! Normalized TablePro vector icons for all 11 database engines rendered cleanly
 //! via GPUI `canvas` + `PathBuilder` (zero Direct2D dependency).
 
-use dataforge_gfx::glyphs::{EngineKind, PathSegment, parse_svg_path};
+use tableminus_gfx::glyphs::{EngineKind, PathSegment, parse_svg_path};
 use herogpui::gpui::{
     AnyElement, Hsla, IntoElement, Path, PathBuilder, Pixels, Point, Styled, canvas, point, px,
 };
