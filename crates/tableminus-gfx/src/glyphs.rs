@@ -1,5 +1,5 @@
 //! Adaptive vector glyphs (`16x16` normalized viewbox) for all 11 database engines
-//! and the DataForge application icon, backed by a pure-Rust SVG path parser and
+//! and the TableMinus application icon, backed by a pure-Rust SVG path parser and
 //! Direct2D `ID2D1PathGeometry` builder.
 
 use std::f32::consts::TAU;
@@ -717,18 +717,18 @@ pub fn engine_glyph(kind: EngineKind) -> Result<GlyphDefinition> {
     })
 }
 
-/// Returns the `16x16` normalized DataForge application icon glyph.
+/// Returns the `16x16` normalized TableMinus application icon glyph.
 ///
 /// # Errors
 /// Returns [`GfxError::InvalidSvgPath`] if the embedded path fails to parse.
 pub fn app_icon_glyph() -> Result<GlyphDefinition> {
     Ok(GlyphDefinition {
-        name: "DataForge",
-        segments: parse_svg_path(DATAFORGE_APP_ICON_PATH, 16.0)?,
+        name: "TableMinus",
+        segments: parse_svg_path(TABLEMINUS_APP_ICON_PATH, 16.0)?,
     })
 }
 
-const DATAFORGE_APP_ICON_PATH: &str = "\
+const TABLEMINUS_APP_ICON_PATH: &str = "\
 M8 1.5C4.4 1.5 2 2.6 2 4v2c0 1.4 2.4 2.5 6 2.5s6-1.1 6-2.5V4c0-1.4-2.4-2.5-6-2.5z\
 M2 7.6v2.2c0 1.4 2.4 2.5 6 2.5s6-1.1 6-2.5V7.6c-1.3.9-3.5 1.4-6 1.4s-4.7-.5-6-1.4z\
 M2 11.4v1.8c0 1.4 2.4 2.3 6 2.3s6-.9 6-2.3v-1.8c-1.3.9-3.5 1.4-6 1.4s-4.7-.5-6-1.4z";
@@ -934,7 +934,7 @@ mod tests {
             }
         }
         let icon = app_icon_glyph()?;
-        assert_eq!(icon.name, "DataForge");
+        assert_eq!(icon.name, "TableMinus");
         assert!(!icon.segments.is_empty());
         Ok(())
     }
