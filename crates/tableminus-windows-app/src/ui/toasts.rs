@@ -16,7 +16,7 @@ use crate::app::ScreenMode;
 use crate::i18n::Strings;
 use crate::services::resolve_active_strings;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::ToastSeverity;
 use super::theme::{OVERLAY_EXIT_MS, effective_duration_ms, toast_opaque_theme};
 
@@ -26,19 +26,19 @@ use super::theme::{OVERLAY_EXIT_MS, effective_duration_ms, toast_opaque_theme};
 const TOAST_DEFERRED_PRIORITY: usize = 10;
 
 /// Renders the non-blocking bottom-right HeroGPUI [`ToastViewport`] and subscribes
-/// [`DataForgeWorkspace`] to live [`ToastStore`] changes so queued, updated, and
+/// [`TableMinusWorkspace`] to live [`ToastStore`] changes so queued, updated, and
 /// auto-dismissed toasts repaint immediately.
 #[must_use]
 pub fn render_toast_viewport(
-    _ws: &DataForgeWorkspace,
+    _ws: &TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let weak = cx.entity().downgrade();
     let store = toast_store(cx);
     let store_for_sub = store.clone();
     let _store_sub = window.use_keyed_state(
-        ElementId::Name("dataforge-toast-store-subscription".into()),
+        ElementId::Name("tableminus-toast-store-subscription".into()),
         cx,
         move |_, cx| {
             ToastStore::subscribe(&store_for_sub, cx, move |app| {
@@ -52,7 +52,7 @@ pub fn render_toast_viewport(
     let exit_duration = Duration::from_millis(effective_duration_ms(OVERLAY_EXIT_MS, cx));
 
     let viewport = ToastViewport::new()
-        .id("dataforge-toast-viewport")
+        .id("tableminus-toast-viewport")
         .placement(ToastPlacement::BottomEnd)
         .gap(px(8.0))
         .inset(px(16.0))
@@ -178,7 +178,7 @@ pub fn push_action_toast(
     toast.push(None, cx)
 }
 
-fn active_workspace_strings(workspace: &WeakEntity<DataForgeWorkspace>, cx: &App) -> Strings {
+fn active_workspace_strings(workspace: &WeakEntity<TableMinusWorkspace>, cx: &App) -> Strings {
     workspace
         .upgrade()
         .map_or_else(resolve_active_strings, |view| {
@@ -188,7 +188,7 @@ fn active_workspace_strings(workspace: &WeakEntity<DataForgeWorkspace>, cx: &App
 
 /// Pushes an error toast with a localized retry action link bound to `workspace`.
 pub fn push_retry_connection_toast(
-    workspace: WeakEntity<DataForgeWorkspace>,
+    workspace: WeakEntity<TableMinusWorkspace>,
     title: impl Into<SharedString>,
     error_detail: impl Into<SharedString>,
     cx: &mut App,
@@ -221,7 +221,7 @@ pub fn push_retry_connection_toast(
 
 /// Pushes a notification toast with a localized `"Open Settings"` action link.
 pub fn push_open_settings_toast(
-    workspace: WeakEntity<DataForgeWorkspace>,
+    workspace: WeakEntity<TableMinusWorkspace>,
     severity: ToastSeverity,
     title: impl Into<SharedString>,
     description: Option<SharedString>,
