@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use dataforge_e2e::{E2eResult, open_file_session, shutdown_session};
+use tableminus_e2e::{E2eResult, open_file_session, shutdown_session};
 use tablepro_core::credentials::{CredentialInteraction, Credentials};
 use tablepro_core::{
     ConnectEnvironment, DataModel, DatabaseDriver, DriverRegistry, EndpointKind, EngineCategory,
@@ -124,7 +124,7 @@ fn all_nine_drivers_register_and_report_capabilities() {
 async fn drivers_integrate_with_connector_and_session_registry() -> E2eResult<()> {
     let connector = DriverConnector::new(
         ConnectServices {
-            environment: ConnectEnvironment::new("dataforge-e2e"),
+            environment: ConnectEnvironment::new("tableminus-e2e"),
             ssh: Arc::new(InProcessSsh::system()),
             liveness: LivenessPolicy::DESKTOP,
         },
