@@ -5,7 +5,6 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
-use tableminus_services::export::{ExportFormat, ExportOptions, export_rows_atomic};
 use futures::channel::oneshot;
 use herogpui::components::{
     AlertDialog, AlertDialogSize, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize,
@@ -19,6 +18,7 @@ use herogpui::gpui::{
     Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::export::{ExportFormat, ExportOptions, export_rows_atomic};
 
 use super::TableMinusWorkspace;
 use super::shell_state::{WorkspaceSubView, push_error_toast, push_success_toast};
