@@ -1,10 +1,10 @@
-//! End-to-end and engine integration test harness for DataForge.
+//! End-to-end and engine integration test harness for TableMinus.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use dataforge_state::editor::RunEventAccumulator;
+use tableminus_state::editor::RunEventAccumulator;
 use tablepro_core::credentials::CredentialInteraction;
 use tablepro_core::{
     ConnectEnvironment, DatabaseDriver, EditorSession, EditorSessionOptions, FileEndpoint,
@@ -34,7 +34,7 @@ pub async fn open_file_session(
 ) -> E2eResult<Arc<Session>> {
     let connector = Arc::new(DriverConnector::new(
         ConnectServices {
-            environment: ConnectEnvironment::new("dataforge-e2e"),
+            environment: ConnectEnvironment::new("tableminus-e2e"),
             ssh: Arc::new(InProcessSsh::system()),
             liveness: LivenessPolicy::DESKTOP,
         },
