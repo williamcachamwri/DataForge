@@ -8,11 +8,11 @@ use crate::accessibility::KeyCommand;
 use crate::app::{AppController, ScreenMode};
 use crate::i18n::Strings;
 use crate::views::status_bar::TableViewMode;
-use dataforge_state::connection_window::ConnectionWindowPhase;
-use dataforge_state::tabs::{TabConnectionId, TabId, TabKind};
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::tabs::{TabConnectionId, TabId, TabKind};
 use tablepro_core::meta::{ObjectKind, TableRef};
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::{ResultPaneSubView, ToastSeverity, WorkspaceSubView, WorkspaceToolView};
 
 /// Persistent state for the workspace command palette (`Ctrl+K`).
@@ -24,20 +24,20 @@ pub struct CommandPaletteState {
 }
 
 impl CommandPaletteState {
-    /// Initializes command palette state owned by [`DataForgeWorkspace`].
+    /// Initializes command palette state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self::default()
     }
 
     /// Opens the command palette and resets selection.
-    pub fn open_palette(&mut self, _window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) {
+    pub fn open_palette(&mut self, _window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) {
         self.open = true;
         self.selected_index = 0;
     }
 
     /// Toggles command palette visibility.
-    pub fn toggle(&mut self, window: &mut Window, cx: &mut Context<DataForgeWorkspace>) {
+    pub fn toggle(&mut self, window: &mut Window, cx: &mut Context<TableMinusWorkspace>) {
         if self.open {
             self.close();
         } else {
@@ -61,13 +61,13 @@ impl CommandPaletteState {
 /// so `150ms` enter / `100ms` exit animations and focus restoration run cleanly.
 #[must_use]
 pub fn render_command_palette(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     let s = &ws.controller.strings;
     let items = build_command_items(&ws.controller);
-    let palette = CommandPalette::new("dataforge-command-palette", items)
+    let palette = CommandPalette::new("tableminus-command-palette", items)
         .is_open(ws.command_palette_ui.is_open())
         .placeholder(s.cmd_palette_placeholder)
         .empty_text(s.cmd_palette_empty)
@@ -391,10 +391,10 @@ fn compact_sql_preview(sql: &str, empty_preview: &str) -> String {
 }
 
 fn execute_palette_item(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     key: &str,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.command_palette_ui.close();
 
@@ -450,10 +450,10 @@ fn execute_palette_item(
 }
 
 fn execute_named_action(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: &str,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match action {
         "run" => {
@@ -515,10 +515,10 @@ fn execute_named_action(
 }
 
 fn execute_workbench_action(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: &str,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match action {
         "er-diagram" => open_workbench_tool(ws, WorkspaceToolView::ErDiagram),
@@ -553,14 +553,14 @@ fn execute_workbench_action(
     }
 }
 
-fn open_workbench_tool(ws: &mut DataForgeWorkspace, tool: WorkspaceToolView) {
+fn open_workbench_tool(ws: &mut TableMinusWorkspace, tool: WorkspaceToolView) {
     ws.controller.screen_mode = ScreenMode::Workspace;
     ws.workspace_pane.open_tool(tool);
 }
 
 fn run_visual_explain_from_palette(
-    ws: &mut DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let live_sql = ws.sql_editor_ui.current_text(cx);
     if !live_sql.trim().is_empty() {
@@ -587,7 +587,7 @@ fn run_visual_explain_from_palette(
     }
 }
 
-fn select_tab_by_id(ws: &mut DataForgeWorkspace, id: TabId) {
+fn select_tab_by_id(ws: &mut TableMinusWorkspace, id: TabId) {
     ws.controller.tabs.select(id);
     ws.controller.screen_mode = ScreenMode::Workspace;
     ws.workspace_pane.close_tool();
@@ -618,7 +618,7 @@ fn select_tab_by_id(ws: &mut DataForgeWorkspace, id: TabId) {
     }
 }
 
-fn open_sql_in_new_tab(ws: &mut DataForgeWorkspace, title: &str, sql: &str) {
+fn open_sql_in_new_tab(ws: &mut TableMinusWorkspace, title: &str, sql: &str) {
     ws.controller.screen_mode = ScreenMode::Workspace;
     ws.workspace_pane.close_tool();
     ws.controller
