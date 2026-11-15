@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use dataforge_state::editor::AccumulatedResultSet;
+use tableminus_state::editor::AccumulatedResultSet;
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, ProgressBar, Scrollbar,
     Spinner, SpinnerSize, TabItem, Tabs, TabsSize, TabsVariant,
@@ -25,7 +25,7 @@ use tablepro_core::value::{Temporal, Value};
 use tablepro_core::{TransactionState, Truncation};
 
 use super::shell_state::{QueryTabResultState, ResultPaneSubView, ToastSeverity};
-use super::{DataForgeWorkspace, theme};
+use super::{TableMinusWorkspace, theme};
 
 const DEFAULT_RESULTS_HEIGHT_PX: f32 = 240.0;
 const MIN_RESULTS_HEIGHT_PX: f32 = 120.0;
@@ -66,16 +66,16 @@ impl Default for ResultsPaneState {
 
 impl ResultsPaneState {
     /// Initializes results pane state for the workspace.
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self::default()
     }
 }
 
 /// Renders the execution results & messages pane anchored below the SQL editor.
 pub fn render_results_pane(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let height = ws
         .results_ui
@@ -121,9 +121,9 @@ pub fn render_results_pane(
 
 /// Renders results content filling its parent container (for embedding inside `ResizablePanel`).
 pub(crate) fn render_results_pane_embedded(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .id("results-pane-embedded")
@@ -138,9 +138,9 @@ pub(crate) fn render_results_pane_embedded(
 }
 
 fn render_top_resize_sash(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     current_height: f32,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_dragging = ws.results_ui.resizing_sash;
     let border = theme::hairline_border_color(cx);
@@ -187,9 +187,9 @@ fn render_top_resize_sash(
 }
 
 fn render_results_pane_body(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let active_tab = ws.controller.tabs.active_tab();
     let result_snapshot = active_tab
@@ -197,7 +197,7 @@ fn render_results_pane_body(
         .or_else(|| {
             (!ws.controller.last_explain_nodes.is_empty()).then(|| {
                 let mut tmp =
-                    QueryTabResultState::new(active_tab.unwrap_or(dataforge_state::tabs::TabId(0)));
+                    QueryTabResultState::new(active_tab.unwrap_or(tableminus_state::tabs::TabId(0)));
                 tmp.sub_view = ResultPaneSubView::Explain;
                 tmp
             })
@@ -272,7 +272,7 @@ fn render_results_pane_body(
         .into_any_element()
 }
 
-fn render_honest_empty_results(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_honest_empty_results(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let muted = cx.colors().muted;
     let border = theme::hairline_border_color(cx);
 
@@ -329,7 +329,7 @@ fn render_honest_empty_results(ws: &DataForgeWorkspace, cx: &App) -> AnyElement 
         .into_any_element()
 }
 
-fn render_running_placeholder(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_running_placeholder(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     div()
         .size_full()
         .flex()
@@ -347,9 +347,9 @@ fn render_running_placeholder(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
 }
 
 fn render_results_header(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     res: &QueryTabResultState,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let tab_id = res.tab_id;
@@ -437,9 +437,9 @@ fn render_results_header(
 }
 
 fn render_results_header_right(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     res: &QueryTabResultState,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let mut row = div()
         .flex()
@@ -458,8 +458,8 @@ fn render_results_header_right(
 
 fn render_running_header_controls(
     row: gpui::Div,
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     row.child(Spinner::new("results-running-spin").size(SpinnerSize::Sm))
@@ -495,7 +495,7 @@ fn render_running_header_controls(
 
 fn append_result_status_chips(
     mut row: gpui::Div,
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     res: &QueryTabResultState,
 ) -> gpui::Div {
     let s = &ws.controller.strings;
@@ -554,9 +554,9 @@ fn append_result_status_chips(
 
 fn append_result_action_buttons(
     mut row: gpui::Div,
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     res: &QueryTabResultState,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> gpui::Div {
     let s = &ws.controller.strings;
     let has_active_set = res
@@ -611,10 +611,10 @@ struct ResultGridColors {
 }
 
 fn render_result_set_grid(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     set: &AccumulatedResultSet,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let cols = &set.columns;
     let total_rows = set.rows.len();
@@ -707,7 +707,7 @@ fn wrap_result_set_grid_container(
     scroll_handle: ScrollHandle,
     header_row: AnyElement,
     body_rows: AnyElement,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .id("results-grid-container")
@@ -766,7 +766,7 @@ fn render_result_grid_body(
     col_slice: (usize, usize, f32, f32),
     selected_cell: Option<(usize, usize)>,
     colors: ResultGridColors,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let top_spacer_h = row_range.start as f32 * ROW_HEIGHT_PX;
     let bottom_spacer_h = set.rows.len().saturating_sub(row_range.end) as f32 * ROW_HEIGHT_PX;
@@ -881,7 +881,7 @@ fn render_result_grid_row(
     col_slice: (usize, usize, f32, f32),
     selected_cell: Option<(usize, usize)>,
     colors: ResultGridColors,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let (col_start, col_end, left_pad_w, right_pad_w) = col_slice;
     let zebra = theme::row_zebra_bg(row_idx, cx);
@@ -940,7 +940,7 @@ fn render_result_grid_cell(
     val: &Value,
     is_selected: bool,
     colors: ResultGridColors,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_num = val.is_number();
     let cell_id = row_idx.saturating_mul(10_000).saturating_add(col_idx);
@@ -1012,7 +1012,7 @@ fn render_result_grid_cell(
 
 fn render_messages_view(
     res: &QueryTabResultState,
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cx: &App,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -1165,7 +1165,7 @@ fn render_server_notice_banner(
         .into_any_element()
 }
 
-fn render_summary_view(res: &QueryTabResultState, ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_summary_view(res: &QueryTabResultState, ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let s = &ws.controller.strings;
     let font = theme::value_gpui_font(&ws.controller.settings);
     let total_rows: usize = res
@@ -1274,9 +1274,9 @@ fn compute_visible_col_slice(
 }
 
 fn copy_results_to_clipboard(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     active_set_idx: usize,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(tab_id) = ws.controller.tabs.active_tab() else {
         return;
@@ -1331,7 +1331,7 @@ fn copy_results_to_clipboard(
     );
 }
 
-fn sync_result_set_for_export(ws: &mut DataForgeWorkspace, active_set_idx: usize) {
+fn sync_result_set_for_export(ws: &mut TableMinusWorkspace, active_set_idx: usize) {
     let Some(tab_id) = ws.controller.tabs.active_tab() else {
         return;
     };
