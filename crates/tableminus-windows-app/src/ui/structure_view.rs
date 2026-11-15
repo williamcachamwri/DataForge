@@ -29,7 +29,7 @@ use crate::views::content::StructureColumnRow;
 
 use super::results_pane::format_core_value;
 use super::shell_state::{ToastSeverity, WorkspaceToolView};
-use super::{DataForgeWorkspace, syntax_bridge, theme};
+use super::{TableMinusWorkspace, syntax_bridge, theme};
 
 /// Sub-tabs within the Structure View.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -76,7 +76,7 @@ pub struct StructureViewState {
 
 impl StructureViewState {
     /// Creates initial Structure View state.
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self::default()
     }
 
@@ -94,9 +94,9 @@ impl StructureViewState {
 
     /// Triggers an async `fetch_table_definition` if `table` has not yet been fetched.
     pub(crate) fn ensure_table_loaded(
-        ws: &mut DataForgeWorkspace,
+        ws: &mut TableMinusWorkspace,
         table: &TableRef,
-        cx: &mut Context<DataForgeWorkspace>,
+        cx: &mut Context<TableMinusWorkspace>,
     ) {
         if ws.structure_ui.loaded_table.as_ref() == Some(table)
             || ws.structure_ui.loading_table.as_ref() == Some(table)
@@ -109,9 +109,9 @@ impl StructureViewState {
 
 /// Renders the Structure View pane for `ws.controller.active_table`.
 pub fn render_structure_view(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let Some(table) = ws.controller.active_table.clone() else {
         return render_no_table_selected(&ws.controller.strings, cx);
@@ -134,10 +134,10 @@ pub fn render_structure_view(
 }
 
 fn start_fetch_definition(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     table: TableRef,
     force_refresh: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let Some(services) = ws.controller.services.clone() else {
         ws.structure_ui.loaded_table = Some(table);
@@ -167,7 +167,7 @@ fn start_fetch_definition(
 
 fn spawn_definition_fetch_task(
     services: Arc<crate::services::ServiceHub>,
-    workspace_id: dataforge_state::connection_window::WorkspaceId,
+    workspace_id: tableminus_state::connection_window::WorkspaceId,
     table: TableRef,
     no_session_msg: &'static str,
     tx: async_channel::Sender<Result<(TableDefinition, Option<String>), String>>,
@@ -225,7 +225,7 @@ fn resolve_definition_ddl(
 }
 
 fn apply_fetched_definition(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     table: TableRef,
     result: Result<(TableDefinition, Option<String>), String>,
 ) {
@@ -270,9 +270,9 @@ fn columns_from_definition(def: &TableDefinition) -> Vec<StructureColumnRow> {
 }
 
 fn render_structure_header(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     table: &TableRef,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let qualified = match &table.schema {
         Some(schema) => format!("{schema}.{}", table.name),
@@ -347,10 +347,10 @@ fn render_structure_header(
 }
 
 fn render_structure_header_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_loading: bool,
     table_for_refresh: TableRef,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     div()
@@ -389,9 +389,9 @@ fn render_structure_header_actions(
 }
 
 fn render_structure_subtabs(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     def: Option<&TableDefinition>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Tabs {
     let col_count = def.map_or(ws.controller.structure_columns.len(), |d| d.columns.len());
     let idx_count = def.map_or(0, |d| d.indexes.len());
@@ -423,9 +423,9 @@ fn render_structure_subtabs(
 }
 
 fn render_structure_body(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     table: &TableRef,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_loading = ws.structure_ui.loading_table.as_ref() == Some(table);
     let def_matches = ws.structure_ui.loaded_table.as_ref() == Some(table);
@@ -487,7 +487,7 @@ struct StructureColumnDisplay {
 }
 
 fn collect_structure_column_entries(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     def: Option<&TableDefinition>,
 ) -> Vec<StructureColumnDisplay> {
     let mut entries: Vec<StructureColumnDisplay> = if let Some(d) = def {
@@ -560,7 +560,7 @@ fn collect_structure_column_entries(
 fn render_structure_checkbox_cell(
     orig_idx: usize,
     is_selected: bool,
-    entity_sel: Entity<DataForgeWorkspace>,
+    entity_sel: Entity<TableMinusWorkspace>,
     cx: &App,
 ) -> AnyElement {
     let colors = cx.colors();
@@ -623,7 +623,7 @@ fn build_structure_column_row(
     entry: StructureColumnDisplay,
     is_selected: bool,
     font: &herogpui::gpui::Font,
-    entity_sel: Entity<DataForgeWorkspace>,
+    entity_sel: Entity<TableMinusWorkspace>,
     s: &crate::i18n::Strings,
     cx: &App,
 ) -> TableRow {
@@ -748,9 +748,9 @@ fn render_column_attrs_row(attrs: Vec<String>, cx: &App) -> AnyElement {
 }
 
 fn render_columns_table(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     def: Option<&TableDefinition>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let cols = vec![
@@ -837,7 +837,7 @@ fn render_columns_table(
 }
 
 fn render_indexes_table(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     def: Option<&TableDefinition>,
     cx: &App,
 ) -> AnyElement {
@@ -955,7 +955,7 @@ fn build_index_table_row(
 }
 
 fn render_foreign_keys_table(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     def: Option<&TableDefinition>,
     cx: &App,
 ) -> AnyElement {
@@ -1096,10 +1096,10 @@ fn build_inbound_fk_row(
 }
 
 fn render_ddl_and_triggers(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     table: &TableRef,
     def: Option<&TableDefinition>,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let grammar = ws.active_grammar();
     let editor_font = theme::editor_gpui_font(&ws.controller.settings);
@@ -1134,7 +1134,7 @@ fn render_ddl_and_triggers(
 }
 
 fn collect_table_triggers(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     table: &TableRef,
     def: Option<&TableDefinition>,
 ) -> Vec<(String, Option<String>)> {
@@ -1160,12 +1160,12 @@ fn collect_table_triggers(
 }
 
 fn render_ddl_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     ddl_text: String,
     grammar: tablepro_core::sql_syntax::SqlGrammar,
     editor_font: &herogpui::gpui::Font,
     border: herogpui::gpui::Hsla,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     if ddl_text.is_empty() {
@@ -1235,7 +1235,7 @@ fn render_ddl_card(
 }
 
 fn render_triggers_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     trigger_deps: Vec<(String, Option<String>)>,
     grammar: tablepro_core::sql_syntax::SqlGrammar,
     editor_font: &herogpui::gpui::Font,
@@ -1347,7 +1347,8 @@ fn render_structure_skeleton(s: &crate::i18n::Strings, cx: &App) -> AnyElement {
         stack = stack.child(
             Skeleton::new()
                 .id(("structure-skel", idx))
-                .w(px(560.0))
+                .w_full()
+                .max_w(px(560.0))
                 .h(px(28.0)),
         );
     }
