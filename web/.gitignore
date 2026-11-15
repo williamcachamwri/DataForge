@@ -11,3 +11,6 @@ dist/
 Thumbs.db
 .env
 .env.*
+
+.vercel
+.env*
