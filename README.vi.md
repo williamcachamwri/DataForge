@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="crates/dataforge-windows-app/assets/dataforge_logo.png" alt="DataForge Logo" width="112" height="112" />
+<img src="crates/tableminus-windows-app/assets/tableminus_logo.png" alt="TableMinus Logo" width="112" height="112" />
 
-# DataForge
+# TableMinus
 
 **Trình quản lý cơ sở dữ liệu và SQL workbench thuần Rust cho Windows.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/DataForge/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/DataForge/actions/workflows/release.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/ci.yml?branch=main&style=flat-square&label=CI&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/williamcachamwri/TableMinus/release.yml?style=flat-square&label=Release&logo=github)](https://github.com/williamcachamwri/TableMinus/actions/workflows/release.yml)
 [![Rust](https://img.shields.io/badge/Rust-2024%20Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![GPUI](https://img.shields.io/badge/UI-HeroGPUI%20%2F%20Direct3D%2011-0078D4?style=flat-square&logo=windows&logoColor=white)](#tổng-quan)
 [![Drivers](https://img.shields.io/badge/Drivers-9%20Engines-10B981?style=flat-square)](#hệ-quản-trị-csdl-được-hỗ-trợ)
@@ -24,9 +24,9 @@
 
 ## Tổng quan
 
-DataForge là ứng dụng SQL và quản lý cơ sở dữ liệu viết bằng Rust dành riêng cho Windows. Giao diện dựng bằng [HeroGPUI](https://github.com/williamcachamwri/DataForge) trên nền Direct3D 11 và sử dụng lõi Rust mã nguồn mở của [TablePro](https://github.com/TableProApp/TablePro), không chạy qua Electron hay JVM.
+TableMinus là ứng dụng SQL và quản lý cơ sở dữ liệu viết bằng Rust dành riêng cho Windows. Giao diện dựng bằng [HeroGPUI](https://github.com/williamcachamwri/TableMinus) trên nền Direct3D 11 và sử dụng lõi Rust mã nguồn mở của [TablePro](https://github.com/TableProApp/TablePro), không chạy qua Electron hay JVM.
 
-Trên bản dựng release ở Windows 11, thời gian khởi động lạnh đo được quanh mức `10 ms` (từ `9.21` đến `10.11 ms` qua `--smoke-startup` khi nạp đủ 9 driver), còn bộ nhớ tiến trình giữ ở khoảng `~55 MB` trong các bài kiểm tra tải `100k`, `500k` và `1M` dòng. Trong bộ test SQLite của `dataforge-e2e`, việc nạp `100k` dòng vào bảng lưới mất `24.43 ms` và cuộn `10k` khung hình mất `0.432 ms`.
+Trên bản dựng release ở Windows 11, thời gian khởi động lạnh đo được quanh mức `10 ms` (từ `9.21` đến `10.11 ms` qua `--smoke-startup` khi nạp đủ 9 driver), còn bộ nhớ tiến trình giữ ở khoảng `~55 MB` trong các bài kiểm tra tải `100k`, `500k` và `1M` dòng. Trong bộ test SQLite của `tableminus-e2e`, việc nạp `100k` dòng vào bảng lưới mất `24.43 ms` và cuộn `10k` khung hình mất `0.432 ms`.
 
 ---
 
@@ -34,25 +34,25 @@ Trên bản dựng release ở Windows 11, thời gian khởi động lạnh đo
 
 ### Trình soạn thảo SQL, chế độ Vim và khung kết quả chia đôi (truy vấn có chỉ mục trên 10M dòng trong `15 ms`)
 
-![DataForge SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
+![TableMinus SQL Editor querying 10 million rows](docs/screenshots/sql-editor-10m.jpg)
 
 ### Lưới dữ liệu ảo hóa, trình xem cấu trúc và bộ lọc tham số hóa
 
-![DataForge Data Grid view](docs/screenshots/data-grid.jpg)
+![TableMinus Data Grid view](docs/screenshots/data-grid.jpg)
 
 ### Ngăn trợ lý AI chỉ đọc schema (`Ctrl+Shift+A`)
 
-![DataForge Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
+![TableMinus Schema-Aware AI Assistant](docs/screenshots/ai-assistant.jpg)
 
 ### Sơ đồ ER tương tác, quan hệ khóa ngoại và xuất SVG
 
-![DataForge ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
+![TableMinus ER Diagram Workbench](docs/screenshots/er-diagram-workbench.jpg)
 
 ---
 
 ## Hệ quản trị CSDL được hỗ trợ
 
-DataForge biên dịch sẵn 9 driver vào thẳng tệp `dataforge.exe`, không cần cài thêm ODBC hay plugin ngoài:
+TableMinus biên dịch sẵn 9 driver vào thẳng tệp `tableminus.exe`, không cần cài thêm ODBC hay plugin ngoài:
 
 | Hệ quản trị | Crate driver | Ghi chú |
 | :--- | :--- | :--- |
@@ -92,17 +92,17 @@ Với các công cụ lập trình hoặc IDE bên ngoài, `tablepro-mcp` chạy
 
 - `list_connections`, `connect`, `list_databases`, `list_schemas`, `list_tables`, `describe_table`, `get_table_ddl`, `browse_table`, `count_rows`, `execute_query`, `export_data`
 
-Công cụ `execute_query` tuân thủ cấu hình External Clients và Safe Mode của từng kết nối, đồng thời yêu cầu người dùng bấm xác nhận ngay trong DataForge trước khi chạy bất kỳ lệnh ghi nào.
+Công cụ `execute_query` tuân thủ cấu hình External Clients và Safe Mode của từng kết nối, đồng thời yêu cầu người dùng bấm xác nhận ngay trong TableMinus trước khi chạy bất kỳ lệnh ghi nào.
 
 ### Giao diện, Vật liệu nền và Ngôn ngữ
 
-DataForge có sẵn 14 bộ giao diện (`Dark`, `Light`, `High Contrast`, `Gaussian Glass Dark`, `Gaussian Glass Light`, `Tokyo Night`, `Dracula`, `Catppuccin Mocha`, `One Dark Pro`, `Nord`, `Monokai Pro`, `Gruvbox Dark`, `GitHub Light`, `Catppuccin Latte`). Bạn có thể chọn tách biệt giao diện khung ứng dụng và bảng màu mã nguồn, hoặc nhập tệp theme `.json` từ VS Code.
+TableMinus có sẵn 14 bộ giao diện (`Dark`, `Light`, `High Contrast`, `Gaussian Glass Dark`, `Gaussian Glass Light`, `Tokyo Night`, `Dracula`, `Catppuccin Mocha`, `One Dark Pro`, `Nord`, `Monokai Pro`, `Gruvbox Dark`, `GitHub Light`, `Catppuccin Latte`). Bạn có thể chọn tách biệt giao diện khung ứng dụng và bảng màu mã nguồn, hoặc nhập tệp theme `.json` từ VS Code.
 
 Trên Windows 11, cửa sổ chính hỗ trợ các vật liệu nền DWM gồm `Gaussian Blur`, `Mica`, `Mica Alt` và `Opaque`, trong khi các lớp nổi (modal, dropdown, toast) luôn giữ nền đục (`1.0` alpha) để chữ không bị nhòe. Tùy chọn Reduced Motion tự đồng bộ theo `SPI_GETCLIENTAREAANIMATION` của Windows để bỏ qua hiệu ứng chuyển động khi hệ thống tắt hoạt ảnh. Toàn bộ nhãn giao diện, menu, hộp thoại và thông báo lỗi từ driver hỗ trợ 6 ngôn ngữ: `en-US`, `vi-VN`, `zh-CN`, `ja-JP`, `es-ES` và `fr-FR`.
 
 ### Sử dụng qua CLI
 
-`dataforge.exe` vừa khởi chạy giao diện đồ họa vừa đóng vai trò công cụ dòng lệnh (`tablepro-cli`). Khi truyền đường dẫn `.sqlite`, `.db`, `.duckdb`, `.sql` hoặc chuỗi kết nối (`postgresql://...`), tệp sẽ mở ngay trong cửa sổ đang chạy qua Named Pipe IPC (thêm `-n` / `--new-window` nếu muốn mở cửa sổ mới).
+`tableminus.exe` vừa khởi chạy giao diện đồ họa vừa đóng vai trò công cụ dòng lệnh (`tablepro-cli`). Khi truyền đường dẫn `.sqlite`, `.db`, `.duckdb`, `.sql` hoặc chuỗi kết nối (`postgresql://...`), tệp sẽ mở ngay trong cửa sổ đang chạy qua Named Pipe IPC (thêm `-n` / `--new-window` nếu muốn mở cửa sổ mới).
 
 Các cờ cấp ứng dụng:
 - `--version` (`-V`) in phiên bản rồi thoát.
@@ -113,25 +113,25 @@ Các lệnh con: `open`, `query`, `connections`, `databases`, `schemas`, `tables
 
 ```powershell
 # Chạy truy vấn chỉ đọc và xuất kết quả dạng JSON Lines
-.\target\release\dataforge.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
+.\target\release\tableminus.exe query -c Staging --read-only --format jsonl "SELECT id, email FROM users LIMIT 10"
 
 # Xem câu lệnh CREATE TABLE DDL của một bảng
-.\target\release\dataforge.exe describe -c Staging --ddl users
+.\target\release\tableminus.exe describe -c Staging --ddl users
 ```
 
 ---
 
 ## Tải về và Cài đặt
 
-Yêu cầu **Windows 10 hoặc Windows 11 (x64)**. Các bản dựng sẵn được phát hành tại [GitHub Releases](https://github.com/williamcachamwri/DataForge/releases):
+Yêu cầu **Windows 10 hoặc Windows 11 (x64)**. Các bản dựng sẵn được phát hành tại [GitHub Releases](https://github.com/williamcachamwri/TableMinus/releases):
 
-- **Bộ cài đặt (`DataForge-win-Setup.exe`)**: Cài vào `%LocalAppData%` kèm lối tắt Start Menu và màn hình nền mà không cần quyền quản trị UAC. Sử dụng Velopack để cập nhật phần sai khác (delta) chạy nền, tùy chỉnh trong **Settings -> About**.
-- **Bản Portable (`DataForge-win-Portable.zip`)**: Giải nén ra thư mục bất kỳ và chạy thẳng `dataforge.exe` mà không ảnh hưởng trạng thái bộ cài.
+- **Bộ cài đặt (`TableMinus-win-Setup.exe`)**: Cài vào `%LocalAppData%` kèm lối tắt Start Menu và màn hình nền mà không cần quyền quản trị UAC. Sử dụng Velopack để cập nhật phần sai khác (delta) chạy nền, tùy chỉnh trong **Settings -> About**.
+- **Bản Portable (`TableMinus-win-Portable.zip`)**: Giải nén ra thư mục bất kỳ và chạy thẳng `tableminus.exe` mà không ảnh hưởng trạng thái bộ cài.
 
 Mỗi bản phát hành đều kèm tệp `SHA256SUMS.txt` để đối chiếu bằng PowerShell:
 
 ```powershell
-Get-FileHash .\DataForge-win-Setup.exe -Algorithm SHA256
+Get-FileHash .\TableMinus-win-Setup.exe -Algorithm SHA256
 ```
 
 ---
@@ -178,24 +178,24 @@ Chế độ Vim (`NORMAL`, `INSERT`, `VISUAL` và lệnh `:`) có thể bật tr
 ### Lệnh biên dịch và kiểm tra
 
 ```powershell
-# Kiểm tra xem có tiến trình dataforge.exe nào đang khóa tệp đầu ra không
-Get-Process dataforge -ErrorAction SilentlyContinue
+# Kiểm tra xem có tiến trình tableminus.exe nào đang khóa tệp đầu ra không
+Get-Process tableminus -ErrorAction SilentlyContinue
 
 # Kiểm tra kiểu và biên dịch bản release
-cargo check --release -j 1 -p dataforge-windows-app
-cargo build --release -j 1 -p dataforge-windows-app
+cargo check --release -j 1 -p tableminus-windows-app
+cargo build --release -j 1 -p tableminus-windows-app
 
 # Chạy kiểm tra khởi động và mở ứng dụng
-.\target\release\dataforge.exe --smoke-startup
-.\target\release\dataforge.exe
+.\target\release\tableminus.exe --smoke-startup
+.\target\release\tableminus.exe
 ```
 
 Các bộ kiểm thử release:
 
 ```powershell
 cargo test --release -j 1 -p tablepro-core filter
-cargo test --release -j 1 -p dataforge-e2e --test startup_perf_e2e -- --nocapture
-cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test startup_perf_e2e -- --nocapture
+cargo test --release -j 1 -p tableminus-e2e --test sqlite_e2e -- --nocapture
 ```
 
 ### Cấu trúc workspace
@@ -213,12 +213,12 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 | `core/crates/foreign-import` | `tablepro-foreign-import`: nhập kết nối từ các trình quản lý DB khác |
 | `core/crates/account` | `tablepro-account`: trait tài khoản và token |
 | `core/crates/drivers/*` | 9 driver CSDL (`postgres`, `mysql`, `sqlite`, `duckdb`, `mssql`, `clickhouse`, `cassandra`, `mongodb`, `redis`) |
-| `crates/dataforge-gfx` | Biểu tượng vector và icon hệ quản trị CSDL |
-| `crates/dataforge-state` | Trạng thái editor, autocomplete, mô hình lưới, tab, 14 bộ giao diện |
-| `crates/dataforge-services` | Runtime Tokio bất đồng bộ, điều phối session/AI/MCP, chẩn đoán lỗi |
-| `crates/dataforge-windows-platform` | Cấu hình JSON, Windows Credential Manager, DWM và Reduced Motion |
-| `crates/dataforge-windows-app` | Ứng dụng HeroGPUI (Direct3D 11), bộ cập nhật Velopack, 6 ngôn ngữ |
-| `crates/dataforge-e2e` | Bộ đo hiệu năng SQLite, DuckDB, khởi động và lưới dữ liệu |
+| `crates/tableminus-gfx` | Biểu tượng vector và icon hệ quản trị CSDL |
+| `crates/tableminus-state` | Trạng thái editor, autocomplete, mô hình lưới, tab, 14 bộ giao diện |
+| `crates/tableminus-services` | Runtime Tokio bất đồng bộ, điều phối session/AI/MCP, chẩn đoán lỗi |
+| `crates/tableminus-windows-platform` | Cấu hình JSON, Windows Credential Manager, DWM và Reduced Motion |
+| `crates/tableminus-windows-app` | Ứng dụng HeroGPUI (Direct3D 11), bộ cập nhật Velopack, 6 ngôn ngữ |
+| `crates/tableminus-e2e` | Bộ đo hiệu năng SQLite, DuckDB, khởi động và lưới dữ liệu |
 
 ---
 
@@ -226,4 +226,4 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 
 Mọi đóng góp mã nguồn, báo lỗi hoặc sửa bản dịch đều được hoan nghênh. Xem [CONTRIBUTING.md](CONTRIBUTING.md) để nắm quy tắc biên dịch và GPUI, [CHANGELOG.md](CHANGELOG.md) cho lịch sử phiên bản, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), và [SECURITY.md](SECURITY.md) khi cần báo cáo lỗ hổng bảo mật riêng tư.
 
-DataForge được phát hành theo [LICENSE](LICENSE) (GNU Affero General Public License v3.0) và [LICENSE-MIT](LICENSE-MIT) (MIT, kèm ghi nhận phần lõi từ [TableProApp/TablePro](https://github.com/TableProApp/TablePro)).
+TableMinus được phát hành theo [LICENSE](LICENSE) (GNU Affero General Public License v3.0) và [LICENSE-MIT](LICENSE-MIT) (MIT, kèm ghi nhận phần lõi từ [TableProApp/TablePro](https://github.com/TableProApp/TablePro)).
