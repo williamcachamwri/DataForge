@@ -9353,7 +9353,7 @@ dependencies = [
 
 [[package]]
 name = "tableminus-e2e"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "chrono",
@@ -9391,7 +9391,7 @@ dependencies = [
 
 [[package]]
 name = "tableminus-gfx"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "thiserror 2.0.20",
  "tracing",
@@ -9401,7 +9401,7 @@ dependencies = [
 
 [[package]]
 name = "tableminus-services"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "chrono",
@@ -9444,7 +9444,7 @@ dependencies = [
 
 [[package]]
 name = "tableminus-state"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "chrono",
  "proptest",
@@ -9464,7 +9464,7 @@ dependencies = [
 
 [[package]]
 name = "tableminus-windows-app"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-channel",
  "flate2",
@@ -9499,7 +9499,7 @@ dependencies = [
 
 [[package]]
 name = "tableminus-windows-platform"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "async-trait",
  "futures",
