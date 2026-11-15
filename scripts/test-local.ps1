@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    One-command local release verification suite for DataForge (Windows).
+    One-command local release verification suite for TableMinus (Windows).
 .DESCRIPTION
     Runs rustfmt, clippy (--all-targets), all pure-Rust unit/integration/E2E suites
-    with `--release -j 1` (preventing debug PDB bloat), builds `dataforge.exe`,
+    with `--release -j 1` (preventing debug PDB bloat), builds `tableminus.exe`,
     and verifies `--smoke-startup`.
 #>
 [CmdletBinding()]
@@ -30,12 +30,12 @@ function Invoke-Step {
 
 try {
     $Crates = @(
-        '-p', 'dataforge-windows-platform',
-        '-p', 'dataforge-state',
-        '-p', 'dataforge-gfx',
-        '-p', 'dataforge-services',
-        '-p', 'dataforge-windows-app',
-        '-p', 'dataforge-e2e'
+        '-p', 'tableminus-windows-platform',
+        '-p', 'tableminus-state',
+        '-p', 'tableminus-gfx',
+        '-p', 'tableminus-services',
+        '-p', 'tableminus-windows-app',
+        '-p', 'tableminus-e2e'
     )
 
     Invoke-Step 'Checking formatting (cargo fmt --check)' {
@@ -46,20 +46,20 @@ try {
         cargo clippy --release -j 1 --no-deps --all-targets @Crates -- -D warnings
     }
 
-    Invoke-Step 'Testing dataforge-windows-platform (unit + integration)' {
-        cargo test --release -j 1 -p dataforge-windows-platform
+    Invoke-Step 'Testing tableminus-windows-platform (unit + integration)' {
+        cargo test --release -j 1 -p tableminus-windows-platform
     }
 
-    Invoke-Step 'Testing dataforge-state (unit + state_integration)' {
-        cargo test --release -j 1 -p dataforge-state
+    Invoke-Step 'Testing tableminus-state (unit + state_integration)' {
+        cargo test --release -j 1 -p tableminus-state
     }
 
-    Invoke-Step 'Testing dataforge-services' {
-        cargo test --release -j 1 -p dataforge-services
+    Invoke-Step 'Testing tableminus-services' {
+        cargo test --release -j 1 -p tableminus-services
     }
 
-    Invoke-Step 'Testing dataforge-windows-app (unit + all parity/integration suites)' {
-        cargo test --release -j 1 -p dataforge-windows-app `
+    Invoke-Step 'Testing tableminus-windows-app (unit + all parity/integration suites)' {
+        cargo test --release -j 1 -p tableminus-windows-app `
             --lib `
             --test startup_shell `
             --test layout_hit_test `
@@ -70,8 +70,8 @@ try {
             --test workbench_parity_tools
     }
 
-    Invoke-Step 'Testing dataforge-e2e (self-contained SQLite/DuckDB/Import/Perf suites)' {
-        cargo test --release -j 1 -p dataforge-e2e `
+    Invoke-Step 'Testing tableminus-e2e (self-contained SQLite/DuckDB/Import/Perf suites)' {
+        cargo test --release -j 1 -p tableminus-e2e `
             --test sqlite_e2e `
             --test duckdb_e2e `
             --test import_e2e `
@@ -80,21 +80,21 @@ try {
             --test grid_perf_and_interop_e2e
     }
 
-    $running = Get-Process -Name 'dataforge' -ErrorAction SilentlyContinue
+    $running = Get-Process -Name 'tableminus' -ErrorAction SilentlyContinue
     if ($running) {
-        throw 'dataforge.exe is currently running; close it before building release binary.'
+        throw 'tableminus.exe is currently running; close it before building release binary.'
     }
 
-    Invoke-Step 'Building release binary (dataforge.exe)' {
-        cargo build --release -j 1 -p dataforge-windows-app
+    Invoke-Step 'Building release binary (tableminus.exe)' {
+        cargo build --release -j 1 -p tableminus-windows-app
     }
 
     Invoke-Step 'Verifying smoke startup' {
-        & .\target\release\dataforge.exe --smoke-startup
+        & .\target\release\tableminus.exe --smoke-startup
     }
 
     Write-Host ""
-    Write-Host "All DataForge release checks and test suites passed!" -ForegroundColor Green
+    Write-Host "All TableMinus release checks and test suites passed!" -ForegroundColor Green
 }
 finally {
     Pop-Location
