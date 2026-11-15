@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
-use dataforge_e2e::{E2eResult, open_file_session, run_sql, shutdown_session};
-use dataforge_state::data_grid::{DataGridLayoutScope, DataGridModel};
+use tableminus_e2e::{E2eResult, open_file_session, run_sql, shutdown_session};
+use tableminus_state::data_grid::{DataGridLayoutScope, DataGridModel};
 use tablepro_core::browse::{PageRequest, read_page};
 use tablepro_core::export::{CsvOptions, JsonArrayEncoder, RowEncoder, render_tsv};
 use tablepro_core::filter::FilterSet;
