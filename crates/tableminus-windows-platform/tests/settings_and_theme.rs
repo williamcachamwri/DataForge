@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use dataforge_windows_platform::{
+use tableminus_windows_platform::{
     AppSettings, EditorFont, EnvironmentKind, FontSpec, McpSettings, ThemePreference,
     WindowControlsStyle, WindowGeometry, WindowsTheme, apps_use_light_theme, detect_reduced_motion,
     detect_theme, detect_theme_or_default, is_high_contrast, theme_from_flags,
@@ -26,7 +26,7 @@ fn settings_save_atomic_roundtrips_and_leaves_no_temp_files() -> TestResult {
 
     let custom = AppSettings {
         theme: ThemePreference::Dark,
-        window_backdrop: dataforge_windows_platform::WindowBackdropPreference::GaussianBlur,
+        window_backdrop: tableminus_windows_platform::WindowBackdropPreference::GaussianBlur,
         window_controls: WindowControlsStyle::Windows,
         content_theme_id: Some("builtin.tokyo_night".to_owned()),
         syntax_palette_id: Some("builtin.dracula".to_owned()),
