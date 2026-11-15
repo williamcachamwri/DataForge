@@ -1,4 +1,4 @@
-//! Build script embedding the DataForge Win32 icon and Per-Monitor DPI v2 manifest.
+//! Build script embedding the TableMinus Win32 icon and Per-Monitor DPI v2 manifest.
 
 use std::env;
 use std::io::Write;
@@ -24,9 +24,9 @@ fn find_rc_tool() -> Option<PathBuf> {
 }
 
 fn main() {
-    emit_cargo("cargo:rerun-if-changed=assets/dataforge.rc");
-    emit_cargo("cargo:rerun-if-changed=assets/dataforge.ico");
-    emit_cargo("cargo:rerun-if-changed=assets/dataforge.exe.manifest");
+    emit_cargo("cargo:rerun-if-changed=assets/tableminus.rc");
+    emit_cargo("cargo:rerun-if-changed=assets/tableminus.ico");
+    emit_cargo("cargo:rerun-if-changed=assets/tableminus.exe.manifest");
 
     let Ok(target_os) = env::var("CARGO_CFG_TARGET_OS") else {
         return;
@@ -42,8 +42,8 @@ fn main() {
         return;
     };
 
-    let rc_path = Path::new(&manifest_dir).join("assets").join("dataforge.rc");
-    let res_path = Path::new(&out_dir).join("dataforge.res");
+    let rc_path = Path::new(&manifest_dir).join("assets").join("tableminus.rc");
+    let res_path = Path::new(&out_dir).join("tableminus.res");
 
     if let Some(rc_tool) = find_rc_tool() {
         let mut cmd = Command::new(&rc_tool);
@@ -53,7 +53,7 @@ fn main() {
             && res_path.exists()
         {
             emit_cargo(&format!(
-                "cargo:rustc-link-arg-bin=dataforge={}",
+                "cargo:rustc-link-arg-bin=tableminus={}",
                 res_path.display()
             ));
         }
