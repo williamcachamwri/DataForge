@@ -10,6 +10,12 @@
 
 use std::time::Duration;
 
+use herogpui::core::{readable_color, with_alpha};
+use herogpui::gpui::{
+    Animation, AnimationExt, AnyElement, App, ElementId, Font, FontFeatures, FontStyle, Hsla,
+    IntoElement, Rgba as GpuiRgba, Styled, font as gpui_font, px,
+};
+use herogpui::theme::{ActiveTheme, Appearance, Theme, set_reduce_motion, set_theme};
 use tableminus_gfx::palette::{Color as GfxColor, ThemeMode, ThemePalette};
 use tableminus_state::theme::{
     ResolvedTheme, Rgba as StateRgba, ThemeAppearance, ThemeDefinition, ThemeSlot,
@@ -17,12 +23,6 @@ use tableminus_state::theme::{
 use tableminus_windows_platform::{
     AppSettings, EditorFont, FontSpec, WindowBackdropPreference, detect_reduced_motion,
 };
-use herogpui::core::{readable_color, with_alpha};
-use herogpui::gpui::{
-    Animation, AnimationExt, AnyElement, App, ElementId, Font, FontFeatures, FontStyle, Hsla,
-    IntoElement, Rgba as GpuiRgba, Styled, font as gpui_font, px,
-};
-use herogpui::theme::{ActiveTheme, Appearance, Theme, set_reduce_motion, set_theme};
 
 /// Theme id registered in HeroGPUI when Light mode is active.
 pub const LIGHT_THEME_ID: &str = "tableminus-light";
