@@ -14,9 +14,9 @@ use crate::accessibility::KeyCommand;
 use crate::app::{AppController, ScreenMode};
 use crate::i18n::Strings;
 use crate::views::rail::RailConnectionItem;
-use dataforge_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::connection_window::ConnectionWindowPhase;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::WorkspaceToolView;
 use super::theme::{
@@ -27,9 +27,9 @@ use super::theme::{
 /// Renders the compact left vertical navigation rail.
 #[must_use]
 pub fn render_rail(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let skip_anim = is_reduced_motion(cx);
     let pending_edits = pending_edit_count(&ws.controller);
@@ -117,7 +117,7 @@ fn render_workspace_nav_button(
     connected: bool,
     pending_edits: usize,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let selected = controller.screen_mode == ScreenMode::Workspace;
@@ -179,7 +179,7 @@ fn render_workspace_nav_button(
 fn render_rail_workspaces(
     controller: &AppController,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let mut col = div()
         .id("rail-workspaces")
@@ -209,7 +209,7 @@ fn render_rail_workspace_item(
     item: &RailConnectionItem,
     in_workspace: bool,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let is_active = in_workspace && item.active;
@@ -278,9 +278,9 @@ fn render_rail_workspace_item(
 }
 
 fn render_rail_tools(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let in_workspace = ws.controller.screen_mode == ScreenMode::Workspace;
@@ -379,7 +379,7 @@ fn render_rail_tools(
 fn render_rail_bottom_controls(
     controller: &AppController,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &controller.strings;
     let dark = controller.uses_dark_titlebar();
@@ -450,7 +450,7 @@ fn render_rail_theme_toggle(
     s: &Strings,
     dark: bool,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     Tooltip::new(if dark {
@@ -487,7 +487,7 @@ fn render_rail_toggle(
     icon: IconName,
     selected: bool,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
     on_press: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> AnyElement {
     let tooltip: SharedString = tooltip.into();
