@@ -2,14 +2,14 @@
 
 use std::time::Duration;
 
-use dataforge_services::server_monitor::{
+use tableminus_services::server_monitor::{
     self, LiveSessionRow, ServerLockRow, ServerMonitorSnapshot,
 };
-use dataforge_services::{
+use tableminus_services::{
     DatabaseEngine, active_sessions_query, kill_session_sql, users_roles_query,
 };
-use dataforge_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
-use dataforge_windows_platform::{ScheduledTaskRecord, ScheduledTaskRunEntry};
+use tableminus_state::connection_window::{ConnectionWindowPhase, WorkspaceId};
+use tableminus_windows_platform::{ScheduledTaskRecord, ScheduledTaskRunEntry};
 use herogpui::components::{
     Alert, Button, Chip, ChipLabel, ChipVariant, Icon, IconName, IconSize, Input, InputState,
     PickerItem, Select, Separator, Switch, TabItem, Tabs, TabsSize, TabsVariant,
@@ -22,7 +22,7 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::results_pane::format_core_value;
 use super::shell_state::{push_error_toast, push_success_toast};
 use super::theme::{
@@ -97,9 +97,9 @@ impl std::fmt::Debug for AdminViewState {
 }
 
 impl AdminViewState {
-    /// Creates initial Admin view state owned by [`DataForgeWorkspace`].
+    /// Creates initial Admin view state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let task_name_input = cx.new(|cx| InputState::new(cx));
         let task_sql_input = cx.new(|cx| InputState::new(cx));
         let task_interval_input = cx.new(|cx| {
@@ -147,9 +147,9 @@ impl AdminViewState {
 /// Renders the Server Admin & Scheduled Tasks workbench tool view.
 #[must_use]
 pub fn render_admin_view(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_connected = matches!(
         ws.controller
@@ -181,9 +181,9 @@ pub fn render_admin_view(
 }
 
 fn ensure_section_loaded(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     if !is_connected {
         return;
@@ -208,8 +208,8 @@ fn ensure_section_loaded(
 }
 
 fn render_admin_header(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -268,7 +268,7 @@ fn render_admin_header(
         .into_any_element()
 }
 
-fn render_admin_tabs(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_admin_tabs(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let live_session_count = ws
         .admin_ui
@@ -342,9 +342,9 @@ fn render_admin_tabs(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspac
 }
 
 fn render_users_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let toolbar = render_query_section_toolbar(
@@ -373,9 +373,9 @@ fn render_users_section(
 }
 
 fn render_sessions_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let toolbar = render_query_section_toolbar(
@@ -472,8 +472,8 @@ struct AdminTableSpec<'a> {
 fn render_query_section_body(
     toolbar: AnyElement,
     spec: &AdminTableSpec<'_>,
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -601,7 +601,7 @@ fn render_admin_table_row(
     cells: &[String],
     kill_pid_col: Option<usize>,
     kill_label: &'static str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let mut row = div()
@@ -650,8 +650,8 @@ fn render_admin_table_row(
 }
 
 fn render_tasks_section(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -726,8 +726,8 @@ fn render_tasks_section(
 }
 
 fn render_new_task_form(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let kind_items = vec![
@@ -819,8 +819,8 @@ fn render_new_task_form(
 }
 
 fn render_task_connection_picker(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let mut items = vec![PickerItem::new("", s.active_connection_fallback)];
@@ -841,7 +841,7 @@ fn render_task_connection_picker(
         .into_any_element()
 }
 
-fn resolve_task_conn_label(ws: &DataForgeWorkspace, connection_id: &str) -> String {
+fn resolve_task_conn_label(ws: &TableMinusWorkspace, connection_id: &str) -> String {
     let fallback = ws.controller.strings.active_connection_fallback;
     ws.controller
         .library
@@ -862,11 +862,11 @@ fn resolve_task_conn_label(ws: &DataForgeWorkspace, connection_id: &str) -> Stri
 }
 
 fn render_task_card_header(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     task: &ScheduledTaskRecord,
     conn_label: String,
     history_open: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let task_id_toggle = task.id.clone();
@@ -935,9 +935,9 @@ fn render_task_card_header(
 }
 
 fn render_scheduled_task_card(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     task: &ScheduledTaskRecord,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let font = editor_gpui_font(&ws.controller.settings);
@@ -981,11 +981,11 @@ fn render_scheduled_task_card(
 }
 
 fn render_task_card_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     task_id: &str,
     history_len: usize,
     history_open: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let id_run = task_id.to_owned();
@@ -1042,7 +1042,7 @@ fn render_task_card_actions(
 }
 
 fn render_task_run_history(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     entries: &[ScheduledTaskRunEntry],
     cx: &App,
 ) -> AnyElement {
@@ -1160,7 +1160,7 @@ fn render_centered_note(title: &str, subtitle: &str, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn refresh_users_roles(ws: &mut DataForgeWorkspace) {
+fn refresh_users_roles(ws: &mut TableMinusWorkspace) {
     ws.admin_ui.users_loaded_ws = Some(ws.controller.active_workspace);
     ws.admin_ui.users_error = None;
     ws.admin_ui.users_notice = None;
@@ -1190,7 +1190,7 @@ fn refresh_users_roles(ws: &mut DataForgeWorkspace) {
     }
 }
 
-fn refresh_active_sessions(ws: &mut DataForgeWorkspace) {
+fn refresh_active_sessions(ws: &mut TableMinusWorkspace) {
     ws.admin_ui.sessions_loaded_ws = Some(ws.controller.active_workspace);
     ws.admin_ui.sessions_error = None;
     ws.admin_ui.sessions_notice = None;
@@ -1221,9 +1221,9 @@ fn refresh_active_sessions(ws: &mut DataForgeWorkspace) {
 }
 
 fn kill_active_session(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     pid: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let engine = ws.controller.active_database_engine();
     let title = ws.controller.strings.admin_kill_session;
@@ -1247,7 +1247,7 @@ fn kill_active_session(
     cx.notify();
 }
 
-fn save_new_scheduled_task(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn save_new_scheduled_task(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let name = ws
         .admin_ui
         .task_name_input
@@ -1317,9 +1317,9 @@ fn save_new_scheduled_task(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFor
 }
 
 fn run_task_now_with_toast(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     id: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     let title = ws.controller.strings.admin_run_now;
     match ws.controller.run_scheduled_task_now(id) {
@@ -1334,9 +1334,9 @@ fn run_task_now_with_toast(
 }
 
 fn render_monitor_sessions_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     if !is_connected {
@@ -1393,9 +1393,9 @@ fn render_monitor_sessions_section(
 }
 
 fn render_monitor_locks_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     if !is_connected {
@@ -1445,10 +1445,10 @@ fn render_monitor_locks_section(
 }
 
 fn render_monitor_section_shell(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     toolbar: AnyElement,
     show_kill_confirm: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> herogpui::gpui::Div {
     let s = &ws.controller.strings;
     let mut root = div()
@@ -1481,11 +1481,11 @@ fn render_monitor_section_shell(
 }
 
 fn render_monitor_toolbar(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     title: &'static str,
     row_count: usize,
     is_connected: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -1569,8 +1569,8 @@ fn render_monitor_toolbar(
 }
 
 fn render_monitor_confirm_kill_guard(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> Option<AnyElement> {
     let pending = ws.admin_ui.monitor_confirm_kill.as_ref()?;
     let s = &ws.controller.strings;
@@ -1675,7 +1675,7 @@ fn render_monitor_confirm_kill_guard(
     )
 }
 
-fn render_live_sessions_header(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_live_sessions_header(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let s = &ws.controller.strings;
     div()
         .w_full()
@@ -1724,8 +1724,8 @@ fn render_live_session_row(
     row_idx: usize,
     session: &LiveSessionRow,
     engine: DatabaseEngine,
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -1832,7 +1832,7 @@ fn render_live_session_row(
     .into_any_element()
 }
 
-fn render_locks_header(ws: &DataForgeWorkspace, cx: &App) -> AnyElement {
+fn render_locks_header(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
     let s = &ws.controller.strings;
     div()
         .w_full()
@@ -1940,7 +1940,7 @@ fn render_lock_blocked_cell(
 fn render_server_lock_row(
     row_idx: usize,
     lock: &ServerLockRow,
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     cx: &App,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -2044,7 +2044,7 @@ fn render_monitor_empty_state(icon: IconName, message: &'static str, cx: &App) -
         .into_any_element()
 }
 
-fn refresh_monitor_snapshot(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn refresh_monitor_snapshot(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     let active_ws = ws.controller.active_workspace;
     ws.admin_ui.monitor_loaded_ws = Some(active_ws);
     ws.admin_ui.monitor_error = None;
@@ -2079,7 +2079,7 @@ fn refresh_monitor_snapshot(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFo
     ws.admin_ui.monitor_loading = true;
 
     ws.admin_ui.monitor_fetch_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let sessions = services.sessions.clone();
             drop(services.runtime.spawn(async move {
@@ -2123,9 +2123,9 @@ fn refresh_monitor_snapshot(ws: &mut DataForgeWorkspace, cx: &mut Context<DataFo
 }
 
 fn toggle_monitor_auto_refresh(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     enabled: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.admin_ui.monitor_auto_refresh = enabled;
     ws.admin_ui.monitor_auto_refresh_gen = ws.admin_ui.monitor_auto_refresh_gen.wrapping_add(1);
@@ -2141,7 +2141,7 @@ fn toggle_monitor_auto_refresh(
     }
 
     ws.admin_ui.monitor_auto_refresh_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             loop {
                 cx.background_executor()
                     .timer(MONITOR_AUTO_REFRESH_INTERVAL)
@@ -2187,7 +2187,7 @@ fn toggle_monitor_auto_refresh(
     cx.notify();
 }
 
-fn execute_confirm_kill_session(ws: &mut DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) {
+fn execute_confirm_kill_session(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
     if ws.admin_ui.monitor_killing {
         return;
     }
@@ -2212,7 +2212,7 @@ fn execute_confirm_kill_session(ws: &mut DataForgeWorkspace, cx: &mut Context<Da
     cx.notify();
 
     ws.admin_ui.monitor_kill_task = Some(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             let (tx, rx) = tokio::sync::oneshot::channel();
             let pid_for_task = pending.id.clone();
             let sessions = services.sessions.clone();
