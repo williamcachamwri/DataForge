@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use dataforge_services::{
+use tableminus_services::{
     JoinClause, JoinKind, VisualQuerySpec, WhereClause, build_visual_query_sql,
 };
 use herogpui::components::{
@@ -19,7 +19,7 @@ use herogpui::theme::ActiveTheme;
 use tablepro_core::meta::ObjectInfo;
 
 use super::shell_state::{WorkspaceSubView, push_error_toast, push_success_toast};
-use super::{DataForgeWorkspace, syntax_bridge, theme};
+use super::{TableMinusWorkspace, syntax_bridge, theme};
 
 const JOIN_KINDS: [(JoinKind, &str); 4] = [
     (JoinKind::Inner, "INNER"),
@@ -83,9 +83,9 @@ pub struct QueryBuilderState {
 }
 
 impl QueryBuilderState {
-    /// Creates initial Query Builder state owned by [`DataForgeWorkspace`].
+    /// Creates initial Query Builder state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, cx: &mut Context<TableMinusWorkspace>) -> Self {
         let limit_input = cx.new(|cx| InputState::with_value(cx, "100"));
         Self {
             limit: Some(100),
@@ -112,9 +112,9 @@ impl QueryBuilderState {
 /// Renders the Visual Query Builder workbench tool view.
 #[must_use]
 pub fn render_query_builder(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     _window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     ensure_initial_table_selected(ws);
     let preview_sql = build_current_sql(ws, cx);
@@ -146,7 +146,7 @@ pub fn render_query_builder(
         .into_any_element()
 }
 
-fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
     div()
@@ -190,7 +190,7 @@ fn render_header(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) 
         .into_any_element()
 }
 
-fn render_top_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>) -> AnyElement {
+fn render_top_bar(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
     let s = &ws.controller.strings;
     let tables = browsable_tables(&ws.controller.cached_objects);
     let table_items: Vec<PickerItem> = tables
@@ -281,8 +281,8 @@ fn render_top_bar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
 }
 
 fn render_builder_panes(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let available_cols = collect_available_columns(&ws.query_builder_ui);
 
@@ -318,9 +318,9 @@ fn render_builder_panes(
 }
 
 fn render_columns_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     available_cols: &[String],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -401,8 +401,8 @@ fn render_columns_section(
 }
 
 fn render_joins_section(
-    ws: &DataForgeWorkspace,
-    cx: &mut Context<DataForgeWorkspace>,
+    ws: &TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -468,7 +468,7 @@ fn render_join_row(
     kind_items: &[PickerItem],
     table_items: &[PickerItem],
     col_items: &[PickerItem],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     let jid = join.id;
@@ -531,7 +531,7 @@ fn render_join_kind_select(
     jid: u64,
     kind_label: &'static str,
     kind_items: &[PickerItem],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .w(px(95.0))
@@ -562,7 +562,7 @@ fn render_join_table_select(
     jid: u64,
     table_key: &str,
     table_items: &[PickerItem],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .w(px(150.0))
@@ -598,7 +598,7 @@ fn render_join_col_select(
     col_items: &[PickerItem],
     jid: u64,
     is_left: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .w(px(140.0))
@@ -625,9 +625,9 @@ fn render_join_col_select(
 }
 
 fn render_where_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     available_cols: &[String],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -673,12 +673,12 @@ fn render_where_section(
 }
 
 fn render_where_row(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     idx: usize,
     flt: &WhereDraft,
     col_items: &[PickerItem],
     op_items: &[PickerItem],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let fid = flt.id;
@@ -762,7 +762,7 @@ fn render_where_picker(
     items: &[PickerItem],
     fid: u64,
     is_column: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .w(px(width_px))
@@ -789,9 +789,9 @@ fn render_where_picker(
 }
 
 fn render_group_by_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     available_cols: &[String],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -826,9 +826,9 @@ fn render_group_by_section(
 }
 
 fn render_order_by_section(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     available_cols: &[String],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
@@ -873,7 +873,7 @@ fn render_order_row(
     idx: usize,
     ord: &OrderDraft,
     col_items: &[PickerItem],
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let oid = ord.id;
     div()
@@ -943,9 +943,9 @@ fn render_order_row(
 }
 
 fn render_sql_preview_pane(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     preview_sql: String,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let editor_font = theme::editor_gpui_font(&ws.controller.settings);
@@ -957,6 +957,7 @@ fn render_sql_preview_pane(
         .w(px(340.0))
         .min_w(px(240.0))
         .max_w(px(380.0))
+        .flex_shrink(1.0)
         .min_h_0()
         .p(px(14.0))
         .flex()
@@ -1023,10 +1024,10 @@ fn render_sql_preview_pane(
 }
 
 fn render_sql_preview_actions(
-    ws: &DataForgeWorkspace,
+    ws: &TableMinusWorkspace,
     preview_sql: String,
     has_sql: bool,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let sql_for_run = preview_sql.clone();
@@ -1061,7 +1062,7 @@ fn render_sql_preview_actions(
         .into_any_element()
 }
 
-fn ensure_initial_table_selected(ws: &mut DataForgeWorkspace) {
+fn ensure_initial_table_selected(ws: &mut TableMinusWorkspace) {
     if ws.query_builder_ui.base_table_key.is_some() {
         return;
     }
@@ -1080,7 +1081,7 @@ fn ensure_initial_table_selected(ws: &mut DataForgeWorkspace) {
     }
 }
 
-fn select_base_table(ws: &mut DataForgeWorkspace, table_key: String) {
+fn select_base_table(ws: &mut TableMinusWorkspace, table_key: String) {
     ws.query_builder_ui.base_table_key = Some(table_key.clone());
     ws.query_builder_ui.selected_columns.clear();
     ws.query_builder_ui.group_by.clear();
@@ -1090,7 +1091,7 @@ fn select_base_table(ws: &mut DataForgeWorkspace, table_key: String) {
     ensure_table_columns(ws, &table_key);
 }
 
-fn ensure_table_columns(ws: &mut DataForgeWorkspace, table_key: &str) {
+fn ensure_table_columns(ws: &mut TableMinusWorkspace, table_key: &str) {
     if ws.query_builder_ui.table_columns.contains_key(table_key) {
         return;
     }
@@ -1142,7 +1143,7 @@ fn collect_available_columns(state: &QueryBuilderState) -> Vec<String> {
     out
 }
 
-fn build_current_sql(ws: &DataForgeWorkspace, cx: &App) -> String {
+fn build_current_sql(ws: &TableMinusWorkspace, cx: &App) -> String {
     let state = &ws.query_builder_ui;
     let Some(base_key) = state.base_table_key.as_ref() else {
         return String::new();
@@ -1193,7 +1194,7 @@ fn build_current_sql(ws: &DataForgeWorkspace, cx: &App) -> String {
     build_visual_query_sql(ws.controller.active_database_engine(), &spec)
 }
 
-fn add_default_join(ws: &mut DataForgeWorkspace) {
+fn add_default_join(ws: &mut TableMinusWorkspace) {
     let tables = browsable_tables(&ws.controller.cached_objects);
     let Some(target) = tables.first() else {
         return;
@@ -1220,7 +1221,7 @@ fn add_default_join(ws: &mut DataForgeWorkspace) {
     });
 }
 
-fn add_default_where(ws: &mut DataForgeWorkspace, cx: &mut App) {
+fn add_default_where(ws: &mut TableMinusWorkspace, cx: &mut App) {
     let cols = collect_available_columns(&ws.query_builder_ui);
     let default_col = cols.first().cloned().unwrap_or_default();
     let id = ws.query_builder_ui.alloc_id();
@@ -1233,7 +1234,7 @@ fn add_default_where(ws: &mut DataForgeWorkspace, cx: &mut App) {
     });
 }
 
-fn add_default_order(ws: &mut DataForgeWorkspace) {
+fn add_default_order(ws: &mut TableMinusWorkspace) {
     let cols = collect_available_columns(&ws.query_builder_ui);
     let Some(col) = cols.first().cloned() else {
         return;
@@ -1246,7 +1247,7 @@ fn add_default_order(ws: &mut DataForgeWorkspace) {
     });
 }
 
-fn run_built_query(ws: &mut DataForgeWorkspace, sql: &str, cx: &mut Context<DataForgeWorkspace>) {
+fn run_built_query(ws: &mut TableMinusWorkspace, sql: &str, cx: &mut Context<TableMinusWorkspace>) {
     ws.controller.set_editor_sql(sql);
     match ws.controller.execute_sql_blocking(sql) {
         Ok(_) => {
@@ -1274,9 +1275,9 @@ fn run_built_query(ws: &mut DataForgeWorkspace, sql: &str, cx: &mut Context<Data
 }
 
 fn open_built_query_in_editor(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     sql: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.set_editor_sql(sql);
     ws.workspace_pane.close_tool();
