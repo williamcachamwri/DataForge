@@ -2,17 +2,6 @@
 
 use std::sync::Arc;
 
-use tableminus_gfx::glyphs::EngineKind;
-use tableminus_services::data_transfer::{
-    ColumnTypeMapping, TransferConfig, TransferMode, TransferReport, format_sql_literal,
-    map_sql_type, transfer_table_cancellable,
-};
-use tableminus_services::{
-    AlterTableOp, ColumnSpec, CreateTableSpec, DatabaseEngine, build_alter_table_sql,
-    build_create_table_sql,
-};
-use tableminus_state::connection_window::ConnectionWindowPhase;
-use tableminus_state::library::LibraryConnection;
 use herogpui::components::{
     Alert, Button, Checkbox, Chip, ChipLabel, ChipVariant, FieldVariant, Icon, IconName, IconSize,
     Input, InputState, InputType, PickerItem, Select, Spinner, SpinnerSize,
@@ -26,6 +15,17 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 use secrecy::SecretString;
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_services::data_transfer::{
+    ColumnTypeMapping, TransferConfig, TransferMode, TransferReport, format_sql_literal,
+    map_sql_type, transfer_table_cancellable,
+};
+use tableminus_services::{
+    AlterTableOp, ColumnSpec, CreateTableSpec, DatabaseEngine, build_alter_table_sql,
+    build_create_table_sql,
+};
+use tableminus_state::connection_window::ConnectionWindowPhase;
+use tableminus_state::library::LibraryConnection;
 use tablepro_core::column::ColumnDefault;
 use tablepro_core::credentials::{CredentialInteraction, SecretKind, SecretLookup, SecretVault};
 use tablepro_core::ddl::{ColumnAttributes, ColumnDefinition, TableDefinition};
@@ -1546,7 +1546,10 @@ fn apply_target_engine_change(
     cx.notify();
 }
 
-fn force_reload_source_metadata(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
+fn force_reload_source_metadata(
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
     ws.data_transfer_ui.loaded_source_key = None;
     ws.data_transfer_ui.source_tables_loaded_for = None;
     ws.data_transfer_ui.last_error = None;
