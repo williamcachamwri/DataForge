@@ -177,7 +177,10 @@ fn render_explain_header(
                         Chip::new()
                             .variant(ChipVariant::Secondary)
                             .size(HeroSize::Sm)
-                            .child(ChipLabel::new().child(format!("{} nodes", stats.total_nodes))),
+                            .child(ChipLabel::new().child(format!(
+                                "{} {}",
+                                stats.total_nodes, s.explain_nodes_suffix
+                            ))),
                     )
                 })
                 .when(stats.warning_count > 0, |el| {
@@ -237,13 +240,14 @@ fn trigger_visual_explain(
     } else {
         ws.controller.strings.explain_plan
     };
+    let suffix = ws.controller.strings.explain_nodes_suffix;
     match ws.controller.run_visual_explain_blocking(&sql, analyze) {
         Ok(nodes) => {
             ws.explain_ui.last_error = None;
             ws.explain_ui.selected_node_id = nodes.first().map(|n| n.id.to_string());
             ws.notify_toast(
                 ToastSeverity::Success,
-                format!("{label}: {} nodes", nodes.len()),
+                format!("{label}: {} {suffix}", nodes.len()),
                 None,
                 cx,
             );
@@ -619,9 +623,9 @@ fn render_explain_inspector(
     let code_font = theme::editor_gpui_font(&ws.controller.settings);
 
     let mut pairs: Vec<(&str, String)> = Vec::new();
-    pairs.push(("Node", node.operation.clone()));
+    pairs.push((s.explain_node_label, node.operation.clone()));
     if let Some(ref rel) = node.relation {
-        pairs.push(("Relation", rel.clone()));
+        pairs.push((s.explain_relation_label, rel.clone()));
     }
     if let Some(cost) = node.cost {
         let pct = if stats.max_cost > 0.0 {
@@ -635,7 +639,7 @@ fn render_explain_inspector(
         pairs.push((s.explain_est_rows, format!("{est:.0}")));
     }
     if let Some(act) = node.actual_rows {
-        pairs.push(("Actual Rows", act.to_string()));
+        pairs.push((s.explain_actual_rows_label, act.to_string()));
     }
     if let Some(ms) = node.actual_time_ms {
         pairs.push((s.explain_actual_time, format!("{ms:.3} ms")));
