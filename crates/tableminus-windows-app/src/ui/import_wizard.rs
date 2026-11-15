@@ -2,11 +2,6 @@
 
 use std::path::Path;
 
-use tableminus_services::{
-    ColumnMapping, ImportFormat, ParsedImportPreview, detect_import_format,
-    generate_import_sql_batches, preview_import_file, read_all_import_rows,
-    split_sql_script_statements,
-};
 use herogpui::components::{
     Alert, Button, Checkbox, Chip, ChipLabel, ChipVariant, FieldVariant, Icon, IconName, IconSize,
     Input, InputState, Switch, TabItem, Tabs, TabsSize, TabsVariant, Variant,
@@ -18,6 +13,11 @@ use herogpui::gpui::{
     Styled, Task, WeakEntity, Window, div, px,
 };
 use herogpui::theme::ActiveTheme;
+use tableminus_services::{
+    ColumnMapping, ImportFormat, ParsedImportPreview, detect_import_format,
+    generate_import_sql_batches, preview_import_file, read_all_import_rows,
+    split_sql_script_statements,
+};
 
 use super::shell_state::{push_error_toast, push_success_toast};
 use super::{TableMinusWorkspace, syntax_bridge, theme};
