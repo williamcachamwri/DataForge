@@ -1,31 +1,31 @@
-//! Isolated state-transition tests for `dataforge-state` public APIs.
+//! Isolated state-transition tests for `tableminus-state` public APIs.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::time::Duration;
 
-use dataforge_state::connection_window::{
+use tableminus_state::connection_window::{
     CloseDecision, ConnectionSession, ConnectionUnavailableView, ConnectionWindowPaneResolver,
     ConnectionWindowPhase, ConnectionWindowPhaseMachine, DriverHandle, EditorTabLabelResolver,
     ReportedStatus, SessionLiveness, WindowTitleResolver, WorkspaceId, WorkspacePaneKind,
 };
-use dataforge_state::data_grid::{
+use tableminus_state::data_grid::{
     DataGridCellEdit, DataGridChange, DataGridColumnSet, DataGridLayoutScope, DataGridModel,
     DataGridPane, DataGridRowOrder, FilterBarState, GridCoord, GridSelection, GridSelectionAction,
     GridSelectionMode, GridSelectionReducer, MAX_COLUMN_WIDTH, MAXIMUM_FROZEN_SHARE,
     MIN_COLUMN_WIDTH, PaneColumnSlot, RowID, SortDirection, SortKey, TableEdits, TableQueryPage,
 };
-use dataforge_state::editor::{
+use tableminus_state::editor::{
     AutocompleteContext, AutocompleteState, CursorPosition, EditorPaneId, EditorSplitNode,
     IncrementalLineHighlighter, QueryHistoryEntry, QueryHistoryModel, Rope, RunEventAccumulator,
     SchemaCompletionItem, SchemaCompletionKind, SplitAxis, SplitPaneLayoutPolicy, UndoHistory,
     VimAction, VimMode, VimMotion, VimOperator, VimState, normalize_line_endings,
 };
-use dataforge_state::library::{
+use tableminus_state::library::{
     ConnectionsLibraryModel, LibraryConnection, LibraryConnectionId, LibraryGroup, LibraryGroupId,
     LibraryRowID, LibrarySection, LibraryStorageSnapshot,
 };
-use dataforge_state::tabs::{
+use tableminus_state::tabs::{
     CloseActionResult, CrashSafeTabPersistence, MoveQueryTabQueue, RestoredTabMerge,
     SaveTabsOutcome, SavedTabsStore, SessionRestorePlanner, TabConnectionId, TabId, TabItem,
     TabKind, TabStripModel,
@@ -436,8 +436,8 @@ fn grid_table_edits_stage_update_insert_delete_and_commit_vs_rollback() {
     let mut edits = TableEdits::new();
     assert!(!edits.has_pending_edits());
 
-    let col1 = dataforge_state::data_grid::DataGridColumnID(1);
-    let col2 = dataforge_state::data_grid::DataGridColumnID(2);
+    let col1 = tableminus_state::data_grid::DataGridColumnID(1);
+    let col2 = tableminus_state::data_grid::DataGridColumnID(2);
 
     // Empty batch is a no-op.
     edits.commit_cells(Vec::new(), "Empty");
