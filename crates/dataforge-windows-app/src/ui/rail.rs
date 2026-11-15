@@ -18,6 +18,7 @@ use dataforge_state::connection_window::ConnectionWindowPhase;
 
 use super::DataForgeWorkspace;
 use super::engine_icons::engine_icon;
+use super::shell_state::WorkspaceToolView;
 use super::theme::{
     HAIRLINE_BORDER_PX, MICRO_GAP_PX, animate_active_indicator, hairline_border_color,
     is_reduced_motion, panel_surface_bg,
@@ -82,10 +83,18 @@ pub fn render_rail(
         );
 
     if !ws.controller.rail_items.is_empty() {
-        rail = rail.child(render_rail_workspaces(&ws.controller, skip_anim, cx));
+        rail = rail
+            .child(render_rail_workspaces(&ws.controller, skip_anim, cx))
+            .child(
+                Separator::new()
+                    .id("rail-sep-tools")
+                    .orientation(Orientation::Horizontal)
+                    .sx(|s| s.my(px(4.0)).w(px(28.0))),
+            );
     }
 
     rail = rail
+        .child(render_rail_tools(ws, skip_anim, cx))
         .child(div().flex_1())
         .child(
             Separator::new()
@@ -125,6 +134,7 @@ fn render_workspace_nav_button(
         .is_selected(selected)
         .aria_label(controller.strings.sql_workspace_aria)
         .on_press(cx.listener(|ws, _, _, cx| {
+            ws.workspace_pane.close_tool();
             ws.switch_screen(ScreenMode::Workspace, cx);
         }))
         .child(Icon::new(IconName::Terminal).size(px(16.0)).color(fg));
@@ -264,6 +274,94 @@ fn render_rail_workspace_item(
         .close_delay(80)
         .should_skip_animation(skip_anim)
         .child(wrapped)
+        .into_any_element()
+}
+
+fn render_rail_tools(
+    ws: &DataForgeWorkspace,
+    skip_anim: bool,
+    cx: &Context<DataForgeWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let in_workspace = ws.controller.screen_mode == ScreenMode::Workspace;
+    let active_tool = ws.workspace_pane.active_tool;
+
+    let tool_button =
+        |id: &'static str, tip: SharedString, icon: IconName, tool: WorkspaceToolView| {
+            let selected = in_workspace && active_tool == Some(tool);
+            render_rail_toggle(
+                id,
+                tip,
+                icon,
+                selected,
+                skip_anim,
+                cx,
+                cx.listener(move |ws, _, _, cx| {
+                    ws.controller.screen_mode = ScreenMode::Workspace;
+                    ws.workspace_pane.toggle_tool(tool);
+                    cx.notify();
+                }),
+            )
+        };
+
+    div()
+        .id("rail-workbench-tools")
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(px(MICRO_GAP_PX))
+        .child(tool_button(
+            "rail-tool-er",
+            s.er_diagram.into(),
+            IconName::Share2,
+            WorkspaceToolView::ErDiagram,
+        ))
+        .child(tool_button(
+            "rail-tool-qb",
+            s.query_builder.into(),
+            IconName::SlidersHorizontal,
+            WorkspaceToolView::QueryBuilder,
+        ))
+        .child(tool_button(
+            "rail-tool-schema",
+            s.schema_designer.into(),
+            IconName::Layers,
+            WorkspaceToolView::SchemaDesigner,
+        ))
+        .child(tool_button(
+            "rail-tool-import",
+            s.import_wizard.into(),
+            IconName::Upload,
+            WorkspaceToolView::ImportWizard,
+        ))
+        .child(tool_button(
+            "rail-tool-compare",
+            s.compare_title.into(),
+            IconName::ArrowLeftRight,
+            WorkspaceToolView::Compare,
+        ))
+        .child(tool_button(
+            "rail-tool-admin",
+            format!("{} & {}", s.admin_title, s.admin_scheduled_tasks).into(),
+            IconName::ShieldCheck,
+            WorkspaceToolView::Admin,
+        ))
+        .child(render_rail_toggle(
+            "rail-tool-search",
+            s.metadata_search,
+            IconName::Search,
+            ws.metadata_search_ui.open,
+            skip_anim,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                if ws.metadata_search_ui.open {
+                    ws.metadata_search_ui.close_modal();
+                } else {
+                    ws.metadata_search_ui.open_modal(window, cx);
+                }
+                cx.notify();
+            }),
+        ))
         .into_any_element()
 }
 
