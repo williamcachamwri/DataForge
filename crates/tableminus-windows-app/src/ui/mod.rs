@@ -21,6 +21,7 @@ pub mod query_builder;
 pub mod rail;
 pub mod results_pane;
 pub mod schema_designer;
+pub mod screenshot_tour;
 pub mod settings;
 pub mod shell_state;
 pub mod sidebar;
@@ -38,10 +39,10 @@ pub mod unavailable;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use dataforge_gfx::glyphs::EngineKind;
-use dataforge_state::tabs::{TabId, TabKind};
-use dataforge_state::theme::ThemeDefinition;
-use dataforge_windows_platform::{
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_state::tabs::{TabId, TabKind};
+use tableminus_state::theme::ThemeDefinition;
+use tableminus_windows_platform::{
     ThemePreference, WindowBackdropPreference, detect_theme_or_default,
 };
 use herogpui::application;
@@ -88,7 +89,7 @@ pub use theme::{
 /// Root GPUI workspace entity owning live [`AppController`] state, per-tab query
 /// accumulators, screen sub-view state, reactive IPC/service loops, and native
 /// Win32 window branding/guards.
-pub struct DataForgeWorkspace {
+pub struct TableMinusWorkspace {
     pub controller: AppController,
     pub ipc_inbox: Arc<IpcInbox>,
     pub focus_handle: FocusHandle,
@@ -126,7 +127,7 @@ pub struct DataForgeWorkspace {
     _subscriptions: Vec<Subscription>,
 }
 
-impl DataForgeWorkspace {
+impl TableMinusWorkspace {
     /// Constructs the GPUI root workspace and wires Win32 branding, appearance sync,
     /// close guard, modular Wave 2 view states, and reactive IPC/service listeners.
     pub fn new(
@@ -227,10 +228,10 @@ impl DataForgeWorkspace {
         };
         self.controller.settings.theme = next_pref;
         let next_appearance = match next_pref {
-            ThemePreference::Light => dataforge_state::theme::ThemeAppearance::Light,
-            ThemePreference::Dark => dataforge_state::theme::ThemeAppearance::Dark,
-            ThemePreference::HighContrast => dataforge_state::theme::ThemeAppearance::HighContrast,
-            ThemePreference::System => dataforge_state::theme::ThemeAppearance::Dark,
+            ThemePreference::Light => tableminus_state::theme::ThemeAppearance::Light,
+            ThemePreference::Dark => tableminus_state::theme::ThemeAppearance::Dark,
+            ThemePreference::HighContrast => tableminus_state::theme::ThemeAppearance::HighContrast,
+            ThemePreference::System => tableminus_state::theme::ThemeAppearance::Dark,
         };
         self.controller.content_theme = ThemeDefinition::default_for(next_appearance);
         self.refresh_theme(window, cx);
@@ -666,13 +667,13 @@ impl DataForgeWorkspace {
     }
 }
 
-impl Focusable for DataForgeWorkspace {
+impl Focusable for TableMinusWorkspace {
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
 
-impl Render for DataForgeWorkspace {
+impl Render for TableMinusWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = cx.colors().clone();
         let screen_key = match self.controller.screen_mode {
@@ -751,7 +752,7 @@ impl Render for DataForgeWorkspace {
 }
 
 /// Launches the HeroGPUI desktop shell with [`HeroGpuiAssets`] registered,
-/// reduced motion & keymap initialized, and [`DataForgeWorkspace`] mounted as root view.
+/// reduced motion & keymap initialized, and [`TableMinusWorkspace`] mounted as root view.
 pub fn launch_gpui_app(controller: AppController, ipc_inbox: Arc<IpcInbox>) {
     application()
         .with_assets(HeroGpuiAssets)
@@ -781,9 +782,14 @@ pub fn launch_gpui_app(controller: AppController, ipc_inbox: Arc<IpcInbox>) {
             let title = controller.strings.app_title;
             if let Err(err) = cx.open_window(options, move |window, cx| {
                 window.set_window_title(title);
-                cx.new(|cx| DataForgeWorkspace::new(controller, ipc_inbox, window, cx))
+                let entity =
+                    cx.new(|cx| TableMinusWorkspace::new(controller, ipc_inbox, window, cx));
+                if let Some(dir) = screenshot_tour::output_dir() {
+                    screenshot_tour::start(dir, window, &entity, cx);
+                }
+                entity
             }) {
-                tracing::error!(error = %err, "failed to open DataForge GPUI window");
+                tracing::error!(error = %err, "failed to open TableMinus GPUI window");
             }
         });
 }
@@ -798,8 +804,8 @@ fn install_win32_window_branding(window: &Window, dark_titlebar: bool) {
     }
 }
 
-fn install_close_guard(window: &Window, cx: &mut Context<DataForgeWorkspace>) {
-    let weak: WeakEntity<DataForgeWorkspace> = cx.entity().downgrade();
+fn install_close_guard(window: &Window, cx: &mut Context<TableMinusWorkspace>) {
+    let weak: WeakEntity<TableMinusWorkspace> = cx.entity().downgrade();
     window.on_window_should_close(cx, move |_window, cx| {
         let Some(entity) = weak.upgrade() else {
             return true;
@@ -824,12 +830,12 @@ fn spawn_reactive_bridges(
     controller: &AppController,
     ipc_inbox: &Arc<IpcInbox>,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> (Vec<Task<()>>, Vec<Subscription>) {
     let mut tasks = Vec::new();
     let ipc_rx = ipc_inbox.subscribe();
     tasks.push(cx.spawn(
-        async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+        async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
             while ipc_rx.recv().await.is_ok() {
                 let Ok(()) = this.update(cx, |ws, cx| ws.process_pending_ipc(cx)) else {
                     break;
@@ -841,7 +847,7 @@ fn spawn_reactive_bridges(
     if let Some(services) = &controller.services {
         let svc_rx = services.subscribe();
         tasks.push(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 while svc_rx.recv().await.is_ok() {
                     let Ok(()) = this.update(cx, |ws, cx| ws.process_service_events(cx)) else {
                         break;
@@ -853,7 +859,7 @@ fn spawn_reactive_bridges(
 
     if !controller.headless {
         tasks.push(cx.spawn(
-            async move |this: WeakEntity<DataForgeWorkspace>, cx: &mut AsyncApp| {
+            async move |this: WeakEntity<TableMinusWorkspace>, cx: &mut AsyncApp| {
                 loop {
                     cx.background_executor()
                         .timer(std::time::Duration::from_secs(30))
