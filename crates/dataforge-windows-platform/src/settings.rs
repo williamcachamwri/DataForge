@@ -1,5 +1,7 @@
 //! Application settings persistence with atomic write-and-rename.
 
+use std::collections::BTreeMap;
+use std::fmt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -40,6 +42,59 @@ pub enum WindowBackdropPreference {
     Mica,
     /// Windows 11 Mica Alt backdrop material.
     MicaAlt,
+}
+
+/// Deployment environment classification tag assigned to a saved connection.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum EnvironmentKind {
+    /// Local developer machine or embedded file database.
+    #[default]
+    Local,
+    /// Shared development environment.
+    Development,
+    /// Pre-production staging / QA environment.
+    Staging,
+    /// Live production environment.
+    Production,
+}
+
+impl EnvironmentKind {
+    /// All environment kinds in severity order.
+    pub const ALL: [Self; 4] = [
+        Self::Local,
+        Self::Development,
+        Self::Staging,
+        Self::Production,
+    ];
+
+    /// Returns the canonical lowercase identifier for this environment kind.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Development => "development",
+            Self::Staging => "staging",
+            Self::Production => "production",
+        }
+    }
+
+    /// Returns the i18n localization key corresponding to this environment kind.
+    pub const fn label_key(self) -> &'static str {
+        match self {
+            Self::Local => "env_local",
+            Self::Development => "env_development",
+            Self::Staging => "env_staging",
+            Self::Production => "env_production",
+        }
+    }
+}
+
+impl fmt::Display for EnvironmentKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// SQL/code editor font configuration.
@@ -171,6 +226,12 @@ pub struct AppSettings {
     /// Optional UI locale tag override (e.g. `en-US`, `fr-FR`, or `None` for auto/OS detection).
     #[serde(default)]
     pub locale: Option<String>,
+    /// Connection environment classification tags keyed by `connection_id`.
+    #[serde(default)]
+    pub environment_tags: BTreeMap<String, EnvironmentKind>,
+    /// Whether to restore the previous workspace session snapshot on startup.
+    #[serde(default = "default_true")]
+    pub restore_last_session: bool,
 }
 
 const fn default_true() -> bool {
@@ -191,6 +252,8 @@ impl Default for AppSettings {
             restore_session: true,
             auto_check_updates: true,
             locale: None,
+            environment_tags: BTreeMap::new(),
+            restore_last_session: true,
         }
     }
 }
@@ -221,36 +284,40 @@ impl AppSettings {
 
     /// Atomically writes settings to `path` via a sibling temporary file and rename.
     pub fn save_atomic(&self, path: &Path) -> Result<(), PlatformError> {
-        if let Some(parent) = path.parent()
-            && !parent.as_os_str().is_empty()
-        {
-            std::fs::create_dir_all(parent).map_err(|err| PlatformError::Io {
-                operation: "create settings directory",
-                source: err,
-            })?;
-        }
-
         let payload = serde_json::to_vec_pretty(self).map_err(|err| PlatformError::Json {
             context: "AppSettings",
             source: err,
         })?;
-
-        let temp_path = sibling_temp_path(path);
-        let write_result = write_and_sync(&temp_path, &payload);
-        if let Err(err) = write_result {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(err);
-        }
-
-        if let Err(err) = std::fs::rename(&temp_path, path) {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(PlatformError::Io {
-                operation: "rename settings temp file",
-                source: err,
-            });
-        }
-        Ok(())
+        write_bytes_atomic(path, &payload)
     }
+}
+
+/// Atomically writes `payload` to `path` by creating parent directories,
+/// writing and fsyncing a sibling temporary file, and renaming it over `path`.
+pub(crate) fn write_bytes_atomic(path: &Path, payload: &[u8]) -> Result<(), PlatformError> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).map_err(|err| PlatformError::Io {
+            operation: "create settings directory",
+            source: err,
+        })?;
+    }
+
+    let temp_path = sibling_temp_path(path);
+    if let Err(err) = write_and_sync(&temp_path, payload) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(err);
+    }
+
+    if let Err(err) = std::fs::rename(&temp_path, path) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(PlatformError::Io {
+            operation: "rename settings temp file",
+            source: err,
+        });
+    }
+    Ok(())
 }
 
 fn sibling_temp_path(target: &Path) -> PathBuf {
@@ -280,4 +347,75 @@ fn write_and_sync(temp_path: &Path, payload: &[u8]) -> Result<(), PlatformError>
         source: err,
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn legacy_settings_json_deserializes_with_environment_and_session_defaults() -> TestResult {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("settings.json");
+        let legacy = r#"{
+            "theme": "dark",
+            "restore_session": false
+        }"#;
+        std::fs::write(&path, legacy)?;
+
+        let loaded = AppSettings::load(&path)?;
+        assert_eq!(loaded.theme, ThemePreference::Dark);
+        assert!(!loaded.restore_session);
+        assert!(loaded.restore_last_session);
+        assert!(loaded.environment_tags.is_empty());
+        assert!(loaded.auto_check_updates);
+        Ok(())
+    }
+
+    #[test]
+    fn environment_tags_and_restore_last_session_roundtrip() -> TestResult {
+        let dir = TempDir::new()?;
+        let path = dir.path().join("settings.json");
+
+        let mut tags = BTreeMap::new();
+        tags.insert("conn-local".to_owned(), EnvironmentKind::Local);
+        tags.insert("conn-dev".to_owned(), EnvironmentKind::Development);
+        tags.insert("conn-stg".to_owned(), EnvironmentKind::Staging);
+        tags.insert("conn-prod".to_owned(), EnvironmentKind::Production);
+
+        let settings = AppSettings {
+            environment_tags: tags,
+            restore_last_session: false,
+            ..AppSettings::default()
+        };
+        settings.save_atomic(&path)?;
+
+        let loaded = AppSettings::load(&path)?;
+        assert_eq!(loaded, settings);
+        assert_eq!(
+            loaded.environment_tags.get("conn-prod").copied(),
+            Some(EnvironmentKind::Production)
+        );
+        assert!(!loaded.restore_last_session);
+        Ok(())
+    }
+
+    #[test]
+    fn environment_kind_helpers_and_ordering() {
+        assert_eq!(EnvironmentKind::default(), EnvironmentKind::Local);
+        assert_eq!(EnvironmentKind::Local.as_str(), "local");
+        assert_eq!(EnvironmentKind::Development.as_str(), "development");
+        assert_eq!(EnvironmentKind::Staging.as_str(), "staging");
+        assert_eq!(EnvironmentKind::Production.as_str(), "production");
+        assert_eq!(EnvironmentKind::Local.label_key(), "env_local");
+        assert_eq!(EnvironmentKind::Development.label_key(), "env_development");
+        assert_eq!(EnvironmentKind::Staging.label_key(), "env_staging");
+        assert_eq!(EnvironmentKind::Production.label_key(), "env_production");
+        assert!(EnvironmentKind::Local < EnvironmentKind::Development);
+        assert!(EnvironmentKind::Development < EnvironmentKind::Staging);
+        assert!(EnvironmentKind::Staging < EnvironmentKind::Production);
+    }
 }
