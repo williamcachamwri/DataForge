@@ -39,12 +39,6 @@ pub mod unavailable;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use tableminus_gfx::glyphs::EngineKind;
-use tableminus_state::tabs::{TabId, TabKind};
-use tableminus_state::theme::ThemeDefinition;
-use tableminus_windows_platform::{
-    ThemePreference, WindowBackdropPreference, detect_theme_or_default,
-};
 use herogpui::application;
 use herogpui::components::{HeroGpuiAssets, TitleBar, WindowBorder, app_focus_root};
 use herogpui::core::with_alpha;
@@ -55,6 +49,12 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use tableminus_gfx::glyphs::EngineKind;
+use tableminus_state::tabs::{TabId, TabKind};
+use tableminus_state::theme::ThemeDefinition;
+use tableminus_windows_platform::{
+    ThemePreference, WindowBackdropPreference, detect_theme_or_default,
+};
 use tablepro_core::sql_syntax::SqlGrammar;
 use windows::Win32::Foundation::HWND;
 
