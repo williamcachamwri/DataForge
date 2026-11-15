@@ -1,4 +1,4 @@
-//! Horizontal tab strip backed by `dataforge_state::tabs::TabStripModel`
+//! Horizontal tab strip backed by `tableminus_state::tabs::TabStripModel`
 //! plus the `[SQL | Grid | Structure]` workspace sub-view switch.
 
 use std::collections::BTreeMap;
@@ -18,10 +18,10 @@ use herogpui::theme::ActiveTheme;
 use crate::accessibility::KeyCommand;
 use crate::app::ScreenMode;
 use crate::views::status_bar::TableViewMode;
-use dataforge_state::tabs::{TabConnectionId, TabId, TabItem, TabKind};
+use tableminus_state::tabs::{TabConnectionId, TabId, TabItem, TabKind};
 use tablepro_core::meta::TableRef;
 
-use super::DataForgeWorkspace;
+use super::TableMinusWorkspace;
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{
     CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, animate_active_indicator,
@@ -38,9 +38,9 @@ pub struct TabsStripState {
 }
 
 impl TabsStripState {
-    /// Creates tab-strip scroll/rename state owned by [`DataForgeWorkspace`].
+    /// Creates tab-strip scroll/rename state owned by [`TableMinusWorkspace`].
     #[must_use]
-    pub fn new(_window: &mut Window, _cx: &mut Context<DataForgeWorkspace>) -> Self {
+    pub fn new(_window: &mut Window, _cx: &mut Context<TableMinusWorkspace>) -> Self {
         Self {
             scroll_handle: ScrollHandle::new(),
             title_overrides: BTreeMap::new(),
@@ -59,7 +59,7 @@ impl TabsStripState {
         &mut self,
         tab_id: TabId,
         current_title: &str,
-        cx: &mut Context<DataForgeWorkspace>,
+        cx: &mut Context<TableMinusWorkspace>,
     ) {
         let initial = current_title.to_owned();
         let entity = cx.new(|cx| InputState::with_value(cx, initial));
@@ -85,9 +85,9 @@ impl TabsStripState {
 /// Renders the workspace tab strip, tab management controls, and `[SQL | Grid | Structure]` switcher.
 #[must_use]
 pub fn render_tab_strip(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     window: &mut Window,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let skip_anim = is_reduced_motion(cx);
     let active_tab = ws.controller.tabs.active_tab();
@@ -180,7 +180,7 @@ pub fn render_tab_strip(
 
 fn render_empty_tabs_notice(
     s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     div()
@@ -202,7 +202,7 @@ struct TabPillProps<'a> {
     strings: &'a crate::i18n::Strings,
 }
 
-fn render_tab_pill(props: TabPillProps<'_>, cx: &Context<DataForgeWorkspace>) -> AnyElement {
+fn render_tab_pill(props: TabPillProps<'_>, cx: &Context<TableMinusWorkspace>) -> AnyElement {
     let colors = cx.colors().clone();
     let tab_id = props.tab.id;
 
@@ -242,7 +242,7 @@ fn build_tab_pill_shell(
     tab_id: TabId,
     tab_kind: &TabKind,
     is_active: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> herogpui::gpui::Stateful<herogpui::gpui::Div> {
     let colors = cx.colors().clone();
     let kind_icon = match tab_kind {
@@ -307,7 +307,7 @@ fn render_tab_title_slot(
     title: &str,
     is_active: bool,
     rename_input: Option<Entity<InputState>>,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     if let Some(input_entity) = rename_input {
         return render_tab_rename_input(tab_id, input_entity, cx);
@@ -335,7 +335,7 @@ fn render_tab_title_slot(
 fn render_tab_rename_input(
     tab_id: TabId,
     input_entity: Entity<InputState>,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     div()
         .w(px(116.0))
@@ -366,7 +366,7 @@ fn render_tab_close_button(
     tab_id: TabId,
     title: &str,
     s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     Button::new(format!("workspace-tab-close-{}", tab_id.0))
@@ -390,7 +390,7 @@ fn wrap_tab_context_menu(
     title: &str,
     total_tabs: usize,
     s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let tab_id = tab.id;
     let current_title = title.to_owned();
@@ -438,7 +438,7 @@ fn build_tab_context_menu_items(total_tabs: usize, s: &crate::i18n::Strings) -> 
 fn render_tab_strip_actions(
     s: &crate::i18n::Strings,
     skip_anim: bool,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let colors = cx.colors().clone();
     div()
@@ -508,7 +508,7 @@ fn render_tab_strip_actions(
 fn render_subview_switcher(
     sub_view: WorkspaceSubView,
     s: &crate::i18n::Strings,
-    cx: &Context<DataForgeWorkspace>,
+    cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let selected_key = match sub_view {
         WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid => "sql",
@@ -540,9 +540,9 @@ fn render_subview_switcher(
 }
 
 fn apply_subview_selection(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     key: &str,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.workspace_pane.close_tool();
     match key {
@@ -569,10 +569,10 @@ fn apply_subview_selection(
 }
 
 fn select_workspace_tab(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     tab_id: TabId,
     kind: &TabKind,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.controller.tabs.select(tab_id);
     ws.controller.screen_mode = ScreenMode::Workspace;
@@ -597,9 +597,9 @@ fn select_workspace_tab(
 }
 
 fn close_workspace_tab(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     tab_id: TabId,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.tabs_ui.title_overrides.remove(&tab_id);
     if ws.tabs_ui.renaming_tab == Some(tab_id) {
@@ -611,13 +611,13 @@ fn close_workspace_tab(
 }
 
 fn handle_tab_context_action(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     action: &str,
     tab_id: TabId,
     title: &str,
     conn_id: &TabConnectionId,
     kind: &TabKind,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     match action {
         "save" => {
@@ -660,11 +660,11 @@ fn handle_tab_context_action(
 }
 
 fn duplicate_workspace_tab(
-    ws: &mut DataForgeWorkspace,
+    ws: &mut TableMinusWorkspace,
     title: &str,
     conn_id: &TabConnectionId,
     kind: &TabKind,
-    cx: &mut Context<DataForgeWorkspace>,
+    cx: &mut Context<TableMinusWorkspace>,
 ) {
     ws.workspace_pane.close_tool();
     let copy_title = format!("{title} {}", ws.controller.strings.copy_suffix);
@@ -701,7 +701,7 @@ fn parse_table_ref(raw: &str) -> TableRef {
     }
 }
 
-fn pending_grid_edits(ws: &DataForgeWorkspace) -> usize {
+fn pending_grid_edits(ws: &TableMinusWorkspace) -> usize {
     let edits = &ws.controller.grid_model.edits;
     edits.modified_cells.len() + edits.inserted_rows.len() + edits.deleted_rows.len()
 }
