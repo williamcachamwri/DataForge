@@ -1,0 +1,185 @@
+---
+import { ArrowUpRight, Check, Copy, Download, Github, Terminal } from 'lucide-astro';
+import SectionBand from './SectionBand.astro';
+import type { ReleaseInfo } from '../lib/release';
+
+interface Props {
+  release: ReleaseInfo;
+}
+
+const { release } = Astro.props;
+
+const installCommands = [
+  { id: 'winget', label: 'winget', cmd: 'winget install williamcachamwri.DataForge' },
+  { id: 'scoop', label: 'scoop', cmd: 'scoop install dataforge' },
+  { id: 'cli', label: 'cli', cmd: 'dataforge.exe --smoke-startup' },
+];
+
+const shortcuts = [
+  { keys: 'Ctrl+K', action: 'Open Command Palette' },
+  { keys: 'Ctrl+Enter / F5', action: 'Run active SQL query' },
+  { keys: 'Ctrl+Shift+S / R', action: 'Commit / Rollback staged grid edits' },
+  { keys: 'Ctrl+I', action: 'Toggle docked Row Inspector' },
+  { keys: 'Ctrl+Shift+A', action: 'Toggle schema-only AI drawer' },
+  { keys: 'Ctrl+Shift+E', action: 'Export to CSV, JSON, JSONL, or SQL' },
+];
+---
+
+<section id="cli" class="scroll-mt-[57px]">
+  <!-- Band 1: 2-Column .cell-grid: 1-Line Install / CLI + Keyboard Shortcuts -->
+  <SectionBand as="div">
+    <div class="cell-grid grid-cols-1 lg:grid-cols-2">
+    <!-- Left Cell: 1-Line Install & CLI Copy -->
+    <div class="p-6 sm:p-10 flex flex-col justify-between gap-6">
+      <div>
+        <p
+          data-i18n="cli.installLabel"
+          class="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)]"
+        >
+          Quick Install &amp; CLI
+        </p>
+        <h2
+          data-i18n="cli.title"
+          class="mt-2.5 text-xl sm:text-2xl font-medium tracking-[-0.025em] text-[var(--foreground)]"
+        >
+          GUI launcher and scriptable CLI in one executable.
+        </h2>
+        <p
+          data-i18n="cli.ipcNote"
+          class="mt-2.5 text-sm leading-relaxed text-[var(--muted)]"
+        >
+          Pass .sqlite, .duckdb, or .sql files to open tabs in the active window via Named Pipe IPC.
+        </p>
+      </div>
+
+      <div class="space-y-3">
+        <!-- Switcher pills -->
+        <div
+          role="tablist"
+          aria-label="Install method"
+          class="inline-flex items-center gap-1 rounded-[6px] border border-[var(--rule)] bg-[var(--surface)] p-1"
+        >
+          {installCommands.map((item, idx) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={idx === 0 ? 'true' : 'false'}
+              data-install-tab={item.id}
+              data-install-cmd={item.cmd}
+              class="df-seg-btn min-h-[32px] rounded-[4px] px-2.5 font-mono text-xs cursor-pointer"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <!-- Single-Line Copy Box (6px radius) -->
+        <div class="flex items-center justify-between gap-3 rounded-[6px] border border-[var(--rule-strong)] bg-[var(--surface)] px-3.5 py-2.5">
+          <div class="flex items-center gap-2.5 min-w-0 font-mono text-xs sm:text-[13px] text-[var(--foreground)]">
+            <Terminal class="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+            <code id="cli-install-code" class="truncate select-all">{installCommands[0].cmd}</code>
+          </div>
+          <button
+            type="button"
+            id="copy-cli-btn"
+            data-copy-text={installCommands[0].cmd}
+            data-copied="false"
+            class="copy-btn inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-[6px] px-2.5 py-1 font-mono text-[11px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          >
+            <Copy class="copy-icon-copy h-3 w-3" />
+            <Check class="copy-icon-check h-3 w-3" />
+            <span data-copy-label>Copy</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Cell: Keyboard Shortcuts Keycap Table -->
+    <div class="p-6 sm:p-10">
+      <p
+        data-i18n="cli.shortcutsEyebrow"
+        class="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)]"
+      >
+        Keyboard-First
+      </p>
+      <h2
+        data-i18n="cli.shortcutsTitle"
+        class="mt-2.5 text-xl sm:text-2xl font-medium tracking-[-0.025em] text-[var(--foreground)]"
+      >
+        Zero-mouse workflow.
+      </h2>
+
+      <div class="mt-6 border border-[var(--rule)] divide-y divide-[var(--rule)]">
+        {shortcuts.map((item, idx) => (
+          <div class="cell-hover flex items-center justify-between gap-4 px-4 py-3">
+            <span
+              data-i18n={`cli.shortcuts.${idx}`}
+              class="min-w-0 text-[13px] text-[var(--muted)]"
+            >
+              {item.action}
+            </span>
+            <kbd class="df-kbd shrink-0 whitespace-nowrap rounded-[6px] px-2 py-0.5 font-mono text-[11px]">
+              {item.keys}
+            </kbd>
+          </div>
+        ))}
+      </div>
+    </div>
+    </div>
+  </SectionBand>
+
+  <!-- Band 2: Minimal Download CTA Band -->
+  <SectionBand
+    as="div"
+    frameClass="px-4 py-12 sm:px-10 sm:py-16 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between"
+  >
+    <div class="max-w-xl">
+      <div class="inline-flex flex-wrap items-center gap-2 rounded-[6px] border border-[var(--accent-border)] bg-[var(--accent-tint)] px-2.5 py-1 font-mono text-[11px] text-[var(--accent)]">
+        <span>
+          <span data-i18n="cta.releasePrefix">Release</span>
+          <span data-release-version class="tabular-nums">{release.tag}</span>
+        </span>
+        <span aria-hidden="true">·</span>
+        <span data-i18n="cta.platform">Windows 10 / 11 (x64)</span>
+      </div>
+      <h2
+        data-i18n="cta.title"
+        class="mt-4 text-2xl sm:text-3xl font-medium tracking-[-0.03em] text-[var(--foreground)]"
+      >
+        Ready to replace heavy database clients.
+      </h2>
+      <p
+        data-i18n="cta.subtitle"
+        class="mt-2.5 text-sm leading-relaxed text-[var(--muted)]"
+      >
+        Install via DataForge-win-Setup.exe (no UAC required, Velopack delta updates) or extract DataForge-win-Portable.zip. Verify checksums with SHA256SUMS.txt.
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 shrink-0">
+      <a
+        href={release.releaseUrl}
+        data-release-link
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-primary inline-flex min-h-[42px] items-center gap-2 rounded-[6px] px-4 py-2 text-sm font-medium tracking-tight"
+      >
+        <Download class="h-4 w-4 shrink-0" />
+        <span>
+          <span data-i18n="cta.download">Download DataForge</span>
+          <span data-release-version class="font-mono">{release.tag}</span>
+        </span>
+      </a>
+      <a
+        href={release.repoUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-secondary inline-flex min-h-[42px] items-center gap-2 rounded-[6px] px-4 py-2 text-sm font-medium tracking-tight"
+      >
+        <Github class="h-4 w-4 shrink-0 opacity-85" />
+        <span data-i18n="cta.source">Source on GitHub</span>
+        <ArrowUpRight class="h-3.5 w-3.5 shrink-0 opacity-70" />
+      </a>
+    </div>
+  </SectionBand>
+</section>
