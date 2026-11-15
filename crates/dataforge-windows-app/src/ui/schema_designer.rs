@@ -349,7 +349,9 @@ fn render_toolbar(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspace>)
         .gap(px(10.0))
         .child(
             div()
+                .min_w_0()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap(px(10.0))
                 .child(mode_tabs)
@@ -364,11 +366,13 @@ fn render_create_table_controls(
     cx: &mut Context<DataForgeWorkspace>,
 ) -> AnyElement {
     div()
+        .min_w_0()
         .flex()
+        .flex_wrap()
         .items_center()
         .gap(px(10.0))
         .child(
-            div().w(px(210.0)).child(
+            div().w(px(190.0)).min_w(px(130.0)).child(
                 Input::new(&ws.schema_designer_ui.table_name_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder("table_name")
@@ -411,11 +415,13 @@ fn render_alter_table_controls(
     let s = &ws.controller.strings;
 
     div()
+        .min_w_0()
         .flex()
+        .flex_wrap()
         .items_center()
         .gap(px(8.0))
         .child(
-            div().w(px(230.0)).child(
+            div().w(px(200.0)).min_w(px(130.0)).child(
                 Select::new("schema-alter-table-select", items)
                     .variant(FieldVariant::Secondary)
                     .placeholder(s.structure_no_table_title)
@@ -460,6 +466,7 @@ fn render_destructive_buttons(
 
     div()
         .flex()
+        .flex_wrap()
         .items_center()
         .gap(px(6.0))
         .child(
@@ -523,11 +530,13 @@ fn render_confirm_banner(
             .border_color(theme::hairline_border_color(cx))
             .bg(colors.danger.color.opacity(0.12))
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
             .gap(px(10.0))
             .child(
                 div()
+                    .min_w_0()
                     .flex()
                     .items_center()
                     .gap(px(8.0))
@@ -538,6 +547,8 @@ fn render_confirm_banner(
                     )
                     .child(
                         div()
+                            .min_w_0()
+                            .truncate()
                             .text_size(px(12.0))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(colors.foreground)
@@ -547,6 +558,7 @@ fn render_confirm_banner(
             .child(
                 div()
                     .flex()
+                    .flex_wrap()
                     .items_center()
                     .gap(px(6.0))
                     .child(
@@ -643,8 +655,10 @@ fn render_columns_section(
     let mut section = div().flex().flex_col().gap(px(8.0)).child(
         div()
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
+            .gap(px(8.0))
             .child(
                 div()
                     .text_size(px(12.0))
@@ -701,12 +715,15 @@ fn render_column_row(
             theme::hairline_border_color(cx)
         })
         .bg(theme::muted_surface_bg(cx))
+        .min_w_0()
         .flex()
         .flex_col()
         .gap(px(8.0))
         .child(
             div()
+                .min_w_0()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap(px(8.0))
                 .child(
@@ -719,7 +736,7 @@ fn render_column_row(
                     ),
                 )
                 .child(
-                    div().w(px(130.0)).child(
+                    div().flex_1().min_w(px(100.0)).max_w(px(150.0)).child(
                         Input::new(&col.type_input)
                             .variant(FieldVariant::Secondary)
                             .placeholder(s.schema_column_type)
@@ -728,7 +745,7 @@ fn render_column_row(
                     ),
                 )
                 .child(
-                    div().w(px(120.0)).child(
+                    div().flex_1().min_w(px(100.0)).max_w(px(150.0)).child(
                         Input::new(&col.default_input)
                             .variant(FieldVariant::Secondary)
                             .placeholder(s.schema_default_value)
@@ -883,8 +900,10 @@ fn render_indexes_section(
     let mut section = div().flex().flex_col().gap(px(8.0)).child(
         div()
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
+            .gap(px(8.0))
             .child(
                 div()
                     .text_size(px(12.0))
@@ -933,11 +952,13 @@ fn render_index_row(
             theme::hairline_border_color(cx)
         })
         .bg(theme::muted_surface_bg(cx))
+        .min_w_0()
         .flex()
+        .flex_wrap()
         .items_center()
         .gap(px(8.0))
         .child(
-            div().w(px(160.0)).child(
+            div().flex_1().min_w(px(120.0)).max_w(px(180.0)).child(
                 Input::new(&item.name_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder("idx_name")
@@ -946,7 +967,7 @@ fn render_index_row(
             ),
         )
         .child(
-            div().flex_1().child(
+            div().flex_1().min_w(px(130.0)).child(
                 Input::new(&item.columns_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder("col1, col2")
@@ -1004,8 +1025,10 @@ fn render_fks_section(ws: &DataForgeWorkspace, cx: &mut Context<DataForgeWorkspa
     let mut section = div().flex().flex_col().gap(px(8.0)).child(
         div()
             .flex()
+            .flex_wrap()
             .items_center()
             .justify_between()
+            .gap(px(8.0))
             .child(
                 div()
                     .text_size(px(12.0))
@@ -1056,12 +1079,13 @@ fn render_fk_row(
             theme::hairline_border_color(cx)
         })
         .bg(theme::muted_surface_bg(cx))
+        .min_w_0()
         .flex()
         .flex_wrap()
         .items_center()
         .gap(px(8.0))
         .child(
-            div().w(px(130.0)).child(
+            div().flex_1().min_w(px(110.0)).child(
                 Input::new(&fk.name_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder("fk_name")
@@ -1070,7 +1094,7 @@ fn render_fk_row(
             ),
         )
         .child(
-            div().w(px(110.0)).child(
+            div().flex_1().min_w(px(100.0)).child(
                 Input::new(&fk.column_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder(s.schema_column_name)
@@ -1079,7 +1103,7 @@ fn render_fk_row(
             ),
         )
         .child(
-            div().w(px(130.0)).child(
+            div().flex_1().min_w(px(110.0)).child(
                 Input::new(&fk.ref_table_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder(s.schema_fk_ref_table)
@@ -1088,7 +1112,7 @@ fn render_fk_row(
             ),
         )
         .child(
-            div().w(px(110.0)).child(
+            div().flex_1().min_w(px(100.0)).child(
                 Input::new(&fk.ref_column_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder(s.schema_fk_ref_column)
@@ -1137,8 +1161,9 @@ fn render_preview_column(
     let can_execute = !stmts.is_empty() && stmts.iter().any(|st| !st.trim().starts_with("--"));
 
     div()
-        .w(px(390.0))
-        .flex_shrink_0()
+        .w(px(340.0))
+        .min_w(px(240.0))
+        .max_w(px(390.0))
         .min_h_0()
         .p(px(14.0))
         .flex()
@@ -1147,8 +1172,10 @@ fn render_preview_column(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .justify_between()
+                .gap(px(6.0))
                 .child(
                     div()
                         .text_size(px(12.0))
@@ -1186,7 +1213,7 @@ fn render_preview_column(
                 .child(if preview_sql.trim().is_empty() {
                     div()
                         .text_color(cx.colors().muted)
-                        .child("-- No DDL changes")
+                        .child(s.schema_no_changes)
                         .into_any_element()
                 } else {
                     syntax_bridge::styled_sql_block(preview_sql, grammar, &ws.content_palette)
