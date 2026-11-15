@@ -226,4 +226,9 @@ cargo test --release -j 1 -p dataforge-e2e --test sqlite_e2e -- --nocapture
 
 Contributions, bug reports, and translation fixes are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for build and GPUI rules, [CHANGELOG.md](CHANGELOG.md) for release notes, [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-DataForge is licensed under [LICENSE](LICENSE) (GNU Affero General Public License v3.0) and [LICENSE-MIT](LICENSE-MIT) (MIT, with upstream core attribution to [TableProApp/TablePro](https://github.com/TableProApp/TablePro)).
+### License Boundary (`AGPL-3.0-or-later` vs `MIT`)
+
+| Scope | License | Notes |
+| :--- | :--- | :--- |
+| `crates/*`, `web/`, and compiled `dataforge.exe` binaries | **[AGPL-3.0-or-later](LICENSE)** | DataForge Windows desktop shell, UI, state, services, and website. Linking `core/` into `dataforge.exe` distributes the combined work under AGPL-3.0. |
+| `core/` (`core/crates/*`) | **[MIT](LICENSE-MIT)** *(upstream)* | Upstream TablePro core crates ([TableProApp/TablePro](https://github.com/TableProApp/TablePro)). Independent reuse of unmodified upstream `core/` components retains MIT terms under [LICENSE-MIT](LICENSE-MIT). |
