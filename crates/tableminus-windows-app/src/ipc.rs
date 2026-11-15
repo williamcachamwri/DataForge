@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use dataforge_windows_platform::{
+use tableminus_windows_platform::{
     ForwardPayload, NamedPipeServer, SingleInstanceLock, is_forwardable_target,
     send_to_existing_instance,
 };
@@ -194,7 +194,7 @@ impl IpcInbox {
 pub fn spawn_ipc_listener(pipe_name: &str, inbox: Arc<IpcInbox>) -> Result<JoinHandle<()>> {
     let mut server = NamedPipeServer::bind(pipe_name)?;
     let handle = thread::Builder::new()
-        .name("dataforge-ipc".to_owned())
+        .name("tableminus-ipc".to_owned())
         .spawn(move || {
             while !inbox.stopped.load(Ordering::Acquire) {
                 match server.accept_one() {
