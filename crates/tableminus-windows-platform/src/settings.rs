@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::error::PlatformError;
 
-/// Default filename for DataForge application settings inside [`StoragePaths::config`].
+/// Default filename for TableMinus application settings inside [`StoragePaths::config`].
 pub const SETTINGS_FILENAME: &str = "settings.json";
 
 /// User-selected theme preference.
@@ -205,7 +205,7 @@ impl Default for McpSettings {
     }
 }
 
-/// Top-level persisted application settings for DataForge on Windows.
+/// Top-level persisted application settings for TableMinus on Windows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
