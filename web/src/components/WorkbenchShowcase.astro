@@ -1,0 +1,300 @@
+---
+import { Activity, ArrowRight, Binary, DatabaseZap, GitFork, Shuffle, Table2 } from 'lucide-astro';
+import SectionBand from './SectionBand.astro';
+
+interface ShowcaseTab {
+  id: string;
+  label: string;
+  labelKey: string;
+  title: string;
+  titleKey: string;
+  desc: string;
+  descKey: string;
+  image?: string;
+  alt?: string;
+}
+
+const tabs: ShowcaseTab[] = [
+  {
+    id: 'sql-grid',
+    label: 'SQL Editor & Grid',
+    labelKey: 'workbench.tabs.sql-grid.label',
+    title: 'Dialect-aware SQL editor & virtualized data grid.',
+    titleKey: 'workbench.tabs.sql-grid.title',
+    desc: 'Autocomplete, multi-cursor editing, Vim mode, 11 filter operators, and staged batch commits across 10M+ indexed rows.',
+    descKey: 'workbench.tabs.sql-grid.desc',
+    image: '/images/data-grid.jpg',
+    alt: 'DataForge virtualized Data Grid with structure inspector and parameterized filters',
+  },
+  {
+    id: 'er-diagram',
+    label: 'ER Diagram',
+    labelKey: 'workbench.tabs.er-diagram.label',
+    title: 'Interactive ER diagram with vector SVG export.',
+    titleKey: 'workbench.tabs.er-diagram.title',
+    desc: 'Auto-arranged schema graph displaying foreign key relations, reference counts, and smooth Direct3D 11 zoom.',
+    descKey: 'workbench.tabs.er-diagram.desc',
+    image: '/images/er-diagram-workbench.jpg',
+    alt: 'DataForge ER Diagram mapping tables and foreign key relationships',
+  },
+  {
+    id: 'value-viewer',
+    label: 'Rich Value Viewer',
+    labelKey: 'workbench.tabs.value-viewer.label',
+    title: 'Docked inspector for text, JSON, hex, and images.',
+    titleKey: 'workbench.tabs.value-viewer.title',
+    desc: 'Press Ctrl+I to inspect nested JSON trees with path copy, 16-byte aligned hex dumps, or decoded PNG, JPEG, and SVG payloads.',
+    descKey: 'workbench.tabs.value-viewer.desc',
+  },
+  {
+    id: 'mock-generator',
+    label: 'Mock Generator',
+    labelKey: 'workbench.tabs.mock-generator.label',
+    title: 'Foreign-key-safe synthetic data from live schemas.',
+    titleKey: 'workbench.tabs.mock-generator.title',
+    desc: 'Topologically orders parent-child tables and generates deterministic batches tailored to your active SQL dialect.',
+    descKey: 'workbench.tabs.mock-generator.desc',
+  },
+  {
+    id: 'data-transfer',
+    label: 'Data Transfer',
+    labelKey: 'workbench.tabs.data-transfer.label',
+    title: 'Cross-engine streaming without intermediate CSVs.',
+    titleKey: 'workbench.tabs.data-transfer.title',
+    desc: 'Stream tables directly between any of the 9 compiled drivers with automatic type mapping and chunked batching.',
+    descKey: 'workbench.tabs.data-transfer.desc',
+  },
+  {
+    id: 'live-monitor',
+    label: 'Live Monitor',
+    labelKey: 'workbench.tabs.live-monitor.label',
+    title: 'Real-time PID sessions, lock chains, and triage.',
+    titleKey: 'workbench.tabs.live-monitor.title',
+    desc: 'Inspect active queries, idle transactions, and blocking locks in real time with Safe Mode confirmation before terminating a PID.',
+    descKey: 'workbench.tabs.live-monitor.desc',
+  },
+];
+---
+
+<SectionBand as="section" id="workbench" bandClass="scroll-mt-[57px]">
+  <!-- Editorial Section Header: Left Eyebrow + Right Content -->
+  <div class="px-4 py-10 sm:px-10 sm:py-12 border-b border-[var(--rule)] lg:grid lg:grid-cols-12 lg:gap-8 lg:items-start">
+    <p
+      data-i18n="workbench.eyebrow"
+      class="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--accent)] lg:col-span-3 lg:pt-1.5"
+    >
+      Workbench
+    </p>
+    <div class="mt-2.5 lg:mt-0 lg:col-span-9">
+      <h2
+        data-i18n="workbench.title"
+        class="section-heading text-[var(--foreground)] max-w-2xl"
+      >
+        Built for fast query, schema, and operations.
+      </h2>
+      <p
+        data-i18n="workbench.subtitle"
+        class="mt-2.5 text-sm sm:text-[15px] text-[var(--muted)] max-w-xl"
+      >
+        Six native tools in one lightweight Windows executable.
+      </p>
+    </div>
+  </div>
+
+  <!-- Horizontal Tab Bar -->
+  <div class="border-b border-[var(--rule)] bg-[var(--surface)]/40 overflow-x-auto">
+    <div
+      role="tablist"
+      aria-label="DataForge Workbench Features"
+      data-tablist
+      class="relative flex min-w-max items-stretch"
+    >
+      <span
+        id="workbench-tab-indicator"
+        aria-hidden="true"
+        class="tab-indicator pointer-events-none absolute top-0 left-0"
+      ></span>
+      {tabs.map((tab, index) => (
+        <button
+          type="button"
+          role="tab"
+          id={`tab-${tab.id}`}
+          aria-selected={index === 0 ? 'true' : 'false'}
+          aria-controls={`panel-${tab.id}`}
+          tabindex={index === 0 ? 0 : -1}
+          data-tab-target={tab.id}
+          class="tab-trigger inline-flex min-h-[46px] items-center gap-2 border-r border-[var(--rule)] px-4 sm:px-5 text-xs font-medium tracking-tight whitespace-nowrap cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
+        >
+          <span class="font-mono text-[10px] text-[var(--dim)] tabular-nums">0{index + 1}</span>
+          <span data-i18n={tab.labelKey}>{tab.label}</span>
+        </button>
+      ))}
+    </div>
+  </div>
+
+  <!-- Tab Panels -->
+  <div class="px-4 py-8 sm:px-10 sm:py-12">
+    {tabs.map((tab, index) => (
+      <div
+        role="tabpanel"
+        id={`panel-${tab.id}`}
+        aria-labelledby={`tab-${tab.id}`}
+        data-panel-id={tab.id}
+        hidden={index !== 0}
+      >
+        <div class="max-w-2xl">
+          <h3
+            data-i18n={tab.titleKey}
+            class="text-lg sm:text-xl font-medium tracking-[-0.02em] text-[var(--foreground)]"
+          >
+            {tab.title}
+          </h3>
+          <p
+            data-i18n={tab.descKey}
+            class="mt-2 text-sm leading-relaxed text-[var(--muted)]"
+          >
+            {tab.desc}
+          </p>
+        </div>
+
+        {tab.image ? (
+          <div class="mt-6 border border-[var(--rule)] bg-[var(--stage-bg)] overflow-hidden">
+            <img
+              src={tab.image}
+              alt={tab.alt ?? tab.title}
+              loading={index === 0 ? 'eager' : 'lazy'}
+              decoding="async"
+              class="block w-full h-auto object-cover select-none"
+            />
+          </div>
+        ) : (
+          <div class="mt-6 border border-[var(--rule)]">
+            {tab.id === 'value-viewer' && (
+              <div class="cell-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="p-5 sm:p-6">
+                  <Binary class="h-4 w-4 text-[var(--accent)]" />
+                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Text &amp; UTF-8</div>
+                  <div class="mt-1 text-xs text-[var(--muted)]">Multi-line inspection with inline edit &amp; commit</div>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <Table2 class="h-4 w-4 text-[var(--accent)]" />
+                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">JSON Tree</div>
+                  <div class="mt-1 text-xs text-[var(--muted)]">Collapsible nodes with one-click JSONPath copy</div>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <Binary class="h-4 w-4 text-[var(--accent)]" />
+                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">16-Byte Hex</div>
+                  <div class="mt-1 text-xs text-[var(--muted)]">Aligned offset, byte columns, and ASCII preview</div>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <GitFork class="h-4 w-4 text-[var(--accent)]" />
+                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Image Payloads</div>
+                  <div class="mt-1 text-xs text-[var(--muted)]">Instant PNG, JPEG, GIF, WEBP, and SVG decode</div>
+                </div>
+              </div>
+            )}
+
+            {tab.id === 'mock-generator' && (
+              <div class="cell-grid grid-cols-1 md:grid-cols-3">
+                <div class="p-5 sm:p-6">
+                  <span class="font-mono text-[11px] text-[var(--accent)]">01</span>
+                  <div class="mt-2.5 flex items-center gap-2 text-sm font-medium text-[var(--foreground)]">
+                    <DatabaseZap class="h-4 w-4 text-[var(--muted)]" />
+                    <span>Topological Graph</span>
+                  </div>
+                  <p class="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">
+                    Resolves parent-child foreign key order automatically before generating rows.
+                  </p>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <span class="font-mono text-[11px] text-[var(--accent)]">02</span>
+                  <div class="mt-2.5 flex items-center gap-2 text-sm font-medium text-[var(--foreground)]">
+                    <Shuffle class="h-4 w-4 text-[var(--muted)]" />
+                    <span>Deterministic Seeds</span>
+                  </div>
+                  <p class="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">
+                    Reproducible datasets with realistic names, emails, timestamps, and numeric ranges.
+                  </p>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <span class="font-mono text-[11px] text-[var(--accent)]">03</span>
+                  <div class="mt-2.5 flex items-center gap-2 text-sm font-medium text-[var(--foreground)]">
+                    <ArrowRight class="h-4 w-4 text-[var(--muted)]" />
+                    <span>Dialect Batch Insert</span>
+                  </div>
+                  <p class="mt-1.5 text-xs leading-relaxed text-[var(--muted)]">
+                    Commits directly into SQLite, PostgreSQL, MySQL, or DuckDB inside staged transactions.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {tab.id === 'data-transfer' && (
+              <div class="cell-grid grid-cols-1 md:grid-cols-3">
+                <div class="p-5 sm:p-6">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-[var(--dim)]">Source</span>
+                  <div class="mt-2 text-base font-medium text-[var(--foreground)]">Any Compiled Driver</div>
+                  <p class="mt-1.5 text-xs text-[var(--muted)]">
+                    Read directly from SQLite, DuckDB, PostgreSQL, MySQL, MSSQL, or ClickHouse.
+                  </p>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-[var(--accent)]">Pipeline</span>
+                  <div class="mt-2 text-base font-medium text-[var(--foreground)]">Zero-CSV Streaming</div>
+                  <p class="mt-1.5 text-xs text-[var(--muted)]">
+                    Chunked in-memory batches with automatic column type coercion and progress tracking.
+                  </p>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <span class="font-mono text-[11px] uppercase tracking-wider text-[var(--dim)]">Target</span>
+                  <div class="mt-2 text-base font-medium text-[var(--foreground)]">Binary Bulk Load</div>
+                  <p class="mt-1.5 text-xs text-[var(--muted)]">
+                    Uses native COPY IN and prepared batch inserts over rustls TLS or russh tunnels.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {tab.id === 'live-monitor' && (
+              <div class="cell-grid grid-cols-1 md:grid-cols-3">
+                <div class="p-5 sm:p-6">
+                  <div class="flex items-center justify-between">
+                    <span class="font-mono text-[11px] text-[var(--dim)]">Sessions</span>
+                    <span class="inline-flex items-center gap-1.5 font-mono text-[10px] text-[var(--status-ok)]">
+                      <span class="h-1.5 w-1.5 rounded-full bg-[var(--status-ok)]"></span>
+                      Live
+                    </span>
+                  </div>
+                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Active PID &amp; Query State</div>
+                  <p class="mt-1.5 text-xs text-[var(--muted)]">
+                    Monitor running queries, duration, and idle-in-transaction sessions in real time.
+                  </p>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <div class="flex items-center justify-between">
+                    <span class="font-mono text-[11px] text-[var(--dim)]">Contention</span>
+                    <span class="font-mono text-[10px] text-[var(--status-warn)]">Lock Graph</span>
+                  </div>
+                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Blocking Lock Detection</div>
+                  <p class="mt-1.5 text-xs text-[var(--muted)]">
+                    Identify blocking PIDs, lock modes, and waiting relations without manual system queries.
+                  </p>
+                </div>
+                <div class="p-5 sm:p-6">
+                  <div class="flex items-center justify-between">
+                    <span class="font-mono text-[11px] text-[var(--dim)]">Safety</span>
+                    <Activity class="h-3.5 w-3.5 text-[var(--accent)]" />
+                  </div>
+                  <div class="mt-3 text-sm font-medium text-[var(--foreground)]">Confirmed Termination</div>
+                  <p class="mt-1.5 text-xs text-[var(--muted)]">
+                    Two-step Safe Mode confirmation prevents accidental backend termination on production hosts.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+</SectionBand>
