@@ -4,8 +4,8 @@
 use std::process::Command;
 use std::sync::Arc;
 
-use tableminus_e2e::{E2eResult, shutdown_session};
 use secrecy::SecretString;
+use tableminus_e2e::{E2eResult, shutdown_session};
 use tablepro_core::credentials::{CredentialInteraction, Credentials};
 use tablepro_core::{
     DataModel, DatabaseDriver, EngineCategory, LivenessPolicy, NetworkEndpoint, SafeModeLevel,
