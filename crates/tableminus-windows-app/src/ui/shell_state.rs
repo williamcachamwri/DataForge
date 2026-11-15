@@ -2,8 +2,8 @@
 //! for the HeroGPUI workspace shell.
 
 use crate::i18n::Strings;
-use dataforge_state::editor::RunEventAccumulator;
-use dataforge_state::tabs::TabId;
+use tableminus_state::editor::RunEventAccumulator;
+use tableminus_state::tabs::TabId;
 use herogpui::components::{IconName, Toast};
 use herogpui::core::Color as HeroColor;
 use herogpui::gpui::{App, SharedString};
