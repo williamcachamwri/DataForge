@@ -1,19 +1,19 @@
 //! Main Content Area rendering (`DataGridRenderer`, Structure view,
 //! `SqlEditorRenderer` with Vim mode & autocomplete, and `ConnectionUnavailableView`).
 
-use dataforge_gfx::Result;
-use dataforge_gfx::context::{
+use tableminus_gfx::Result;
+use tableminus_gfx::context::{
     FontWeight, RenderSurface, TextAlign, TextFormatSpec, VerticalAlign, point_f,
 };
-use dataforge_gfx::editor_renderer::{
+use tableminus_gfx::editor_renderer::{
     AutocompletePopup, CursorMode, EditorCursor, EditorLayout, EditorLine, EditorRenderState,
     EditorSelection, SqlEditorRenderer,
 };
-use dataforge_gfx::grid_renderer::{
+use tableminus_gfx::grid_renderer::{
     DataGridRenderer, GridColumn, GridLayout, GridRow, GridSelection,
 };
-use dataforge_gfx::palette::ThemePalette;
-use dataforge_state::connection_window::ConnectionUnavailableView;
+use tableminus_gfx::palette::ThemePalette;
+use tableminus_state::connection_window::ConnectionUnavailableView;
 use windows_numerics::Matrix3x2;
 
 use crate::shell_layout::{Rect, ShellLayout};
