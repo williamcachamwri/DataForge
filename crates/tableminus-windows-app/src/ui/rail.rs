@@ -61,20 +61,6 @@ pub fn render_rail(
             skip_anim,
             cx,
         ))
-        .child(render_rail_toggle(
-            "rail-nav-connections",
-            format!(
-                "{} (Ctrl+Shift+C)",
-                ws.controller.strings.connections_library
-            ),
-            IconName::Server,
-            ws.controller.screen_mode == ScreenMode::ConnectionsLibrary,
-            skip_anim,
-            cx,
-            cx.listener(|ws, _, _, cx| {
-                ws.switch_screen(ScreenMode::ConnectionsLibrary, cx);
-            }),
-        ))
         .child(
             Separator::new()
                 .id("rail-sep-top")

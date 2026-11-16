@@ -170,11 +170,15 @@ pub fn render_tab_strip(
                     cx,
                 )),
         )
-        .child(render_subview_switcher(
-            ws.workspace_pane.sub_view,
-            &ws.controller.strings,
-            cx,
-        ))
+        .children(
+            tabs_snapshot
+                .iter()
+                .find(|t| active_tab == Some(t.id))
+                .filter(|t| !matches!(t.kind, TabKind::QueryEditor { .. }))
+                .map(|_| {
+                    render_subview_switcher(ws.workspace_pane.sub_view, &ws.controller.strings, cx)
+                }),
+        )
         .into_any_element()
 }
 
@@ -511,15 +515,12 @@ fn render_subview_switcher(
     cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let selected_key = match sub_view {
-        WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid => "sql",
+        WorkspaceSubView::SqlEditor | WorkspaceSubView::SplitSqlAndGrid => "grid",
         WorkspaceSubView::DataGrid => "grid",
         WorkspaceSubView::Structure => "structure",
     };
 
     let items = vec![
-        HeroTabItem::new("sql", s.sql_tab)
-            .height(px(24.0))
-            .padding_x(px(10.0)),
         HeroTabItem::new("grid", s.grid_tab)
             .height(px(24.0))
             .padding_x(px(10.0)),
@@ -528,7 +529,7 @@ fn render_subview_switcher(
             .padding_x(px(10.0)),
     ];
 
-    Tabs::new("workspace-subview-tabs", items, "sql")
+    Tabs::new("workspace-subview-tabs", items, "grid")
         .selected_key(selected_key)
         .variant(TabsVariant::Primary)
         .size(TabsSize::Sm)

@@ -24,8 +24,9 @@ pub use paths::{APP_DIR_NAME, storage_paths, storage_paths_for};
 pub use secrets::{DEFAULT_CREDENTIAL_PREFIX, LAYOUT_KEYWORD, PART_SIZE, WindowsCredentialStore};
 pub use session_state::{
     PlatformResult, SCHEDULED_TASKS_FILENAME, SavedTabSnapshot, ScheduledTaskRecord,
-    ScheduledTaskRunEntry, WORKSPACE_SESSION_FILENAME, WORKSPACE_SESSION_SCHEMA_VERSION,
-    WorkspaceSessionSnapshot, load_scheduled_tasks, load_workspace_session, save_scheduled_tasks,
+    ScheduledTaskRunEntry, StartupSessionDecision, WORKSPACE_SESSION_FILENAME,
+    WORKSPACE_SESSION_SCHEMA_VERSION, WorkspaceSessionSnapshot, clear_active_workspace_session,
+    decide_startup_session, load_scheduled_tasks, load_workspace_session, save_scheduled_tasks,
     save_workspace_session, scheduled_tasks_path, workspace_session_path,
 };
 pub use settings::{

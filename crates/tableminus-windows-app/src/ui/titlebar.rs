@@ -1,8 +1,8 @@
 //! Custom HeroGPUI client-side title bar with macOS-style traffic lights and Win32 drag hit-testing.
 
 use herogpui::components::{
-    Button, Chip, ChipLabel, ChipVariant, Color, Icon, IconName, Kbd, KbdAbbr, KbdContent, KbdKey,
-    KbdVariant, Orientation, Separator, Size, Spinner, Tooltip, TooltipPlacement, Variant,
+    Button, Icon, IconName, Kbd, KbdAbbr, KbdContent, KbdKey, KbdVariant, Orientation, Popover,
+    PopoverPlacement, Separator, Size, Tooltip, TooltipPlacement, Variant,
 };
 use herogpui::core::with_alpha;
 use herogpui::gpui::{
@@ -12,16 +12,17 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 
-use crate::app::{AppController, ScreenMode};
-use tableminus_gfx::glyphs::EngineKind;
+use crate::accessibility::KeyCommand;
+use crate::app::ScreenMode;
 use tableminus_state::connection_window::ConnectionWindowPhase;
 use tableminus_windows_platform::WindowControlsStyle;
-use tablepro_core::SafeModeLevel;
 
 use super::TableMinusWorkspace;
-use super::engine_icons::engine_icon;
+use super::shell_state::{SettingsSection, WorkspaceToolView};
 use super::theme::{
-    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, hairline_border_color, is_reduced_motion,
+    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, TEXT_BADGE_PX, TEXT_BODY_PX, TEXT_CONTROL_PX,
+    TEXT_META_PX, animate_popover_enter, elevated_overlay_bg, hairline_border_color,
+    is_reduced_motion,
 };
 
 /// Renders the custom `TableMinus` title bar wired with macOS-style traffic lights
@@ -47,13 +48,15 @@ pub fn render_titlebar(
         .items_center()
         .gap(px(8.0))
         .min_w(px(0.0))
-        .flex_shrink(1.0);
+        .flex_shrink(1.0)
+        .overflow_hidden();
 
     if !is_windows_controls {
         leading = leading.child(render_traffic_lights(skip_anim, cx));
     }
 
     leading = leading
+        .child(render_hamburger_menu(ws, skip_anim, cx))
         .child(
             div()
                 .flex()
@@ -62,7 +65,7 @@ pub fn render_titlebar(
                 .gap(px(6.0))
                 .min_w(px(0.0))
                 .flex_shrink(1.0)
-                .pl(px(if is_windows_controls { 0.0 } else { 4.0 }))
+                .pl(px(if is_windows_controls { 0.0 } else { 2.0 }))
                 .child(
                     img(ImageSource::Image(crate::branding::tableminus_logo_image()))
                         .w(px(18.0))
@@ -74,24 +77,28 @@ pub fn render_titlebar(
                         .min_w(px(0.0))
                         .flex_shrink(1.0)
                         .truncate()
-                        .text_size(px(13.0))
+                        .text_size(px(TEXT_BODY_PX))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(colors.foreground)
                         .child(ws.controller.strings.app_title),
                 ),
-        )
-        .child(render_status_pill(&ws.controller, cx))
-        .child(
-            Separator::new()
-                .id("titlebar-sep-left")
-                .orientation(Orientation::Vertical)
-                .sx(|s| s.h(px(16.0)).flex_shrink_0()),
-        )
-        .child(render_quick_search_trigger(
-            &ws.controller.strings,
-            skip_anim,
-            cx,
-        ));
+        );
+
+    let show_welcome = ws.controller.screen_mode == ScreenMode::Workspace && ws.welcome_ui.active;
+    if !show_welcome {
+        leading = leading
+            .child(
+                Separator::new()
+                    .id("titlebar-sep-left")
+                    .orientation(Orientation::Vertical)
+                    .sx(|s| s.h(px(16.0)).flex_shrink_0()),
+            )
+            .child(render_quick_search_trigger(
+                &ws.controller.strings,
+                skip_anim,
+                cx,
+            ));
+    }
 
     let mut bar = div()
         .id("tableminus-titlebar")
@@ -140,6 +147,8 @@ fn request_close_window(
     if ws.controller.needs_close_guard() {
         ws.workspace_pane.close_guard_open = true;
         cx.notify();
+    } else if ws.controller.screen_mode == ScreenMode::Workspace && !ws.welcome_ui.active {
+        super::welcome_view::close_active_connection_to_welcome(ws, cx);
     } else {
         window.remove_window();
     }
@@ -327,172 +336,6 @@ fn render_windows_caption_buttons(
         .into_any_element()
 }
 
-fn active_engine_kind(controller: &AppController) -> Option<EngineKind> {
-    let phase = controller.connections.phase(controller.active_workspace);
-    if !matches!(phase, Some(ConnectionWindowPhase::Connected)) {
-        return None;
-    }
-    let version = controller.toolbar_status.engine_version.as_str();
-    EngineKind::ALL
-        .iter()
-        .copied()
-        .find(|kind| version.starts_with(kind.display_name()))
-        .or_else(|| {
-            controller
-                .rail_items
-                .iter()
-                .find(|item| item.connected)
-                .map(|item| item.engine)
-        })
-}
-
-fn render_status_pill(controller: &AppController, cx: &Context<TableMinusWorkspace>) -> AnyElement {
-    let colors = cx.colors().clone();
-    let s = &controller.strings;
-    match controller.screen_mode {
-        ScreenMode::ConnectionsLibrary => {
-            return render_screen_pill(IconName::Server, s.connections_library, cx);
-        }
-        ScreenMode::Settings => return render_screen_pill(IconName::Settings, s.settings, cx),
-        ScreenMode::Workspace => {}
-    }
-
-    match controller.connections.phase(controller.active_workspace) {
-        Some(ConnectionWindowPhase::Connected) => render_connected_pill(controller, cx),
-        Some(ConnectionWindowPhase::Connecting { .. }) => {
-            render_spinner_chip("titlebar-conn-spinner", s.connecting)
-        }
-        Some(ConnectionWindowPhase::Reconnecting { .. }) => {
-            render_spinner_chip("titlebar-reconn-spinner", s.reconnecting)
-        }
-        Some(ConnectionWindowPhase::Unavailable { .. }) => Chip::new()
-            .variant(ChipVariant::Soft)
-            .color(Color::Danger)
-            .size(Size::Sm)
-            .child(
-                Icon::new(IconName::TriangleAlert)
-                    .size(px(12.0))
-                    .color(colors.danger.color),
-            )
-            .child(ChipLabel::new().child(s.unavailable))
-            .into_any_element(),
-        Some(ConnectionWindowPhase::Disconnected) | None => Chip::new()
-            .variant(ChipVariant::Secondary)
-            .color(Color::Default)
-            .size(Size::Sm)
-            .child(
-                div()
-                    .w(px(6.0))
-                    .h(px(6.0))
-                    .rounded(px(99.0))
-                    .flex_shrink_0()
-                    .bg(colors.muted),
-            )
-            .child(ChipLabel::new().child(s.disconnected))
-            .into_any_element(),
-    }
-}
-
-fn render_screen_pill(
-    icon: IconName,
-    label: &'static str,
-    cx: &Context<TableMinusWorkspace>,
-) -> AnyElement {
-    let colors = cx.colors().clone();
-    Chip::new()
-        .variant(ChipVariant::Secondary)
-        .color(Color::Default)
-        .size(Size::Sm)
-        .child(Icon::new(icon).size(px(12.0)).color(colors.muted))
-        .child(ChipLabel::new().child(label))
-        .into_any_element()
-}
-
-fn render_spinner_chip(id: &'static str, label: &'static str) -> AnyElement {
-    Chip::new()
-        .variant(ChipVariant::Soft)
-        .color(Color::Accent)
-        .size(Size::Sm)
-        .child(Spinner::new(id).size_px(px(12.0)))
-        .child(ChipLabel::new().child(label))
-        .into_any_element()
-}
-
-fn render_connected_pill(
-    controller: &AppController,
-    cx: &Context<TableMinusWorkspace>,
-) -> AnyElement {
-    let colors = cx.colors().clone();
-    let engine = active_engine_kind(controller);
-    let target_label = format_connected_label(controller);
-    let safe_mode = controller.active_safe_mode();
-    let mut pill = div()
-        .id("titlebar-conn-pill")
-        .flex()
-        .items_center()
-        .gap(px(6.0))
-        .max_w(px(280.0))
-        .min_w(px(0.0))
-        .flex_shrink(1.0)
-        .overflow_hidden()
-        .px(px(8.0))
-        .py(px(3.0))
-        .rounded(px(CONTROL_RADIUS_PX))
-        .bg(with_alpha(colors.surface_secondary, 0.85))
-        .border(px(HAIRLINE_BORDER_PX))
-        .border_color(colors.border)
-        .child(
-            div()
-                .w(px(6.0))
-                .h(px(6.0))
-                .rounded(px(99.0))
-                .flex_shrink_0()
-                .bg(colors.success.color),
-        );
-    if let Some(kind) = engine {
-        pill = pill.child(engine_icon(kind, px(13.0), colors.foreground));
-    }
-    pill = pill.child(
-        div()
-            .flex_1()
-            .min_w(px(0.0))
-            .truncate()
-            .text_size(px(11.5))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(colors.foreground)
-            .child(target_label),
-    );
-    if safe_mode != SafeModeLevel::Off {
-        pill = pill.child(
-            Icon::new(IconName::ShieldCheck)
-                .size(px(12.0))
-                .color(colors.warning.color),
-        );
-    }
-    pill.into_any_element()
-}
-
-fn format_connected_label(controller: &AppController) -> String {
-    let status = &controller.toolbar_status;
-    let host = status.host.trim();
-    let db = status.database.trim();
-    match (!host.is_empty() && host != "—", !db.is_empty() && db != "—") {
-        (true, true) => format!("{host} / {db}"),
-        (true, false) => host.to_owned(),
-        (false, true) => db.to_owned(),
-        (false, false) => {
-            let is_not_connected = crate::i18n::Locale::ALL.iter().any(|loc| {
-                status.engine_version == crate::i18n::Strings::for_locale(*loc).not_connected
-            });
-            if !status.engine_version.is_empty() && !is_not_connected {
-                status.engine_version.clone()
-            } else {
-                controller.strings.connected.to_owned()
-            }
-        }
-    }
-}
-
 fn render_quick_search_trigger(
     strings: &crate::i18n::Strings,
     skip_anim: bool,
@@ -529,18 +372,439 @@ fn render_quick_search_trigger(
                         )
                         .child(
                             div()
-                                .text_size(px(11.5))
+                                .whitespace_nowrap()
+                                .text_size(px(TEXT_CONTROL_PX))
                                 .text_color(colors.muted)
                                 .child(strings.command_placeholder),
                         )
                         .child(
                             Kbd::new()
                                 .variant(KbdVariant::Light)
-                                .sx(|s| s.h(px(18.0)).px(px(4.0)).text_size(px(10.0)))
+                                .sx(|s| s.h(px(18.0)).px(px(4.0)).text_size(px(TEXT_BADGE_PX)))
                                 .child(KbdAbbr::new(KbdKey::Ctrl))
                                 .child(KbdContent::new().child("K")),
                         ),
                 ),
         )
+        .into_any_element()
+}
+
+fn render_hamburger_menu(
+    ws: &mut TableMinusWorkspace,
+    skip_anim: bool,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let s = &ws.controller.strings;
+    let is_connected = matches!(
+        ws.controller
+            .connections
+            .phase(ws.controller.active_workspace),
+        Some(ConnectionWindowPhase::Connected)
+    );
+    let show_welcome = ws.controller.screen_mode == ScreenMode::Workspace && ws.welcome_ui.active;
+    let has_export_rows = !ws.controller.grid_rows.is_empty()
+        || ws
+            .active_tab_result()
+            .is_some_and(|r| !r.accumulator.result_sets.is_empty());
+
+    let trigger = Tooltip::new("Menu")
+        .id("titlebar-hamburger-tip")
+        .placement(TooltipPlacement::Bottom)
+        .delay(350)
+        .close_delay(80)
+        .should_skip_animation(skip_anim)
+        .child(
+            Button::new("titlebar-hamburger-btn")
+                .variant(if ws.titlebar_menu_open {
+                    Variant::Secondary
+                } else {
+                    Variant::Ghost
+                })
+                .size(Size::Sm)
+                .is_icon_only(true)
+                .height(px(26.0))
+                .width(px(26.0))
+                .radius(px(CONTROL_RADIUS_PX))
+                .aria_label("Application Menu")
+                .child(
+                    Icon::new(IconName::Menu)
+                        .size(px(15.0))
+                        .color(colors.foreground),
+                ),
+        );
+
+    let menu_body = div()
+        .id("titlebar-hamburger-menu-body")
+        .w_full()
+        .flex()
+        .flex_col()
+        .gap(px(2.0))
+        .bg(elevated_overlay_bg(cx))
+        .child(render_menu_query_section(s, has_export_rows, cx))
+        .child(
+            Separator::new()
+                .id("menu-sep-view")
+                .orientation(Orientation::Horizontal)
+                .sx(|s| s.my(px(4.0))),
+        )
+        .child(render_menu_view_section(s, show_welcome, cx))
+        .child(
+            Separator::new()
+                .id("menu-sep-app")
+                .orientation(Orientation::Horizontal)
+                .sx(|s| s.my(px(4.0))),
+        )
+        .child(render_menu_app_section(s, is_connected, cx))
+        .child(
+            Separator::new()
+                .id("menu-sep-quit")
+                .orientation(Orientation::Horizontal)
+                .sx(|s| s.my(px(4.0))),
+        )
+        .child(render_menu_item(
+            "menu-quit",
+            IconName::Power,
+            "Quit",
+            Some("Alt+F4"),
+            false,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                request_close_window(ws, window, cx);
+            }),
+        ));
+
+    Popover::new(trigger)
+        .id("titlebar-hamburger-popover")
+        .placement(PopoverPlacement::BottomStart)
+        .panel_width(px(272.0))
+        .padding(px(8.0))
+        .is_open(ws.titlebar_menu_open)
+        .on_open_change(cx.listener(|ws, open: &bool, _w, cx| {
+            ws.titlebar_menu_open = *open;
+            cx.notify();
+        }))
+        .child(animate_popover_enter(
+            menu_body,
+            "titlebar-hamburger-anim",
+            cx,
+        ))
+        .into_any_element()
+}
+
+fn render_menu_query_section(
+    s: &crate::i18n::Strings,
+    has_export_rows: bool,
+    cx: &Context<TableMinusWorkspace>,
+) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.0))
+        .child(render_menu_section_label("Query & File", cx))
+        .child(render_menu_item(
+            "menu-new-query",
+            IconName::FilePlus,
+            s.new_query_tab_tooltip,
+            Some("Ctrl+T"),
+            false,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                ws.welcome_ui.close();
+                ws.execute_key_command(KeyCommand::NewQueryTab, window, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-save-query",
+            IconName::Save,
+            s.save_query,
+            Some("Ctrl+S"),
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                super::toolbar::save_active_tab_query(ws, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-export",
+            IconName::Download,
+            s.export,
+            Some("Ctrl+Shift+E"),
+            !has_export_rows,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                ws.modals_ui.open_export(window, cx);
+                cx.notify();
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-import",
+            IconName::Upload,
+            s.import_wizard,
+            None,
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                ws.welcome_ui.close();
+                ws.workspace_pane.open_tool(WorkspaceToolView::ImportWizard);
+                ws.switch_screen(ScreenMode::Workspace, cx);
+            }),
+        ))
+        .into_any_element()
+}
+
+fn render_menu_view_section(
+    s: &crate::i18n::Strings,
+    show_welcome: bool,
+    cx: &Context<TableMinusWorkspace>,
+) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.0))
+        .child(render_menu_section_label("View", cx))
+        .child(render_menu_item(
+            "menu-toggle-rail",
+            IconName::PanelLeft,
+            "Toggle Left Rail",
+            None,
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                ws.toggle_rail(cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-toggle-sidebar",
+            IconName::PanelLeft,
+            "Toggle Objects Sidebar",
+            Some("Ctrl+B"),
+            false,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                ws.execute_key_command(KeyCommand::ToggleSidebar, window, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-toggle-inspector",
+            IconName::Columns2,
+            s.cmd_toggle_inspector,
+            Some("Ctrl+I"),
+            false,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                ws.execute_key_command(KeyCommand::ToggleInspector, window, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-toggle-ai",
+            IconName::Sparkles,
+            s.cmd_toggle_ai,
+            Some("Ctrl+Shift+A"),
+            false,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                ws.execute_key_command(KeyCommand::ToggleAiDrawer, window, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-toggle-console",
+            IconName::Terminal,
+            "Toggle SQL Console",
+            None,
+            show_welcome,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                ws.console_log.toggle();
+                cx.notify();
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-cmd-palette",
+            IconName::Search,
+            s.cmd_palette_tooltip,
+            Some("Ctrl+K"),
+            show_welcome,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                if !(ws.controller.screen_mode == ScreenMode::Workspace && ws.welcome_ui.active) {
+                    ws.command_palette_ui.toggle(window, cx);
+                }
+                cx.notify();
+            }),
+        ))
+        .into_any_element()
+}
+
+fn render_menu_app_section(
+    s: &crate::i18n::Strings,
+    is_connected: bool,
+    cx: &Context<TableMinusWorkspace>,
+) -> AnyElement {
+    let mut section = div()
+        .flex()
+        .flex_col()
+        .gap(px(2.0))
+        .child(render_menu_section_label(s.app_title, cx))
+        .child(render_menu_item(
+            "menu-connections",
+            IconName::Server,
+            s.connections_library,
+            Some("Ctrl+Shift+O"),
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                ws.switch_screen(ScreenMode::ConnectionsLibrary, cx);
+            }),
+        ));
+
+    if is_connected {
+        section = section.child(render_menu_item(
+            "menu-disconnect-welcome",
+            IconName::LogOut,
+            "Close Connection",
+            None,
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                super::welcome_view::close_active_connection_to_welcome(ws, cx);
+            }),
+        ));
+    }
+
+    section
+        .child(render_menu_item(
+            "menu-settings",
+            IconName::Settings,
+            s.settings,
+            Some("Ctrl+,"),
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                ws.switch_screen(ScreenMode::Settings, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-shortcuts",
+            IconName::Keyboard,
+            "Keymap & Shortcuts",
+            None,
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                ws.settings_view.section = SettingsSection::Shortcuts;
+                ws.switch_screen(ScreenMode::Settings, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-toggle-theme",
+            IconName::SunMoon,
+            s.cmd_toggle_theme,
+            Some("Ctrl+Shift+M"),
+            false,
+            cx,
+            cx.listener(|ws, _, window, cx| {
+                ws.titlebar_menu_open = false;
+                ws.toggle_theme_mode(window, cx);
+            }),
+        ))
+        .child(render_menu_item(
+            "menu-about",
+            IconName::Info,
+            s.cat_about,
+            None,
+            false,
+            cx,
+            cx.listener(|ws, _, _, cx| {
+                ws.titlebar_menu_open = false;
+                ws.settings_view.section = SettingsSection::Appearance;
+                ws.switch_screen(ScreenMode::Settings, cx);
+            }),
+        ))
+        .into_any_element()
+}
+
+fn render_menu_section_label(label: &'static str, cx: &Context<TableMinusWorkspace>) -> AnyElement {
+    div()
+        .px(px(8.0))
+        .py(px(2.0))
+        .text_size(px(TEXT_META_PX))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(cx.colors().muted)
+        .child(label)
+        .into_any_element()
+}
+
+fn render_menu_item(
+    id: &'static str,
+    icon: IconName,
+    label: &'static str,
+    shortcut: Option<&'static str>,
+    disabled: bool,
+    cx: &Context<TableMinusWorkspace>,
+    on_press: impl Fn(&herogpui::gpui::ClickEvent, &mut Window, &mut herogpui::gpui::App) + 'static,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let fg = if disabled {
+        colors.muted
+    } else {
+        colors.foreground
+    };
+
+    let mut row = div()
+        .w_full()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(8.0))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(8.0))
+                .min_w(px(0.0))
+                .child(Icon::new(icon).size(px(14.0)).color(fg))
+                .child(
+                    div()
+                        .truncate()
+                        .text_size(px(TEXT_BODY_PX))
+                        .text_color(fg)
+                        .child(label),
+                ),
+        );
+
+    if let Some(keys) = shortcut {
+        row = row.child(
+            div()
+                .flex_shrink_0()
+                .text_size(px(TEXT_BADGE_PX))
+                .text_color(colors.muted)
+                .child(keys),
+        );
+    }
+
+    Button::new(id)
+        .variant(Variant::Ghost)
+        .size(Size::Sm)
+        .height(px(28.0))
+        .full_width(true)
+        .is_disabled(disabled)
+        .on_press(on_press)
+        .child(row)
         .into_any_element()
 }

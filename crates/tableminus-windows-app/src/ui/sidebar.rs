@@ -16,7 +16,7 @@ use herogpui::gpui::prelude::FluentBuilder as _;
 use herogpui::gpui::{
     Animation, AnimationExt as _, AnyElement, App, AppContext as _, AsyncApp, ClipboardItem,
     Context, Entity, Focusable as _, FontFeatures, InteractiveElement, IntoElement, ParentElement,
-    SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
+    ScrollHandle, SharedString, StatefulInteractiveElement, Styled, WeakEntity, Window, div, px,
 };
 use herogpui::theme::{ActiveTheme, SkeletonAnimation};
 use tableminus_state::connection_window::ConnectionWindowPhase;
@@ -27,11 +27,11 @@ use tablepro_core::meta::{IndexInfo, ObjectInfo, ObjectKind, ObjectScope, TableR
 use tablepro_session::{OperationError, OperationKind};
 
 use super::TableMinusWorkspace;
-use super::engine_icons::engine_icon;
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{
-    COMPACT_GAP_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, PANEL_RADIUS_PX, ease_out_quad,
-    hairline_border_color, hover_duration, is_reduced_motion, overlay_duration, panel_surface_bg,
+    COMPACT_GAP_PX, HAIRLINE_BORDER_PX, MICRO_GAP_PX, PANEL_RADIUS_PX, TEXT_BADGE_PX, TEXT_BODY_PX,
+    TEXT_CONTROL_PX, ease_out_quad, hairline_border_color, is_reduced_motion, overlay_duration,
+    panel_surface_bg,
 };
 use crate::app::ScreenMode;
 
@@ -67,7 +67,7 @@ pub struct SidebarPanelState {
     table_details: HashMap<String, TableDetailsState>,
     schema_loading: bool,
     copied_object: Option<(String, Instant)>,
-    expand_anim_gen: u64,
+    tree_scroll_handle: ScrollHandle,
 }
 
 impl SidebarPanelState {
@@ -89,7 +89,7 @@ impl SidebarPanelState {
             table_details: HashMap::new(),
             schema_loading: false,
             copied_object: None,
-            expand_anim_gen: 0,
+            tree_scroll_handle: ScrollHandle::new(),
         }
     }
 
@@ -242,7 +242,7 @@ fn render_sidebar_header(
                         .min_w_0()
                         .child(
                             div()
-                                .text_xs()
+                                .text_size(px(TEXT_CONTROL_PX))
                                 .font_weight(herogpui::gpui::FontWeight::SEMIBOLD)
                                 .text_color(colors.foreground)
                                 .child(ws.controller.strings.objects),
@@ -347,16 +347,6 @@ fn render_database_and_schema_controls(
     ws: &mut TableMinusWorkspace,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
-    let colors = cx.colors().clone();
-    let engine = ws.controller.connection_form.engine;
-    let db_name = if !ws.controller.toolbar_status.database.trim().is_empty() {
-        ws.controller.toolbar_status.database.trim().to_owned()
-    } else if !ws.controller.connection_form.database.trim().is_empty() {
-        ws.controller.connection_form.database.trim().to_owned()
-    } else {
-        engine.display_name().to_owned()
-    };
-
     let active_schema = resolve_active_schema(ws);
     if active_schema.is_some() && ws.sidebar_ui.selected_schema.is_none() {
         ws.sidebar_ui.selected_schema = active_schema.clone();
@@ -384,8 +374,8 @@ fn render_database_and_schema_controls(
         .value(Some(SharedString::from(selected_key)))
         .full_width(true)
         .height(px(28.0))
-        .trigger_text_size(px(12.0))
-        .row_text_size(px(12.0))
+        .trigger_text_size(px(TEXT_CONTROL_PX))
+        .row_text_size(px(TEXT_BODY_PX))
         .is_disabled(disabled_select)
         .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
             let Some(schema) = key.as_ref().map(|s| s.to_string()) else {
@@ -401,23 +391,6 @@ fn render_database_and_schema_controls(
         .flex()
         .flex_col()
         .gap(px(MICRO_GAP_PX))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(MICRO_GAP_PX))
-                .min_w_0()
-                .child(engine_icon(engine, px(13.0), colors.muted))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .truncate()
-                        .text_xs()
-                        .text_color(colors.muted)
-                        .child(truncate_middle(&db_name, 26)),
-                ),
-        )
         .child(schema_select)
         .into_any_element()
 }
@@ -445,7 +418,7 @@ fn render_filter_controls(
         .placeholder(s.filter_shortcut_placeholder)
         .full_width()
         .height(px(30.0))
-        .text_size(px(12.0))
+        .text_size(px(TEXT_CONTROL_PX))
         .on_change(cx.listener(|ws, value: &str, _, cx| {
             ws.sidebar_ui.last_synced_filter = value.to_owned();
             ws.controller.set_sidebar_filter(value);
@@ -459,6 +432,12 @@ fn render_filter_controls(
             });
         });
 
+    let all_objs: Vec<&ObjectInfo> = ws.controller.cached_objects.iter().collect();
+    let count_strip = render_count_badges_strip(
+        &ws.controller.strings,
+        SectionCounts::from_objects(&all_objs),
+        cx,
+    );
     let active_tab = if ws.controller.sidebar_favorites_only {
         "favorites"
     } else {
@@ -476,7 +455,6 @@ fn render_filter_controls(
     .selected_key(active_tab)
     .variant(TabsVariant::Secondary)
     .size(TabsSize::Sm)
-    .full_width(true)
     .on_selection_change(cx.listener(|ws, key: &SharedString, _, cx| {
         ws.controller.sidebar_favorites_only = key.as_ref() == "favorites";
         ws.controller.rebuild_sidebar_rows();
@@ -489,6 +467,7 @@ fn render_filter_controls(
         .gap(px(COMPACT_GAP_PX))
         .child(search)
         .child(tabs)
+        .child(count_strip)
         .into_any_element()
 }
 
@@ -508,7 +487,6 @@ fn render_connected_body(
         return render_empty_filtered_card(ws, cx);
     }
 
-    let counts = SectionCounts::from_objects(&filtered);
     let tree_items = build_tree_items(ws, &filtered);
     let selected_object = resolve_selected_object(ws).cloned();
 
@@ -524,6 +502,12 @@ fn render_connected_body(
         .expanded_keys(expanded_keys)
         .on_selection_change(cx.listener(|ws, keys: &HashSet<SharedString>, _, cx| {
             ws.sidebar_ui.selected_node_key = keys.iter().next().map(|k| k.to_string());
+            if let Some(obj) = resolve_selected_object(ws).cloned()
+                && is_tabular_object(obj.kind)
+            {
+                open_object_in_grid(ws, &obj, cx);
+                return;
+            }
             cx.notify();
         }))
         .on_expanded_change(cx.listener(|ws, keys: &HashSet<SharedString>, _, cx| {
@@ -532,9 +516,6 @@ fn render_connected_body(
                 .filter(|k| !ws.sidebar_ui.expanded_keys.contains(*k))
                 .map(|k| k.to_string())
                 .collect();
-            if *keys != ws.sidebar_ui.expanded_keys {
-                ws.sidebar_ui.expand_anim_gen = ws.sidebar_ui.expand_anim_gen.wrapping_add(1);
-            }
             ws.sidebar_ui.expanded_keys = keys.clone();
             for key in newly_opened {
                 maybe_load_expanded_table_details(ws, &key, cx);
@@ -542,47 +523,13 @@ fn render_connected_body(
             cx.notify();
         }));
 
-    let ctx_items = build_object_menu_items(selected_object.as_ref(), ws);
-    let tree_with_ctx = ContextMenu::new(
-        "sidebar-tree-context-menu",
-        div().w_full().p(px(6.0)).child(tree),
-        ctx_items,
-    )
-    .on_action(cx.listener(|ws, action_key: &SharedString, _, cx| {
-        execute_node_action(ws, action_key.as_ref(), cx);
-    }));
-
-    let tree_container = div()
-        .id("sidebar-object-tree-scroll")
-        .flex_1()
-        .min_h_0()
-        .w_full()
-        .overflow_y_scroll()
-        .flex()
-        .flex_col()
-        .child(tree_with_ctx);
-    let tree_section = if ws.sidebar_ui.expand_anim_gen > 0 && !is_reduced_motion(cx) {
-        tree_container
-            .with_animation(
-                ("sidebar-tree-expand", ws.sidebar_ui.expand_anim_gen),
-                Animation::new(hover_duration(cx)).with_easing(ease_out_quad),
-                |el, delta| el.opacity(0.90 + 0.10 * delta).pt(px(2.0 * (1.0 - delta))),
-            )
-            .into_any_element()
-    } else {
-        tree_container.into_any_element()
-    };
+    let tree_section = render_tree_section(ws, tree, &selected_object, cx);
 
     let mut root = div()
         .flex_1()
         .min_h_0()
         .flex()
         .flex_col()
-        .child(render_count_badges_strip(
-            &ws.controller.strings,
-            counts,
-            cx,
-        ))
         .child(tree_section);
 
     if let Some(ref obj) = selected_object {
@@ -592,6 +539,49 @@ fn render_connected_body(
     }
 
     root.into_any_element()
+}
+
+fn render_tree_section(
+    ws: &mut TableMinusWorkspace,
+    tree: TreeView,
+    selected_object: &Option<ObjectInfo>,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
+    let ctx_items = build_object_menu_items(selected_object.as_ref(), ws);
+    let tree_interactive = div()
+        .w_full()
+        .on_mouse_down(
+            herogpui::gpui::MouseButton::Left,
+            cx.listener(|ws, event: &herogpui::gpui::MouseDownEvent, _, cx| {
+                if event.click_count >= 2
+                    && let Some(obj) = resolve_selected_object(ws).cloned()
+                    && is_tabular_object(obj.kind)
+                {
+                    open_object_in_new_grid_tab(ws, &obj, cx);
+                }
+            }),
+        )
+        .child(tree);
+    let tree_with_ctx = ContextMenu::new(
+        "sidebar-tree-context-menu",
+        div().w_full().p(px(6.0)).child(tree_interactive),
+        ctx_items,
+    )
+    .on_action(cx.listener(|ws, action_key: &SharedString, _, cx| {
+        execute_node_action(ws, action_key.as_ref(), cx);
+    }));
+
+    div()
+        .id("sidebar-object-tree-scroll")
+        .track_scroll(&ws.sidebar_ui.tree_scroll_handle)
+        .flex_1()
+        .min_h_0()
+        .w_full()
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .child(tree_with_ctx)
+        .into_any_element()
 }
 
 #[derive(Default, Clone, Copy)]
@@ -628,13 +618,9 @@ fn render_count_badges_strip(
     let colors = cx.colors().clone();
     div()
         .flex()
-        .flex_wrap()
         .items_center()
         .gap(px(MICRO_GAP_PX))
-        .px(px(10.0))
-        .py(px(6.0))
-        .border_b(px(HAIRLINE_BORDER_PX))
-        .border_color(hairline_border_color(cx))
+        .flex_shrink_0()
         .child(summary_chip(s.tables, counts.tables, colors.muted))
         .child(summary_chip(s.views, counts.views, colors.muted))
         .child(summary_chip(s.routines, counts.routines, colors.muted))
@@ -658,7 +644,7 @@ fn summary_chip(label: &str, count: usize, muted: herogpui::gpui::Hsla) -> AnyEl
                         .py(px(1.0))
                         .rounded(px(99.0))
                         .bg(muted.alpha(0.14))
-                        .text_size(px(10.0))
+                        .text_size(px(TEXT_BADGE_PX))
                         .font_features(tabular_font_features())
                         .child(format!("{count}")),
                 ),
@@ -1054,6 +1040,280 @@ fn build_object_menu_items(
     items
 }
 
+fn active_engine_kind(ws: &TableMinusWorkspace) -> tableminus_gfx::glyphs::EngineKind {
+    use tableminus_gfx::glyphs::EngineKind;
+    if let Some(conn_id) = ws.controller.active_connection_id()
+        && let Some(conn) = ws
+            .controller
+            .library
+            .storage()
+            .connections
+            .values()
+            .find(|c| c.id.0 == conn_id)
+    {
+        return crate::views::library::engine_from_driver_id(&conn.driver_id);
+    }
+    let version = ws.controller.toolbar_status.engine_version.as_str();
+    EngineKind::ALL
+        .iter()
+        .copied()
+        .find(|kind| version.starts_with(kind.display_name()))
+        .or_else(|| {
+            ws.controller
+                .rail_items
+                .iter()
+                .find(|item| item.connected)
+                .map(|item| item.engine)
+        })
+        .unwrap_or(EngineKind::Sqlite)
+}
+
+fn quote_ident(engine: tableminus_gfx::glyphs::EngineKind, ident: &str) -> String {
+    use tableminus_gfx::glyphs::EngineKind;
+    match engine {
+        EngineKind::Mysql | EngineKind::Mariadb | EngineKind::Clickhouse => {
+            format!("`{}`", ident.replace('`', "``"))
+        }
+        EngineKind::Mssql => format!("[{}]", ident.replace(']', "]]")),
+        _ => format!("\"{}\"", ident.replace('"', "\"\"")),
+    }
+}
+
+fn quote_table_ref_parts(
+    engine: tableminus_gfx::glyphs::EngineKind,
+    schema: Option<&str>,
+    table_name: &str,
+) -> String {
+    let table = quote_ident(engine, table_name);
+    match schema.map(str::trim) {
+        Some(s) if !s.is_empty() => format!("{}.{table}", quote_ident(engine, s)),
+        _ => table,
+    }
+}
+
+fn format_order_by(
+    engine: tableminus_gfx::glyphs::EngineKind,
+    sort_cols: &[(&str, bool)],
+) -> String {
+    let parts: Vec<String> = sort_cols
+        .iter()
+        .map(|(col, asc)| {
+            let dir = if *asc { "ASC" } else { "DESC" };
+            format!("{} {dir}", quote_ident(engine, col))
+        })
+        .collect();
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" ORDER BY {}", parts.join(", "))
+    }
+}
+
+fn build_table_open_queries(
+    engine: tableminus_gfx::glyphs::EngineKind,
+    schema: Option<&str>,
+    table_name: &str,
+    sort_cols: &[(&str, bool)],
+    limit: u64,
+    offset: u64,
+) -> Vec<(super::console_log::ConsoleLogKind, String)> {
+    use super::console_log::ConsoleLogKind;
+    use tableminus_gfx::glyphs::EngineKind;
+
+    let limit = limit.max(1);
+    match engine {
+        EngineKind::Mongodb => {
+            let escaped = table_name.replace('"', "\\\"");
+            return vec![
+                (
+                    ConsoleLogKind::Query,
+                    format!(
+                        "db.getCollection(\"{escaped}\").find({{}}).skip({offset}).limit({limit});"
+                    ),
+                ),
+                (
+                    ConsoleLogKind::Count,
+                    format!("db.getCollection(\"{escaped}\").countDocuments({{}});"),
+                ),
+                (
+                    ConsoleLogKind::Schema,
+                    format!("db.getCollection(\"{escaped}\").findOne();"),
+                ),
+            ];
+        }
+        EngineKind::Redis => {
+            return vec![
+                (
+                    ConsoleLogKind::Query,
+                    format!("SCAN 0 MATCH {table_name}* COUNT {limit}"),
+                ),
+                (ConsoleLogKind::Count, "DBSIZE".to_owned()),
+            ];
+        }
+        _ => {}
+    }
+
+    let qualified = quote_table_ref_parts(engine, schema, table_name);
+    let order_by = format_order_by(engine, sort_cols);
+    let select_sql = match engine {
+        EngineKind::Mssql if order_by.is_empty() => {
+            format!("SELECT TOP {limit} * FROM {qualified};")
+        }
+        EngineKind::Mssql => {
+            format!(
+                "SELECT * FROM {qualified}{order_by} OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY;"
+            )
+        }
+        _ => format!("SELECT * FROM {qualified}{order_by} LIMIT {limit} OFFSET {offset};"),
+    };
+    let count_sql = format!("SELECT COUNT(*) FROM {qualified};");
+    let escaped_name = table_name.replace('\'', "''");
+    let schema_sql = match engine {
+        EngineKind::Sqlite => {
+            format!("PRAGMA table_info({});", quote_ident(engine, table_name))
+        }
+        EngineKind::Duckdb => format!("DESCRIBE {qualified};"),
+        EngineKind::Clickhouse | EngineKind::Cassandra | EngineKind::Scylladb => {
+            format!("DESCRIBE TABLE {qualified};")
+        }
+        EngineKind::Mysql | EngineKind::Mariadb => format!("SHOW FULL COLUMNS FROM {qualified};"),
+        EngineKind::Postgresql => {
+            let schema_name = schema
+                .filter(|s| !s.is_empty())
+                .unwrap_or("public")
+                .replace('\'', "''");
+            format!(
+                "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name = '{escaped_name}' ORDER BY ordinal_position;"
+            )
+        }
+        EngineKind::Mssql => {
+            let schema_name = schema
+                .filter(|s| !s.is_empty())
+                .unwrap_or("dbo")
+                .replace('\'', "''");
+            format!(
+                "SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{schema_name}' AND TABLE_NAME = '{escaped_name}' ORDER BY ORDINAL_POSITION;"
+            )
+        }
+        EngineKind::Mongodb | EngineKind::Redis => unreachable!(),
+    };
+
+    vec![
+        (ConsoleLogKind::Query, select_sql),
+        (ConsoleLogKind::Count, count_sql),
+        (ConsoleLogKind::Schema, schema_sql),
+    ]
+}
+
+fn log_table_open_queries(ws: &mut TableMinusWorkspace, obj: &ObjectInfo) {
+    let engine = active_engine_kind(ws);
+    let limit = ws.controller.grid_model.page.limit.max(1);
+    let offset = ws.controller.grid_model.page.offset;
+    let cols = ws.controller.grid_model.columns.columns();
+    let sort_cols: Vec<(&str, bool)> = ws
+        .controller
+        .grid_model
+        .sort
+        .keys
+        .iter()
+        .filter_map(|sk| {
+            let col = cols.iter().find(|c| c.id == sk.column_id)?;
+            let asc = matches!(
+                sk.direction,
+                tableminus_state::data_grid::SortDirection::Ascending
+            );
+            Some((col.name.as_str(), asc))
+        })
+        .collect();
+
+    let entries = build_table_open_queries(
+        engine,
+        obj.schema.as_deref(),
+        &obj.name,
+        &sort_cols,
+        limit,
+        offset,
+    );
+    for (kind, sql) in entries {
+        ws.console_log.push(sql, kind);
+    }
+}
+
+fn open_object_in_grid(
+    ws: &mut TableMinusWorkspace,
+    obj: &ObjectInfo,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
+    let table_ref = TableRef::new(obj.schema.clone(), obj.name.clone());
+    match ws.controller.open_table_tab_blocking(table_ref) {
+        Ok(()) => {
+            log_table_open_queries(ws, obj);
+            ws.welcome_ui.close();
+            ws.controller.screen_mode = ScreenMode::Workspace;
+            ws.sync_active_tab_sub_view();
+            ws.workspace_pane.sub_view = WorkspaceSubView::DataGrid;
+            cx.notify();
+        }
+        Err(err) => {
+            ws.console_log.push(
+                format!("-- Failed to open {}: {err}", obj.name),
+                super::console_log::ConsoleLogKind::Error,
+            );
+            let msg = ws.controller.strings.failed_to_open_table;
+            ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
+        }
+    }
+}
+
+fn open_object_in_new_grid_tab(
+    ws: &mut TableMinusWorkspace,
+    obj: &ObjectInfo,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
+    let conn_id = TabConnectionId(format!("ws-{}", ws.controller.active_workspace.0));
+    let new_tab = tableminus_state::tabs::TabItem {
+        id: tableminus_state::tabs::TabId(0),
+        connection_id: conn_id.clone(),
+        title: obj.name.clone(),
+        kind: tableminus_state::tabs::TabKind::TableData {
+            table_name: obj.name.clone(),
+        },
+        pinned: false,
+        has_unsaved_edits: false,
+        has_active_filters: false,
+        has_active_sort: false,
+    };
+    ws.controller.tabs.attach_tab(new_tab, conn_id);
+
+    let table_ref = TableRef::new(obj.schema.clone(), obj.name.clone());
+    ws.controller.active_table = Some(table_ref.clone());
+    ws.controller.screen_mode = ScreenMode::Workspace;
+    ws.controller.sync_layout_counts();
+
+    match ws
+        .controller
+        .query_active_table_page_blocking(&tablepro_core::meta::PagePosition::First)
+    {
+        Ok(()) => {
+            log_table_open_queries(ws, obj);
+            let _ = ws.controller.refresh_table_row_count_blocking();
+            let _ = ws.controller.load_table_structure_blocking(&table_ref);
+            ws.welcome_ui.close();
+            ws.sync_active_tab_sub_view();
+            ws.workspace_pane.sub_view = WorkspaceSubView::DataGrid;
+            cx.notify();
+        }
+        Err(err) => {
+            ws.console_log.push(
+                format!("-- Failed to open {}: {err}", obj.name),
+                super::console_log::ConsoleLogKind::Error,
+            );
+            let msg = ws.controller.strings.failed_to_open_table;
+            ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
+        }
+    }
+}
+
 fn execute_node_action(
     ws: &mut TableMinusWorkspace,
     action: &str,
@@ -1063,17 +1323,7 @@ fn execute_node_action(
     match action {
         "open_data" => {
             let Some(obj) = selected else { return };
-            let table_ref = TableRef::new(obj.schema.clone(), obj.name.clone());
-            match ws.controller.open_table_tab_blocking(table_ref) {
-                Ok(()) => {
-                    ws.workspace_pane.sub_view = WorkspaceSubView::DataGrid;
-                    cx.notify();
-                }
-                Err(err) => {
-                    let msg = ws.controller.strings.failed_to_open_table;
-                    ws.notify_toast(ToastSeverity::Error, msg, Some(err.to_string().into()), cx);
-                }
-            }
+            open_object_in_grid(ws, &obj, cx);
         }
         "view_structure" => {
             let Some(obj) = selected else { return };
@@ -1596,4 +1846,88 @@ fn truncate_middle(text: &str, max_chars: usize) -> String {
     let prefix: String = text.chars().take(head).collect();
     let suffix: String = text.chars().skip(total.saturating_sub(tail)).collect();
     format!("{prefix}…{suffix}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::console_log::ConsoleLogKind;
+    use tableminus_gfx::glyphs::EngineKind;
+
+    #[test]
+    fn dialect_queries_cover_all_nine_engines() {
+        for engine in EngineKind::ALL {
+            let entries = build_table_open_queries(engine, None, "orders", &[], 100, 0);
+            assert!(
+                entries.len() >= 2,
+                "engine {engine:?} should emit at least query + count"
+            );
+            assert_eq!(entries[0].0, ConsoleLogKind::Query);
+            assert_eq!(entries[1].0, ConsoleLogKind::Count);
+            if !matches!(engine, EngineKind::Redis) {
+                assert_eq!(entries.len(), 3);
+                assert_eq!(entries[2].0, ConsoleLogKind::Schema);
+            }
+        }
+    }
+
+    #[test]
+    fn quotes_special_identifiers_and_non_default_schemas() {
+        let pg = build_table_open_queries(
+            EngineKind::Postgresql,
+            Some("analytics"),
+            "user \"events\" 2026",
+            &[("created at", false)],
+            300,
+            600,
+        );
+        assert_eq!(
+            pg[0].1,
+            "SELECT * FROM \"analytics\".\"user \"\"events\"\" 2026\" ORDER BY \"created at\" DESC LIMIT 300 OFFSET 600;"
+        );
+        assert!(pg[2].1.contains("table_schema = 'analytics'"));
+
+        let mysql = build_table_open_queries(
+            EngineKind::Mysql,
+            Some("sales"),
+            "order`items",
+            &[("id", true)],
+            50,
+            0,
+        );
+        assert_eq!(
+            mysql[0].1,
+            "SELECT * FROM `sales`.`order``items` ORDER BY `id` ASC LIMIT 50 OFFSET 0;"
+        );
+        assert_eq!(mysql[2].1, "SHOW FULL COLUMNS FROM `sales`.`order``items`;");
+
+        let mssql = build_table_open_queries(
+            EngineKind::Mssql,
+            Some("reporting"),
+            "my]table",
+            &[("tenant_id", true), ("seq", false)],
+            200,
+            400,
+        );
+        assert_eq!(
+            mssql[0].1,
+            "SELECT * FROM [reporting].[my]]table] ORDER BY [tenant_id] ASC, [seq] DESC OFFSET 400 ROWS FETCH NEXT 200 ROWS ONLY;"
+        );
+        assert!(mssql[2].1.contains("TABLE_SCHEMA = 'reporting'"));
+    }
+
+    #[test]
+    fn omits_order_by_when_no_sort_or_pk_and_handles_mssql_top() {
+        let sqlite =
+            build_table_open_queries(EngineKind::Sqlite, None, "stress_events_10m", &[], 100, 0);
+        assert_eq!(
+            sqlite[0].1,
+            "SELECT * FROM \"stress_events_10m\" LIMIT 100 OFFSET 0;"
+        );
+        assert!(!sqlite[0].1.contains("ORDER BY"));
+        assert_eq!(sqlite[2].1, "PRAGMA table_info(\"stress_events_10m\");");
+
+        let mssql = build_table_open_queries(EngineKind::Mssql, None, "heap_logs", &[], 250, 0);
+        assert_eq!(mssql[0].1, "SELECT TOP 250 * FROM [heap_logs];");
+    }
 }

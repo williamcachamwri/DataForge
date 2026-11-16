@@ -298,7 +298,7 @@ fn render_honest_empty_results(ws: &TableMinusWorkspace, cx: &App) -> AnyElement
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(theme::TEXT_CONTROL_PX))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(muted)
                         .child(ws.controller.strings.result_prefix),
@@ -315,14 +315,14 @@ fn render_honest_empty_results(ws: &TableMinusWorkspace, cx: &App) -> AnyElement
                 .px(px(16.0))
                 .child(
                     div()
-                        .text_size(px(13.0))
+                        .text_size(px(theme::TEXT_TITLE_PX))
                         .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(cx.colors().foreground)
                         .child(ws.controller.strings.results_empty_title),
                 )
                 .child(
                     div()
-                        .text_size(px(12.0))
+                        .text_size(px(theme::TEXT_META_PX))
                         .text_color(muted)
                         .child(ws.controller.strings.results_empty_desc),
                 ),
@@ -830,7 +830,7 @@ fn render_result_grid_header(
                 .flex()
                 .items_center()
                 .justify_end()
-                .text_size(px(11.0))
+                .text_size(px(theme::TEXT_BADGE_PX))
                 .text_color(muted)
                 .child("#"),
         );
@@ -857,14 +857,14 @@ fn render_result_grid_header(
                         .min_w_0()
                         .truncate()
                         .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_size(px(12.0))
+                        .text_size(px(theme::TEXT_CONTROL_PX))
                         .text_color(hdr_fg)
                         .child(col.name.clone()),
                 )
                 .child(
                     div()
                         .flex_shrink_0()
-                        .text_size(px(10.0))
+                        .text_size(px(theme::TEXT_BADGE_PX))
                         .text_color(muted)
                         .child(col.column_type.name.clone()),
                 ),
@@ -909,7 +909,7 @@ fn render_result_grid_row(
                 .flex()
                 .items_center()
                 .justify_end()
-                .text_size(px(11.0))
+                .text_size(px(theme::TEXT_BADGE_PX))
                 .text_color(colors.muted)
                 .child(format!("{}", row_idx + 1)),
         );
@@ -952,7 +952,7 @@ fn render_result_grid_cell(
             .size(HeroSize::Sm)
             .child(
                 ChipLabel::new()
-                    .sx(|s| s.italic().text_size(px(10.0)))
+                    .sx(|s| s.italic().text_size(px(theme::TEXT_BADGE_PX)))
                     .child("NULL"),
             )
             .into_any_element()

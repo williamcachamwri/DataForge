@@ -439,7 +439,7 @@ fn render_axis_select(
         .gap(px(4.0))
         .child(
             div()
-                .text_size(px(11.0))
+                .text_size(px(theme::TEXT_META_PX))
                 .text_color(colors.muted)
                 .child(label),
         )
@@ -451,8 +451,8 @@ fn render_axis_select(
                     .is_disabled(disabled)
                     .full_width(true)
                     .height(px(26.0))
-                    .trigger_text_size(px(11.5))
-                    .row_text_size(px(11.5))
+                    .trigger_text_size(px(theme::TEXT_CONTROL_PX))
+                    .row_text_size(px(theme::TEXT_CONTROL_PX))
                     .on_selection_change(on_change),
             ),
         )
@@ -488,14 +488,14 @@ fn render_charts_empty_state(ws: &TableMinusWorkspace, cx: &App) -> AnyElement {
         )
         .child(
             div()
-                .text_size(px(13.0))
+                .text_size(px(theme::TEXT_TITLE_PX))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(colors.foreground)
                 .child(s.charts_tab),
         )
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(px(theme::TEXT_META_PX))
                 .text_color(colors.muted)
                 .child(s.charts_no_numeric),
         )

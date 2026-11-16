@@ -48,6 +48,21 @@ pub const MICRO_GAP_PX: f32 = 4.0;
 /// Standard compact spacing gap (`8.0` DIP) inside toolbars, sidebars, and drawers.
 pub const COMPACT_GAP_PX: f32 = 8.0;
 
+/// Title/section heading font size (`14.0` DIP) for 1536x864 readability.
+pub const TEXT_TITLE_PX: f32 = 14.0;
+
+/// Primary UI body/label font size (`13.0` DIP) for sidebar items, menus, and active pills.
+pub const TEXT_BODY_PX: f32 = 13.0;
+
+/// Compact control/toolbar/tab font size (`12.5` DIP).
+pub const TEXT_CONTROL_PX: f32 = 12.5;
+
+/// Metadata/status-bar/secondary label font size (`12.0` DIP).
+pub const TEXT_META_PX: f32 = 12.0;
+
+/// Compact badge/chip/kbd shortcut font size (`11.0` DIP).
+pub const TEXT_BADGE_PX: f32 = 11.0;
+
 /// Zero-delay instant transition (`0ms`) for high-frequency actions (100+/day).
 pub const INSTANT_ACTION_MS: u64 = 0;
 
@@ -59,6 +74,9 @@ pub const OVERLAY_ENTER_MS: u64 = 150;
 
 /// Overlay/modal exit duration (`100ms`).
 pub const OVERLAY_EXIT_MS: u64 = 100;
+
+/// Popover and dropdown menu entrance duration (`120ms`).
+pub const POPOVER_ENTER_MS: u64 = 120;
 
 /// Drawer/panel slide transition duration (`180ms`, < `250ms`).
 pub const DRAWER_SLIDE_MS: u64 = 180;
@@ -679,14 +697,153 @@ where
     .into_any_element()
 }
 
-/// Smooth Apple-style modal entrance (opacity + subtle 8px upward settle).
+/// Smooth Apple-style modal entrance (opacity + subtle 10px upward settle).
 ///
 /// Returns `el` untouched when reduced motion is active.
 pub fn animate_modal_enter<E>(el: E, id: impl Into<ElementId>, cx: &App) -> AnyElement
 where
     E: IntoElement + Styled + 'static,
 {
-    animate_slide_fade_in(el, id, OVERLAY_ENTER_MS, 8.0, cx)
+    animate_slide_fade_in(el, id, OVERLAY_ENTER_MS, 10.0, cx)
+}
+
+/// Smooth modal exit transition (opacity `1 -> 0` + subtle 8px downward settle).
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_modal_exit<E>(el: E, id: impl Into<ElementId>, cx: &App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    let ms = effective_duration_ms(OVERLAY_EXIT_MS, cx);
+    if ms == 0 {
+        return el.into_any_element();
+    }
+    el.with_animation(
+        id.into(),
+        Animation::new(Duration::from_millis(ms)).with_easing(ease_out_quad),
+        |el, delta| {
+            let alpha = (1.0 - delta).clamp(0.0, 1.0);
+            el.opacity(alpha).mt(px(8.0 * delta))
+        },
+    )
+    .into_any_element()
+}
+
+/// Smooth backdrop scrim fade for opening or closing modals.
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_backdrop_fade<E>(
+    el: E,
+    id: impl Into<ElementId>,
+    closing: bool,
+    cx: &App,
+) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    let base_ms = if closing {
+        OVERLAY_EXIT_MS
+    } else {
+        OVERLAY_ENTER_MS
+    };
+    let ms = effective_duration_ms(base_ms, cx);
+    if ms == 0 {
+        return el.into_any_element();
+    }
+    el.with_animation(
+        id.into(),
+        Animation::new(Duration::from_millis(ms)).with_easing(ease_out_cubic),
+        move |el, delta| {
+            let alpha = if closing {
+                (1.0 - delta).clamp(0.0, 1.0)
+            } else {
+                delta
+            };
+            if !closing && alpha >= 1.0 {
+                el
+            } else {
+                el.opacity(alpha)
+            }
+        },
+    )
+    .into_any_element()
+}
+
+/// Crisp dropdown/popover menu entrance (opacity + subtle 6px vertical settle).
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_popover_enter<E>(el: E, id: impl Into<ElementId>, cx: &App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    animate_slide_fade_in(el, id, POPOVER_ENTER_MS, 6.0, cx)
+}
+
+/// Directional horizontal slide + fade for wizard step transitions.
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_step_slide<E>(el: E, id: impl Into<ElementId>, forward: bool, cx: &App) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    let ms = effective_duration_ms(DRAWER_SLIDE_MS, cx);
+    if ms == 0 {
+        return el.into_any_element();
+    }
+    el.with_animation(
+        id.into(),
+        Animation::new(Duration::from_millis(ms)).with_easing(ease_out_quint),
+        move |el, delta| {
+            if delta >= 1.0 {
+                return el;
+            }
+            let offset = px(16.0 * (1.0 - delta));
+            let el = el.opacity(delta);
+            if forward {
+                el.ml(offset).mr(-offset)
+            } else {
+                el.ml(-offset).mr(offset)
+            }
+        },
+    )
+    .into_any_element()
+}
+
+/// Subtle staggered card/row entrance capped at 8 steps so lists ripple cleanly without lag.
+///
+/// Returns `el` untouched when reduced motion is active.
+pub fn animate_staggered_enter<E>(
+    el: E,
+    id: impl Into<ElementId>,
+    index: usize,
+    cx: &App,
+) -> AnyElement
+where
+    E: IntoElement + Styled + 'static,
+{
+    let step = index.min(8) as u64;
+    let total_ms = effective_duration_ms(OVERLAY_ENTER_MS + step * 16, cx);
+    if total_ms == 0 {
+        return el.into_any_element();
+    }
+    let delay_frac = if step == 0 {
+        0.0
+    } else {
+        ((step * 16) as f32 / total_ms as f32).min(0.45)
+    };
+    el.with_animation(
+        id.into(),
+        Animation::new(Duration::from_millis(total_ms)).with_easing(ease_out_quint),
+        move |el, delta| {
+            let t = ((delta - delay_frac) / (1.0 - delay_frac)).clamp(0.0, 1.0);
+            if t >= 1.0 {
+                el
+            } else {
+                el.opacity(t).mt(px(6.0 * (1.0 - t)))
+            }
+        },
+    )
+    .into_any_element()
 }
 
 /// Smooth Apple-style toast viewport entrance (opacity + subtle 10px slide from bottom).

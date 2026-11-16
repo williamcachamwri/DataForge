@@ -141,22 +141,35 @@ impl DataTransferViewState {
 #[must_use]
 pub fn render_data_transfer_view(
     ws: &mut TableMinusWorkspace,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let is_connected = is_active_workspace_connected(ws);
     sync_source_selection_and_metadata(ws, is_connected, cx);
 
+    let rem_scale = (f32::from(window.rem_size()) / 16.0).clamp(0.75, 2.0);
+    let viewport_width = f32::from(window.viewport_size().width) / rem_scale;
+    let is_narrow_endpoints = viewport_width < 1040.0;
+    let is_narrow_body = viewport_width < 880.0;
+
     div()
         .id("data-transfer-view")
         .size_full()
+        .min_w_0()
+        .min_h_0()
+        .overflow_hidden()
         .flex()
         .flex_col()
         .bg(panel_surface_bg(cx))
         .child(render_header(ws, cx))
-        .child(render_endpoints_bar(ws, is_connected, cx))
+        .child(render_endpoints_bar(
+            ws,
+            is_connected,
+            is_narrow_endpoints,
+            cx,
+        ))
         .child(render_options_bar(ws, is_connected, cx))
-        .child(render_body(ws, is_connected, cx))
+        .child(render_body(ws, is_connected, is_narrow_body, cx))
         .into_any_element()
 }
 
@@ -293,16 +306,18 @@ fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>
                 ),
         )
         .child(
-            Button::new("transfer-view-close")
-                .variant(Variant::Ghost)
-                .size(HeroSize::Sm)
-                .is_icon_only(true)
-                .aria_label(s.close_label)
-                .on_press(cx.listener(|ws, _, _, cx| {
-                    ws.workspace_pane.close_tool();
-                    cx.notify();
-                }))
-                .child(Icon::new(IconName::X).size(IconSize::Xs)),
+            div().flex_shrink_0().child(
+                Button::new("transfer-view-close")
+                    .variant(Variant::Ghost)
+                    .size(HeroSize::Sm)
+                    .is_icon_only(true)
+                    .aria_label(s.close_label)
+                    .on_press(cx.listener(|ws, _, _, cx| {
+                        ws.workspace_pane.close_tool();
+                        cx.notify();
+                    }))
+                    .child(Icon::new(IconName::X).size(IconSize::Xs)),
+            ),
         )
         .into_any_element()
 }
@@ -310,40 +325,109 @@ fn render_header(ws: &TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>
 fn render_endpoints_bar(
     ws: &TableMinusWorkspace,
     is_connected: bool,
+    is_narrow: bool,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let border = hairline_border_color(cx);
     let colors = cx.colors().clone();
 
-    div()
+    let bar = div()
         .px(px(14.0))
         .py(px(10.0))
         .bg(muted_surface_bg(cx))
         .border_b_1()
         .border_color(border)
+        .min_w_0()
+        .overflow_hidden()
+        .flex();
+
+    if is_narrow {
+        bar.flex_col()
+            .items_stretch()
+            .gap(px(8.0))
+            .child(render_source_section(ws, is_connected, is_narrow, cx))
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .flex_shrink_0()
+                    .child(
+                        Icon::new(IconName::ArrowDown)
+                            .size(IconSize::Sm)
+                            .color(colors.muted),
+                    ),
+            )
+            .child(render_target_section(ws, is_connected, is_narrow, cx))
+            .into_any_element()
+    } else {
+        bar.flex_row()
+            .items_stretch()
+            .gap(px(10.0))
+            .child(render_source_section(ws, is_connected, is_narrow, cx))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .flex_shrink_0()
+                    .child(
+                        Icon::new(IconName::ArrowRight)
+                            .size(IconSize::Sm)
+                            .color(colors.muted),
+                    ),
+            )
+            .child(render_target_section(ws, is_connected, is_narrow, cx))
+            .into_any_element()
+    }
+}
+
+fn endpoint_card(border: herogpui::gpui::Hsla, is_narrow: bool, cx: &App) -> herogpui::gpui::Div {
+    let card = div()
+        .min_w_0()
+        .overflow_hidden()
+        .rounded(px(PANEL_RADIUS_PX))
+        .border_1()
+        .border_color(border)
+        .bg(panel_surface_bg(cx))
+        .p(px(10.0))
         .flex()
-        .flex_wrap()
-        .items_end()
-        .gap(px(12.0))
-        .child(render_source_section(ws, is_connected, cx))
-        .child(
-            div().pb(px(6.0)).flex_shrink_0().child(
-                Icon::new(IconName::ArrowRight)
-                    .size(IconSize::Sm)
-                    .color(colors.muted),
-            ),
-        )
-        .child(render_target_section(ws, is_connected, cx))
-        .into_any_element()
+        .flex_col()
+        .gap(px(8.0));
+    if is_narrow {
+        card.w_full()
+    } else {
+        card.flex_1()
+    }
+}
+
+fn apply_single_line_select_value(select: Select, fg_color: herogpui::gpui::Hsla) -> Select {
+    select.value_content(move |val| {
+        if val.is_placeholder {
+            return val.default_children;
+        }
+        div()
+            .w_full()
+            .min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
+            .text_color(fg_color)
+            .child(val.selected_text.to_string())
+            .into_any_element()
+    })
 }
 
 fn render_source_section(
     ws: &TableMinusWorkspace,
     is_connected: bool,
+    is_narrow: bool,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
+    let border = hairline_border_color(cx);
     let conn_items = build_connection_picker_items(ws, is_connected);
     let selected_conn = ws
         .data_transfer_ui
@@ -353,13 +437,7 @@ fn render_source_section(
         .to_owned();
     let is_busy = ws.data_transfer_ui.is_running || ws.data_transfer_ui.loading_source_metadata;
 
-    div()
-        .flex_1()
-        .min_w(px(220.0))
-        .overflow_hidden()
-        .flex()
-        .flex_col()
-        .gap(px(6.0))
+    endpoint_card(border, is_narrow, cx)
         .child(render_section_heading(
             s.transfer_source_section,
             ws.data_transfer_ui.source_engine,
@@ -367,28 +445,32 @@ fn render_source_section(
         ))
         .child(
             div()
+                .min_w_0()
                 .flex()
                 .flex_wrap()
-                .items_end()
+                .items_center()
                 .gap(px(8.0))
                 .child(render_source_conn_select(
                     conn_items,
                     selected_conn,
                     ws.data_transfer_ui.is_running,
+                    colors.foreground,
                     cx,
                 ))
-                .child(render_source_table_select(ws, cx))
+                .child(render_source_table_select(ws, colors.foreground, cx))
                 .child(
-                    Button::new("transfer-refresh-source")
-                        .variant(Variant::Secondary)
-                        .size(HeroSize::Sm)
-                        .is_icon_only(true)
-                        .is_disabled(is_busy)
-                        .aria_label(s.refresh_label)
-                        .on_press(cx.listener(|ws, _, _, cx| {
-                            force_reload_source_metadata(ws, cx);
-                        }))
-                        .child(Icon::new(IconName::RefreshCw).size(IconSize::Xs)),
+                    div().flex_shrink_0().child(
+                        Button::new("transfer-refresh-source")
+                            .variant(Variant::Secondary)
+                            .size(HeroSize::Sm)
+                            .is_icon_only(true)
+                            .is_disabled(is_busy)
+                            .aria_label(s.refresh_label)
+                            .on_press(cx.listener(|ws, _, _, cx| {
+                                force_reload_source_metadata(ws, cx);
+                            }))
+                            .child(Icon::new(IconName::RefreshCw).size(IconSize::Xs)),
+                    ),
                 ),
         )
         .into_any_element()
@@ -398,30 +480,33 @@ fn render_source_conn_select(
     conn_items: Vec<PickerItem>,
     selected_conn: String,
     disabled: bool,
+    fg_color: herogpui::gpui::Hsla,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
+    let select = Select::new("transfer-source-conn", conn_items)
+        .variant(FieldVariant::Secondary)
+        .height(px(28.0))
+        .trigger_text_size(px(12.0))
+        .row_text_size(px(12.0))
+        .full_width(true)
+        .is_disabled(disabled)
+        .value(Some(SharedString::from(selected_conn)))
+        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
+            apply_source_connection_change(ws, key.as_deref(), cx);
+        }));
+
     div()
         .flex_1()
-        .min_w(px(210.0))
+        .min_w(px(140.0))
         .max_w_full()
-        .child(
-            Select::new("transfer-source-conn", conn_items)
-                .variant(FieldVariant::Secondary)
-                .height(px(28.0))
-                .trigger_text_size(px(12.0))
-                .row_text_size(px(12.0))
-                .full_width(true)
-                .is_disabled(disabled)
-                .value(Some(SharedString::from(selected_conn)))
-                .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
-                    apply_source_connection_change(ws, key.as_deref(), cx);
-                })),
-        )
+        .overflow_hidden()
+        .child(apply_single_line_select_value(select, fg_color))
         .into_any_element()
 }
 
 fn render_source_table_select(
     ws: &TableMinusWorkspace,
+    fg_color: herogpui::gpui::Hsla,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let tables = active_source_tables(ws);
@@ -439,41 +524,44 @@ fn render_source_table_select(
     let disabled = tables.is_empty() || ws.data_transfer_ui.is_running;
     let tables_for_cb = tables;
 
+    let select = Select::new("transfer-source-table", table_items)
+        .variant(FieldVariant::Secondary)
+        .placeholder(ws.controller.strings.tables)
+        .height(px(28.0))
+        .trigger_text_size(px(12.0))
+        .row_text_size(px(12.0))
+        .full_width(true)
+        .is_disabled(disabled)
+        .value(selected_table_val)
+        .on_selection_change(cx.listener(move |ws, key: &Option<SharedString>, _, cx| {
+            if let Some(idx) = key.as_deref().and_then(|k| k.parse::<usize>().ok())
+                && let Some(t) = tables_for_cb.get(idx).cloned()
+            {
+                ws.data_transfer_ui.source_table = Some(t);
+                ws.data_transfer_ui.loaded_source_key = None;
+                ws.data_transfer_ui.last_error = None;
+                cx.notify();
+            }
+        }));
+
     div()
         .flex_1()
-        .min_w(px(210.0))
+        .min_w(px(140.0))
         .max_w_full()
-        .child(
-            Select::new("transfer-source-table", table_items)
-                .variant(FieldVariant::Secondary)
-                .placeholder(ws.controller.strings.tables)
-                .height(px(28.0))
-                .trigger_text_size(px(12.0))
-                .row_text_size(px(12.0))
-                .full_width(true)
-                .is_disabled(disabled)
-                .value(selected_table_val)
-                .on_selection_change(cx.listener(move |ws, key: &Option<SharedString>, _, cx| {
-                    if let Some(idx) = key.as_deref().and_then(|k| k.parse::<usize>().ok())
-                        && let Some(t) = tables_for_cb.get(idx).cloned()
-                    {
-                        ws.data_transfer_ui.source_table = Some(t);
-                        ws.data_transfer_ui.loaded_source_key = None;
-                        ws.data_transfer_ui.last_error = None;
-                        cx.notify();
-                    }
-                })),
-        )
+        .overflow_hidden()
+        .child(apply_single_line_select_value(select, fg_color))
         .into_any_element()
 }
 
 fn render_target_section(
     ws: &TableMinusWorkspace,
     is_connected: bool,
+    is_narrow: bool,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
     let colors = cx.colors().clone();
+    let border = hairline_border_color(cx);
     let conn_items = build_connection_picker_items(ws, is_connected);
     let selected_conn = ws
         .data_transfer_ui
@@ -483,13 +571,7 @@ fn render_target_section(
         .to_owned();
     let disabled = ws.data_transfer_ui.is_running;
 
-    div()
-        .flex_1()
-        .min_w(px(220.0))
-        .overflow_hidden()
-        .flex()
-        .flex_col()
-        .gap(px(6.0))
+    endpoint_card(border, is_narrow, cx)
         .child(render_section_heading(
             s.transfer_target_section,
             ws.data_transfer_ui.target_engine,
@@ -497,14 +579,16 @@ fn render_target_section(
         ))
         .child(
             div()
+                .min_w_0()
                 .flex()
                 .flex_wrap()
-                .items_end()
+                .items_center()
                 .gap(px(8.0))
                 .child(render_target_conn_select(
                     conn_items,
                     selected_conn,
                     disabled,
+                    colors.foreground,
                     cx,
                 ))
                 .child(render_target_engine_select(
@@ -514,7 +598,7 @@ fn render_target_section(
                     cx,
                 ))
                 .child(
-                    div().w(px(120.0)).flex_shrink_0().child(
+                    div().w(px(110.0)).flex_shrink_0().overflow_hidden().child(
                         Input::new(&ws.data_transfer_ui.target_schema_input)
                             .variant(FieldVariant::Secondary)
                             .placeholder(s.default_schema)
@@ -524,14 +608,19 @@ fn render_target_section(
                     ),
                 )
                 .child(
-                    div().flex_1().min_w(px(120.0)).child(
-                        Input::new(&ws.data_transfer_ui.target_table_input)
-                            .variant(FieldVariant::Secondary)
-                            .placeholder(s.import_target_table)
-                            .is_disabled(disabled)
-                            .full_width()
-                            .on_change(cx.listener(|_, _: &str, _, cx| cx.notify())),
-                    ),
+                    div()
+                        .flex_1()
+                        .min_w(px(120.0))
+                        .max_w_full()
+                        .overflow_hidden()
+                        .child(
+                            Input::new(&ws.data_transfer_ui.target_table_input)
+                                .variant(FieldVariant::Secondary)
+                                .placeholder(s.import_target_table)
+                                .is_disabled(disabled)
+                                .full_width()
+                                .on_change(cx.listener(|_, _: &str, _, cx| cx.notify())),
+                        ),
                 ),
         )
         .into_any_element()
@@ -541,25 +630,27 @@ fn render_target_conn_select(
     conn_items: Vec<PickerItem>,
     selected_conn: String,
     disabled: bool,
+    fg_color: herogpui::gpui::Hsla,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
+    let select = Select::new("transfer-target-conn", conn_items)
+        .variant(FieldVariant::Secondary)
+        .height(px(28.0))
+        .trigger_text_size(px(12.0))
+        .row_text_size(px(12.0))
+        .full_width(true)
+        .is_disabled(disabled)
+        .value(Some(SharedString::from(selected_conn)))
+        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
+            apply_target_connection_change(ws, key.as_deref(), cx);
+        }));
+
     div()
         .flex_1()
-        .min_w(px(210.0))
+        .min_w(px(140.0))
         .max_w_full()
-        .child(
-            Select::new("transfer-target-conn", conn_items)
-                .variant(FieldVariant::Secondary)
-                .height(px(28.0))
-                .trigger_text_size(px(12.0))
-                .row_text_size(px(12.0))
-                .full_width(true)
-                .is_disabled(disabled)
-                .value(Some(SharedString::from(selected_conn)))
-                .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
-                    apply_target_connection_change(ws, key.as_deref(), cx);
-                })),
-        )
+        .overflow_hidden()
+        .child(apply_single_line_select_value(select, fg_color))
         .into_any_element()
 }
 
@@ -575,30 +666,30 @@ fn render_target_engine_select(
         .collect();
     let target_engine_key = SharedString::from(target_engine.as_str());
 
+    let select = Select::new("transfer-target-engine", engine_items)
+        .variant(FieldVariant::Secondary)
+        .height(px(28.0))
+        .trigger_text_size(px(12.0))
+        .row_text_size(px(12.0))
+        .full_width(true)
+        .is_disabled(disabled)
+        .value(Some(target_engine_key))
+        .item_leading(move |key: &SharedString, _selected: bool| {
+            let kind = database_engine_to_kind(DatabaseEngine::from_driver_id(key.as_ref()));
+            Some(engine_icon(kind, px(13.0), icon_color))
+        })
+        .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
+            if let Some(eng_str) = key.as_deref() {
+                let eng = DatabaseEngine::from_driver_id(eng_str);
+                apply_target_engine_change(ws, eng, cx);
+            }
+        }));
+
     div()
         .w(px(125.0))
         .flex_shrink_0()
-        .child(
-            Select::new("transfer-target-engine", engine_items)
-                .variant(FieldVariant::Secondary)
-                .height(px(28.0))
-                .trigger_text_size(px(12.0))
-                .row_text_size(px(12.0))
-                .full_width(true)
-                .is_disabled(disabled)
-                .value(Some(target_engine_key))
-                .item_leading(move |key: &SharedString, _selected: bool| {
-                    let kind =
-                        database_engine_to_kind(DatabaseEngine::from_driver_id(key.as_ref()));
-                    Some(engine_icon(kind, px(13.0), icon_color))
-                })
-                .on_selection_change(cx.listener(|ws, key: &Option<SharedString>, _, cx| {
-                    if let Some(eng_str) = key.as_deref() {
-                        let eng = DatabaseEngine::from_driver_id(eng_str);
-                        apply_target_engine_change(ws, eng, cx);
-                    }
-                })),
-        )
+        .overflow_hidden()
+        .child(apply_single_line_select_value(select, icon_color))
         .into_any_element()
 }
 
@@ -608,16 +699,21 @@ fn render_section_heading(
     muted: herogpui::gpui::Hsla,
 ) -> AnyElement {
     div()
+        .min_w_0()
+        .overflow_hidden()
         .flex()
         .items_center()
         .gap(px(6.0))
-        .child(engine_icon(
+        .child(div().flex_shrink_0().child(engine_icon(
             database_engine_to_kind(engine),
             px(12.0),
             muted,
-        ))
+        )))
         .child(
             div()
+                .min_w_0()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(11.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(muted)
@@ -639,13 +735,15 @@ fn render_options_bar(
         .py(px(8.0))
         .border_b_1()
         .border_color(border)
+        .min_w_0()
+        .overflow_hidden()
         .flex()
         .flex_wrap()
         .items_center()
         .justify_between()
         .gap(px(10.0))
-        .child(render_mode_and_batch_controls(ws, border, cx))
-        .child(render_transfer_action_area(ws, can_start, cx))
+        .child(render_mode_controls(ws, cx))
+        .child(render_batch_and_action_controls(ws, border, can_start, cx))
         .into_any_element()
 }
 
@@ -668,9 +766,8 @@ fn can_start_transfer(ws: &TableMinusWorkspace, is_connected: bool, cx: &App) ->
     !ws.data_transfer_ui.is_running && src_ready && dst_ready && has_included && target_table_ok
 }
 
-fn render_mode_and_batch_controls(
+fn render_mode_controls(
     ws: &TableMinusWorkspace,
-    border: herogpui::gpui::Hsla,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -679,58 +776,103 @@ fn render_mode_and_batch_controls(
     let disabled = ws.data_transfer_ui.is_running;
 
     div()
+        .min_w_0()
         .flex()
         .flex_wrap()
         .items_center()
-        .gap(px(6.0))
+        .gap(px(8.0))
         .child(
             div()
+                .flex_shrink_0()
                 .text_size(px(11.5))
                 .text_color(colors.muted)
                 .child(s.transfer_mode_label),
         )
-        .child(mode_button(
-            "transfer-mode-create",
-            s.transfer_mode_create,
-            mode == TransferMode::CreateAndLoad,
-            TransferMode::CreateAndLoad,
-            disabled,
-            cx,
-        ))
-        .child(mode_button(
-            "transfer-mode-append",
-            s.transfer_mode_append,
-            mode == TransferMode::Append,
-            TransferMode::Append,
-            disabled,
-            cx,
-        ))
-        .child(mode_button(
-            "transfer-mode-truncate",
-            s.transfer_mode_truncate,
-            mode == TransferMode::TruncateAndLoad,
-            TransferMode::TruncateAndLoad,
-            disabled,
-            cx,
-        ))
-        .child(div().w(px(1.0)).h(px(18.0)).mx(px(4.0)).bg(border))
         .child(
             div()
-                .text_size(px(11.5))
-                .text_color(colors.muted)
-                .child(s.transfer_batch_size),
+                .min_w_0()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_2()
+                .child(mode_button(
+                    "transfer-mode-create",
+                    s.transfer_mode_create,
+                    mode == TransferMode::CreateAndLoad,
+                    TransferMode::CreateAndLoad,
+                    disabled,
+                    cx,
+                ))
+                .child(mode_button(
+                    "transfer-mode-append",
+                    s.transfer_mode_append,
+                    mode == TransferMode::Append,
+                    TransferMode::Append,
+                    disabled,
+                    cx,
+                ))
+                .child(mode_button(
+                    "transfer-mode-truncate",
+                    s.transfer_mode_truncate,
+                    mode == TransferMode::TruncateAndLoad,
+                    TransferMode::TruncateAndLoad,
+                    disabled,
+                    cx,
+                )),
+        )
+        .into_any_element()
+}
+
+fn render_batch_and_action_controls(
+    ws: &TableMinusWorkspace,
+    border: herogpui::gpui::Hsla,
+    can_start: bool,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let colors = cx.colors().clone();
+    let disabled = ws.data_transfer_ui.is_running;
+
+    div()
+        .min_w_0()
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            div()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .text_size(px(11.5))
+                        .text_color(colors.muted)
+                        .child(s.transfer_batch_size),
+                )
+                .child(
+                    div().w(px(76.0)).flex_shrink_0().child(
+                        Input::new(&ws.data_transfer_ui.batch_size_input)
+                            .input_type(InputType::Number)
+                            .variant(FieldVariant::Secondary)
+                            .placeholder(DEFAULT_BATCH_SIZE)
+                            .is_disabled(disabled)
+                            .full_width()
+                            .on_change(cx.listener(|_, _: &str, _, cx| cx.notify())),
+                    ),
+                ),
         )
         .child(
-            div().w(px(76.0)).child(
-                Input::new(&ws.data_transfer_ui.batch_size_input)
-                    .input_type(InputType::Number)
-                    .variant(FieldVariant::Secondary)
-                    .placeholder(DEFAULT_BATCH_SIZE)
-                    .is_disabled(disabled)
-                    .full_width()
-                    .on_change(cx.listener(|_, _: &str, _, cx| cx.notify())),
-            ),
+            div()
+                .w(px(1.0))
+                .h(px(18.0))
+                .mx(px(2.0))
+                .bg(border)
+                .flex_shrink_0(),
         )
+        .child(render_transfer_action_area(ws, can_start, cx))
         .into_any_element()
 }
 
@@ -755,6 +897,7 @@ fn render_transfer_action_area(
                 .into_any_element()
         };
         div()
+            .flex_shrink_0()
             .flex()
             .items_center()
             .gap(px(8.0))
@@ -766,40 +909,46 @@ fn render_transfer_action_area(
                     .child(s.running),
             )
             .child(
-                Button::new("transfer-cancel-btn")
-                    .variant(Variant::DangerSoft)
+                div().flex_shrink_0().child(
+                    Button::new("transfer-cancel-btn")
+                        .variant(Variant::DangerSoft)
+                        .size(HeroSize::Sm)
+                        .on_press(cx.listener(|ws, _, _, cx| {
+                            if let Some(token) = ws.data_transfer_ui.cancel_token.as_ref() {
+                                token.cancel();
+                            }
+                            cx.notify();
+                        }))
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(5.0))
+                                .child(Icon::new(IconName::Square).size(IconSize::Xs))
+                                .child(s.cancel_label),
+                        ),
+                ),
+            )
+            .into_any_element()
+    } else {
+        div()
+            .flex_shrink_0()
+            .child(
+                Button::new("transfer-start-btn")
+                    .variant(Variant::Primary)
                     .size(HeroSize::Sm)
+                    .is_disabled(!can_start)
                     .on_press(cx.listener(|ws, _, _, cx| {
-                        if let Some(token) = ws.data_transfer_ui.cancel_token.as_ref() {
-                            token.cancel();
-                        }
-                        cx.notify();
+                        start_data_transfer(ws, cx);
                     }))
                     .child(
                         div()
                             .flex()
                             .items_center()
                             .gap(px(5.0))
-                            .child(Icon::new(IconName::Square).size(IconSize::Xs))
-                            .child(s.cancel_label),
+                            .child(Icon::new(IconName::Play).size(IconSize::Xs))
+                            .child(s.transfer_start_btn),
                     ),
-            )
-            .into_any_element()
-    } else {
-        Button::new("transfer-start-btn")
-            .variant(Variant::Primary)
-            .size(HeroSize::Sm)
-            .is_disabled(!can_start)
-            .on_press(cx.listener(|ws, _, _, cx| {
-                start_data_transfer(ws, cx);
-            }))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(5.0))
-                    .child(Icon::new(IconName::Play).size(IconSize::Xs))
-                    .child(s.transfer_start_btn),
             )
             .into_any_element()
     }
@@ -813,25 +962,30 @@ fn mode_button(
     disabled: bool,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
-    Button::new(id)
-        .variant(if selected {
-            Variant::Primary
-        } else {
-            Variant::Secondary
-        })
-        .size(HeroSize::Sm)
-        .is_disabled(disabled)
-        .on_press(cx.listener(move |ws, _, _, cx| {
-            ws.data_transfer_ui.mode = mode;
-            cx.notify();
-        }))
-        .child(label)
+    div()
+        .flex_shrink_0()
+        .child(
+            Button::new(id)
+                .variant(if selected {
+                    Variant::Primary
+                } else {
+                    Variant::Secondary
+                })
+                .size(HeroSize::Sm)
+                .is_disabled(disabled)
+                .on_press(cx.listener(move |ws, _, _, cx| {
+                    ws.data_transfer_ui.mode = mode;
+                    cx.notify();
+                }))
+                .child(label),
+        )
         .into_any_element()
 }
 
 fn render_body(
     ws: &TableMinusWorkspace,
     is_connected: bool,
+    is_narrow_body: bool,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -846,6 +1000,7 @@ fn render_body(
     if ws.data_transfer_ui.column_mappings.is_empty() {
         return div()
             .flex_1()
+            .min_w_0()
             .min_h_0()
             .flex()
             .flex_col()
@@ -866,37 +1021,34 @@ fn render_body(
             .into_any_element();
     }
 
-    div()
-        .flex_1()
-        .min_w_0()
-        .min_h_0()
-        .flex()
-        .flex_row()
-        .child(render_column_mapping_pane(ws, cx))
-        .child(render_preview_and_report_pane(ws, cx))
-        .into_any_element()
+    let body = div().flex_1().min_w_0().min_h_0().overflow_hidden().flex();
+
+    if is_narrow_body {
+        body.flex_col()
+            .child(render_column_mapping_pane(ws, is_narrow_body, cx))
+            .child(render_preview_and_report_pane(ws, is_narrow_body, cx))
+            .into_any_element()
+    } else {
+        body.flex_row()
+            .child(render_column_mapping_pane(ws, is_narrow_body, cx))
+            .child(render_preview_and_report_pane(ws, is_narrow_body, cx))
+            .into_any_element()
+    }
 }
 
 fn render_column_mapping_pane(
     ws: &TableMinusWorkspace,
+    is_narrow_body: bool,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
-    let colors = cx.colors().clone();
     let border = hairline_border_color(cx);
-    let total = ws.data_transfer_ui.column_mappings.len();
-    let included = ws
-        .data_transfer_ui
-        .column_mappings
-        .iter()
-        .filter(|m| m.include)
-        .count();
-    let all_included = total > 0 && included == total;
     let value_font = value_gpui_font(&ws.controller.settings);
 
     let mut rows_scroll = div()
         .id("transfer-mapping-scroll")
         .flex_1()
+        .min_w_0()
         .min_h_0()
         .overflow_y_scroll()
         .flex()
@@ -914,63 +1066,97 @@ fn render_column_mapping_pane(
         ));
     }
 
-    div()
+    let mut pane = div()
         .id("transfer-mapping-pane")
         .flex_1()
-        .min_w(px(240.0))
+        .min_w_0()
         .min_h_0()
         .overflow_x_scroll()
-        .border_r_1()
         .border_color(border)
         .flex()
-        .flex_col()
+        .flex_col();
+
+    pane = if is_narrow_body {
+        pane.min_h(px(160.0)).border_b_1()
+    } else {
+        pane.border_r_1()
+    };
+
+    pane.child(render_column_mapping_header(ws, border, cx))
+        .child(render_mapping_table_header(border, s, cx))
+        .child(rows_scroll)
+        .into_any_element()
+}
+
+fn render_column_mapping_header(
+    ws: &TableMinusWorkspace,
+    border: herogpui::gpui::Hsla,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
+    let s = &ws.controller.strings;
+    let colors = cx.colors().clone();
+    let total = ws.data_transfer_ui.column_mappings.len();
+    let included = ws
+        .data_transfer_ui
+        .column_mappings
+        .iter()
+        .filter(|m| m.include)
+        .count();
+    let all_included = total > 0 && included == total;
+
+    div()
+        .h(px(34.0))
+        .px(px(12.0))
+        .border_b_1()
+        .border_color(border)
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(px(8.0))
         .child(
             div()
-                .h(px(34.0))
-                .px(px(12.0))
-                .border_b_1()
-                .border_color(border)
+                .min_w_0()
+                .flex_1()
                 .flex()
                 .items_center()
-                .justify_between()
                 .gap(px(8.0))
                 .child(
                     div()
-                        .flex()
-                        .items_center()
-                        .gap(px(8.0))
-                        .child(
-                            div()
-                                .text_size(px(12.0))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(colors.foreground)
-                                .child(s.transfer_column_mapping),
-                        )
-                        .child(
-                            Chip::new()
-                                .variant(ChipVariant::Soft)
-                                .color(HeroColor::Default)
-                                .size(HeroSize::Sm)
-                                .child(ChipLabel::new().child(format!("{included}/{total}"))),
-                        ),
+                        .min_w_0()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(px(12.0))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(colors.foreground)
+                        .child(s.transfer_column_mapping),
                 )
                 .child(
-                    Button::new("transfer-toggle-all-cols")
-                        .variant(Variant::Ghost)
-                        .size(HeroSize::Sm)
-                        .is_disabled(ws.data_transfer_ui.is_running)
-                        .on_press(cx.listener(move |ws, _, _, cx| {
-                            let target_state = !all_included;
-                            for entry in &mut ws.data_transfer_ui.column_mappings {
-                                entry.include = target_state;
-                            }
-                            cx.notify();
-                        }))
-                        .child(s.show_all),
+                    div().flex_shrink_0().child(
+                        Chip::new()
+                            .variant(ChipVariant::Soft)
+                            .color(HeroColor::Default)
+                            .size(HeroSize::Sm)
+                            .child(ChipLabel::new().child(format!("{included}/{total}"))),
+                    ),
                 ),
         )
-        .child(render_mapping_table_header(border, s, cx))
-        .child(rows_scroll)
+        .child(
+            div().flex_shrink_0().child(
+                Button::new("transfer-toggle-all-cols")
+                    .variant(Variant::Ghost)
+                    .size(HeroSize::Sm)
+                    .is_disabled(ws.data_transfer_ui.is_running)
+                    .on_press(cx.listener(move |ws, _, _, cx| {
+                        let target_state = !all_included;
+                        for entry in &mut ws.data_transfer_ui.column_mappings {
+                            entry.include = target_state;
+                        }
+                        cx.notify();
+                    }))
+                    .child(s.show_all),
+            ),
+        )
         .into_any_element()
 }
 
@@ -995,20 +1181,24 @@ fn render_mapping_table_header(
             div()
                 .flex_1()
                 .min_w(px(110.0))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(11.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(colors.muted)
-                .truncate()
                 .child(s.struct_col_column),
         )
         .child(
             div()
                 .w(px(110.0))
                 .flex_shrink_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(11.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(colors.muted)
-                .truncate()
                 .child(s.schema_column_type),
         )
         .child(div().w(px(18.0)).flex_shrink_0())
@@ -1016,20 +1206,24 @@ fn render_mapping_table_header(
             div()
                 .flex_1()
                 .min_w(px(120.0))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(11.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(colors.muted)
-                .truncate()
                 .child(s.compare_target_prefix),
         )
         .child(
             div()
                 .w(px(135.0))
                 .flex_shrink_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(11.0))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(colors.muted)
-                .truncate()
                 .child(s.schema_column_type),
         )
         .into_any_element()
@@ -1073,10 +1267,12 @@ fn render_mapping_row(
             div()
                 .w(px(110.0))
                 .flex_shrink_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .font(value_font.clone())
                 .text_size(px(11.0))
                 .text_color(colors.muted)
-                .truncate()
                 .child(col.source_type.clone()),
         )
         .child(
@@ -1092,7 +1288,7 @@ fn render_mapping_row(
                 ),
         )
         .child(
-            div().flex_1().min_w(px(120.0)).child(
+            div().flex_1().min_w(px(120.0)).overflow_hidden().child(
                 Input::new(&col.target_col_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder(s.schema_column_name)
@@ -1102,7 +1298,7 @@ fn render_mapping_row(
             ),
         )
         .child(
-            div().w(px(135.0)).flex_shrink_0().child(
+            div().w(px(135.0)).flex_shrink_0().overflow_hidden().child(
                 Input::new(&col.target_type_input)
                     .variant(FieldVariant::Secondary)
                     .placeholder(s.schema_column_type)
@@ -1145,16 +1341,23 @@ fn render_mapping_source_name(
     div()
         .flex_1()
         .min_w(px(110.0))
+        .overflow_hidden()
         .flex()
         .items_center()
         .gap(px(5.0))
         .when(col.is_primary_key, |el| {
-            el.child(Icon::new(IconName::Key).size(IconSize::Xs).color(pk_color))
+            el.child(
+                div()
+                    .flex_shrink_0()
+                    .child(Icon::new(IconName::Key).size(IconSize::Xs).color(pk_color)),
+            )
         })
         .child(
             div()
                 .min_w_0()
-                .truncate()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
                 .text_size(px(12.0))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(fg)
@@ -1165,6 +1368,7 @@ fn render_mapping_source_name(
 
 fn render_preview_and_report_pane(
     ws: &TableMinusWorkspace,
+    is_narrow_body: bool,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
     let s = &ws.controller.strings;
@@ -1175,33 +1379,46 @@ fn render_preview_and_report_pane(
     let editor_font = editor_gpui_font(&ws.controller.settings);
     let grammar = grammar_for_db_engine(ws.data_transfer_ui.target_engine);
 
-    div()
-        .w(px(320.0))
-        .min_w(px(220.0))
-        .max_w(px(440.0))
-        .flex_shrink(1.0)
+    let pane = div()
+        .min_w_0()
         .min_h_0()
+        .overflow_hidden()
         .flex()
-        .flex_col()
-        .child(
-            div()
-                .h(px(34.0))
-                .px(px(12.0))
-                .border_b_1()
-                .border_color(border)
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap(px(8.0))
-                .child(
-                    div()
-                        .text_size(px(12.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(colors.foreground)
-                        .truncate()
-                        .child(s.schema_preview_sql),
-                )
-                .child(
+        .flex_col();
+    let pane = if is_narrow_body {
+        pane.w_full().flex_1().min_h(px(160.0))
+    } else {
+        pane.w(px(320.0))
+            .min_w(px(220.0))
+            .max_w(px(440.0))
+            .flex_shrink(1.0)
+    };
+
+    pane.child(
+        div()
+            .h(px(34.0))
+            .px(px(12.0))
+            .border_b_1()
+            .border_color(border)
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap(px(8.0))
+            .child(
+                div()
+                    .min_w_0()
+                    .flex_1()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
+                    .text_size(px(12.0))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(colors.foreground)
+                    .child(s.schema_preview_sql),
+            )
+            .child(
+                div().flex_shrink_0().child(
                     Button::new("transfer-copy-ddl")
                         .variant(Variant::Ghost)
                         .size(HeroSize::Sm)
@@ -1220,27 +1437,30 @@ fn render_preview_and_report_pane(
                                 .child(s.copy_label),
                         ),
                 ),
-        )
-        .child(
-            div()
-                .id("transfer-ddl-preview-scroll")
-                .flex_1()
-                .min_h_0()
-                .overflow_y_scroll()
-                .p(px(12.0))
-                .bg(ws.content_palette.editor_background)
-                .font(editor_font)
-                .text_size(px(ws.controller.settings.editor_font.size.max(11.0)))
-                .line_height(px(18.0))
-                .text_color(ws.content_palette.editor_text)
-                .child(syntax_bridge::styled_sql_block(
-                    preview_sql,
-                    grammar,
-                    &ws.content_palette,
-                )),
-        )
-        .children(render_report_footer(ws, border, cx))
-        .into_any_element()
+            ),
+    )
+    .child(
+        div()
+            .id("transfer-ddl-preview-scroll")
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .overflow_y_scroll()
+            .overflow_x_hidden()
+            .p(px(12.0))
+            .bg(ws.content_palette.editor_background)
+            .font(editor_font)
+            .text_size(px(ws.controller.settings.editor_font.size.max(11.0)))
+            .line_height(px(18.0))
+            .text_color(ws.content_palette.editor_text)
+            .child(syntax_bridge::styled_sql_block(
+                preview_sql,
+                grammar,
+                &ws.content_palette,
+            )),
+    )
+    .children(render_report_footer(ws, border, cx))
+    .into_any_element()
 }
 
 fn render_report_footer(

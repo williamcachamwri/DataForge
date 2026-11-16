@@ -1897,7 +1897,6 @@ fn render_editor_panel_body(
     let focus_handle = doc.focus_handle.clone();
     let palette = doc.palette.clone();
     let primary = doc.primary_cursor();
-    let has_selection = doc.cursors.iter().any(|c| c.anchor != c.head);
     let primary_pos = doc.char_to_line_col(primary.head);
     let cursor_count = doc.cursors.len();
     let ac_open = doc.autocomplete.is_open;
@@ -1907,11 +1906,8 @@ fn render_editor_panel_body(
     let vim_cmd_buf = doc.vim.command_buffer.clone();
     let _ = doc;
 
-    let is_running = ws.active_tab_result().is_some_and(|r| r.running);
     let toolbar = render_editor_toolbar(
         ws,
-        is_running,
-        has_selection,
         primary_pos,
         cursor_count,
         grammar,
@@ -2049,8 +2045,6 @@ fn build_interactive_editor_canvas(
 )]
 fn render_editor_toolbar(
     ws: &mut TableMinusWorkspace,
-    is_running: bool,
-    has_selection: bool,
     primary_pos: (usize, usize),
     cursor_count: usize,
     grammar: SqlGrammar,
@@ -2059,21 +2053,13 @@ fn render_editor_toolbar(
     vim_cmd_buf: &str,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
-    let left = render_toolbar_left_actions(
-        ws,
-        is_running,
-        has_selection,
-        vim_enabled,
-        vim_mode,
-        vim_cmd_buf,
-        cx,
-    );
+    let left = render_toolbar_left_actions(ws, vim_enabled, vim_mode, vim_cmd_buf, cx);
     let right = render_toolbar_right_status(ws, primary_pos, cursor_count, grammar, cx);
 
     div()
         .id("sql-editor-toolbar")
         .w_full()
-        .h(px(36.0))
+        .h(px(34.0))
         .flex_shrink_0()
         .px(px(10.0))
         .flex()
@@ -2089,8 +2075,6 @@ fn render_editor_toolbar(
 
 fn render_toolbar_left_actions(
     ws: &mut TableMinusWorkspace,
-    is_running: bool,
-    has_selection: bool,
     vim_enabled: bool,
     vim_mode: VimMode,
     vim_cmd_buf: &str,
@@ -2098,7 +2082,6 @@ fn render_toolbar_left_actions(
 ) -> AnyElement {
     let save_popover = render_save_query_popover(ws, cx);
     let s = &ws.controller.strings;
-    let run_btn = render_toolbar_run_button(is_running, has_selection, s, cx);
     let find_btn = render_toolbar_find_button(ws.sql_editor_ui.find_replace_open, s, cx);
     let format_btn = render_toolbar_format_button(s, cx);
     let explain_btn = render_toolbar_explain_button(false, s, cx);
@@ -2109,8 +2092,7 @@ fn render_toolbar_left_actions(
     let mut left = div()
         .flex()
         .items_center()
-        .gap(px(6.0))
-        .child(run_btn)
+        .gap(px(4.0))
         .child(save_popover)
         .child(find_btn)
         .child(format_btn)
@@ -2135,38 +2117,6 @@ fn render_toolbar_left_actions(
         );
     }
     left.into_any_element()
-}
-
-fn render_toolbar_run_button(
-    is_running: bool,
-    has_selection: bool,
-    s: &crate::i18n::Strings,
-    cx: &mut Context<TableMinusWorkspace>,
-) -> AnyElement {
-    if is_running {
-        Button::new("sql-cancel-btn")
-            .variant(Variant::DangerSoft)
-            .size(HeroSize::Sm)
-            .child(Icon::new(IconName::Ban).size(IconSize::Xs))
-            .label(s.stop)
-            .on_press(cx.listener(|ws, _e, _w, cx| cancel_active_query(ws, cx)))
-            .into_any_element()
-    } else {
-        let label = if has_selection {
-            s.run_selection
-        } else {
-            s.run
-        };
-        Button::new("sql-run-btn")
-            .variant(Variant::Primary)
-            .size(HeroSize::Sm)
-            .child(Icon::new(IconName::Play).size(IconSize::Xs))
-            .label(label)
-            .on_press(cx.listener(move |ws, _e, _w, cx| {
-                trigger_run_query(ws, has_selection, cx);
-            }))
-            .into_any_element()
-    }
 }
 
 fn render_toolbar_find_button(
@@ -2704,7 +2654,7 @@ fn render_toolbar_right_status(
         .child(
             div()
                 .font(tnum_font)
-                .text_xs()
+                .text_size(px(theme::TEXT_META_PX))
                 .text_color(cx.colors().muted)
                 .child(pos_text),
         )
@@ -3420,6 +3370,8 @@ pub(crate) fn trigger_run_query(
     ws.ensure_tab_result(tab_id).reset_for_run();
     ws.controller
         .set_editor_sql(&ws.sql_editor_ui.doc.read(cx).rope.text());
+    ws.console_log
+        .push(sql.clone(), super::console_log::ConsoleLogKind::Query);
 
     let (ui_tx, ui_rx) = async_channel::unbounded::<QueryStreamMsg>();
     spawn_query_stream_worker(

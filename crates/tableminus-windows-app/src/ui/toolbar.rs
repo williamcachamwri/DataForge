@@ -12,7 +12,6 @@ use herogpui::gpui::{
 };
 use herogpui::theme::ActiveTheme;
 
-use crate::accessibility::KeyCommand;
 use crate::app::{AppController, ScreenMode};
 use crate::views::library::engine_from_driver_id;
 use tableminus_gfx::glyphs::EngineKind;
@@ -25,8 +24,9 @@ use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::ToastSeverity;
 use super::theme::{
-    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, HOVER_FEEDBACK_MS, animate_fade_in,
-    hairline_border_color, is_reduced_motion, muted_surface_bg,
+    CONTROL_RADIUS_PX, HAIRLINE_BORDER_PX, HOVER_FEEDBACK_MS, TEXT_BADGE_PX, TEXT_CONTROL_PX,
+    TEXT_META_PX, animate_fade_in, animate_popover_enter, hairline_border_color, is_reduced_motion,
+    muted_surface_bg,
 };
 
 const ALL_SCHEMAS_KEY: &str = "__all_schemas__";
@@ -36,7 +36,6 @@ struct ToolbarActionState {
     is_connecting: bool,
     is_running: bool,
     has_selection: bool,
-    has_export_rows: bool,
     has_grid_columns: bool,
     pending_edits: usize,
     skip_anim: bool,
@@ -66,10 +65,6 @@ pub fn render_toolbar(
         ),
         is_running: ws.active_tab_result().is_some_and(|r| r.running),
         has_selection: selected_sql_text(&ws.controller).is_some(),
-        has_export_rows: !ws.controller.grid_rows.is_empty()
-            || ws
-                .active_tab_result()
-                .is_some_and(|r| !r.accumulator.result_sets.is_empty()),
         has_grid_columns: !ws.controller.grid_columns.is_empty(),
         pending_edits: pending_edit_count(&ws.controller),
         skip_anim: is_reduced_motion(cx),
@@ -85,7 +80,10 @@ pub fn render_toolbar(
             let bg = muted_surface_bg(cx);
             let border = hairline_border_color(cx);
             move |s| {
-                s.h(px(42.0))
+                s.h(px(38.0))
+                    .w_full()
+                    .min_w(px(0.0))
+                    .overflow_hidden()
                     .px(px(12.0))
                     .items_center()
                     .justify_between()
@@ -128,94 +126,34 @@ fn render_left_actions(
     state: &ToolbarActionState,
     cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
-    div()
+    let mut left = div()
         .id("toolbar-left-cluster")
         .flex()
         .items_center()
         .gap(px(6.0))
-        .min_w(px(0.0))
-        .child(render_execution_controls(s, state, cx))
-        .child(
-            Separator::new()
-                .id("toolbar-sep-sql")
-                .orientation(Orientation::Vertical)
-                .sx(|s| s.h(px(18.0))),
-        )
-        .child(render_sql_file_group(s, state.has_export_rows, cx))
-        .child(
-            Separator::new()
-                .id("toolbar-sep-grid")
-                .orientation(Orientation::Vertical)
-                .sx(|s| s.h(px(18.0))),
-        )
-        .child(render_grid_edit_controls(
-            s,
-            state.is_connected,
-            state.has_grid_columns,
-            state.pending_edits,
-            state.skip_anim,
-            cx,
-        ))
-        .into_any_element()
-}
+        .flex_shrink_0()
+        .overflow_hidden()
+        .child(render_execution_controls(s, state, cx));
 
-fn render_sql_file_group(
-    s: &crate::i18n::Strings,
-    has_export_rows: bool,
-    cx: &Context<TableMinusWorkspace>,
-) -> AnyElement {
-    let colors = cx.colors().clone();
-    ButtonGroup::new()
-        .id("toolbar-sql-group")
-        .variant(Variant::Outline)
-        .size(Size::Sm)
-        .separators(true)
-        .button(
-            Button::new("toolbar-new-query")
-                .aria_label(s.new_query_tab_tooltip)
-                .on_press(cx.listener(|ws, _, window, cx| {
-                    ws.execute_key_command(KeyCommand::NewQueryTab, window, cx);
-                }))
-                .child(
-                    Icon::new(IconName::FilePlus)
-                        .size(px(13.0))
-                        .color(colors.foreground),
-                )
-                .child(s.new_label),
-        )
-        .button(
-            Button::new("toolbar-save-sql")
-                .aria_label(s.save_query_tooltip)
-                .on_press(cx.listener(|ws, _, _, cx| {
-                    save_active_tab_query(ws, cx);
-                }))
-                .child(
-                    Icon::new(IconName::Save)
-                        .size(px(13.0))
-                        .color(colors.foreground),
-                )
-                .child(s.save),
-        )
-        .button(
-            Button::new("toolbar-export")
-                .is_disabled(!has_export_rows)
-                .aria_label(s.export_data_aria)
-                .on_press(cx.listener(|ws, _, window, cx| {
-                    ws.modals_ui.open_export(window, cx);
-                    cx.notify();
-                }))
-                .child(
-                    Icon::new(IconName::Download)
-                        .size(px(13.0))
-                        .color(if has_export_rows {
-                            colors.foreground
-                        } else {
-                            colors.muted
-                        }),
-                )
-                .child(s.export),
-        )
-        .into_any_element()
+    if state.has_grid_columns || state.pending_edits > 0 {
+        left = left
+            .child(
+                Separator::new()
+                    .id("toolbar-sep-grid")
+                    .orientation(Orientation::Vertical)
+                    .sx(|s| s.h(px(18.0))),
+            )
+            .child(render_grid_edit_controls(
+                s,
+                state.is_connected,
+                state.has_grid_columns,
+                state.pending_edits,
+                state.skip_anim,
+                cx,
+            ));
+    }
+
+    left.into_any_element()
 }
 
 fn render_execution_controls(
@@ -348,7 +286,7 @@ fn render_connected_execution(
                 .child(
                     Kbd::new()
                         .variant(KbdVariant::Light)
-                        .sx(|s| s.h(px(18.0)).px(px(4.0)).text_size(px(10.0)))
+                        .sx(|s| s.h(px(18.0)).px(px(4.0)).text_size(px(TEXT_BADGE_PX)))
                         .child(KbdAbbr::new(KbdKey::Ctrl))
                         .child(KbdAbbr::new(KbdKey::Enter)),
                 ),
@@ -600,8 +538,12 @@ fn render_right_controls(
         .id("toolbar-right-cluster")
         .flex()
         .items_center()
+        .justify_end()
         .gap(px(6.0))
-        .flex_shrink_0();
+        .flex_1()
+        .min_w(px(0.0))
+        .flex_shrink(1.0)
+        .overflow_hidden();
     if controller.restoring_connection_id.is_some() {
         right = right.child(render_right_spinner_chip(
             "toolbar-restore-spin",
@@ -631,8 +573,12 @@ fn render_connected_right_controls(
         .id("toolbar-right-cluster")
         .flex()
         .items_center()
+        .justify_end()
         .gap(px(6.0))
-        .flex_shrink_0();
+        .flex_1()
+        .min_w(px(0.0))
+        .flex_shrink(1.0)
+        .overflow_hidden();
 
     if controller.restoring_connection_id.is_some() {
         right = right.child(render_right_spinner_chip(
@@ -662,12 +608,19 @@ fn render_connected_right_controls(
     }
 
     right
-        .child(render_db_switcher_popover(controller, window, cx))
+        .child(
+            div()
+                .min_w(px(0.0))
+                .flex_shrink(1.0)
+                .overflow_hidden()
+                .child(render_db_switcher_popover(controller, window, cx)),
+        )
         .child(
             Button::new("toolbar-refresh-schema")
                 .variant(Variant::Ghost)
                 .size(Size::Sm)
                 .is_icon_only(true)
+                .sx(|s| s.flex_shrink_0())
                 .aria_label(controller.strings.refresh_schema)
                 .on_press(cx.listener(|ws, _, _, cx| {
                     super::sidebar::refresh_active_schema(ws, cx);
@@ -721,7 +674,7 @@ fn render_db_switcher_popover(
         .padding(px(12.0))
         .title(controller.strings.db_and_schema_title)
         .show_close_button(true)
-        .child(
+        .child(animate_popover_enter(
             div()
                 .w_full()
                 .flex()
@@ -729,7 +682,7 @@ fn render_db_switcher_popover(
                 .gap(px(10.0))
                 .child(
                     div()
-                        .text_size(px(11.5))
+                        .text_size(px(TEXT_META_PX))
                         .text_color(colors.muted)
                         .truncate()
                         .child(host_summary),
@@ -751,7 +704,9 @@ fn render_db_switcher_popover(
                         .orientation(Orientation::Horizontal),
                 )
                 .child(render_popover_footer_actions(&controller.strings, cx)),
-        )
+            "toolbar-db-popover-anim",
+            cx,
+        ))
         .into_any_element()
 }
 
@@ -768,8 +723,9 @@ fn build_db_popover_trigger(
         .height(px(26.0))
         .padding_x(px(8.0))
         .radius(px(CONTROL_RADIUS_PX))
+        .sx(|s| s.min_w(px(0.0)).max_w_full().overflow_hidden())
         .aria_label(controller.strings.db_schema_switcher_aria)
-        .child(engine.map_or_else(
+        .child(div().flex_shrink_0().child(engine.map_or_else(
             || {
                 Icon::new(IconName::Database)
                     .size(px(13.0))
@@ -777,19 +733,25 @@ fn build_db_popover_trigger(
                     .into_any_element()
             },
             |kind| engine_icon(kind, px(13.0), colors.foreground),
-        ))
+        )))
         .child(
             div()
+                .min_w(px(0.0))
+                .flex_1()
                 .max_w(px(160.0))
-                .truncate()
-                .text_size(px(12.0))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(px(TEXT_CONTROL_PX))
                 .font_weight(FontWeight::MEDIUM)
                 .child(db_label),
         )
         .child(
-            Icon::new(IconName::ChevronDown)
-                .size(px(12.0))
-                .color(colors.muted),
+            div().flex_shrink_0().child(
+                Icon::new(IconName::ChevronDown)
+                    .size(px(12.0))
+                    .color(colors.muted),
+            ),
         )
 }
 
@@ -827,8 +789,8 @@ fn render_schema_select(
         .label(s.active_schema_label)
         .placeholder(s.no_schemas_loaded)
         .height(px(30.0))
-        .trigger_text_size(px(12.0))
-        .row_text_size(px(12.0))
+        .trigger_text_size(px(TEXT_CONTROL_PX))
+        .row_text_size(px(TEXT_CONTROL_PX))
         .full_width(true)
         .is_disabled(schema_items.is_empty())
         .value(selected_key)
@@ -854,7 +816,7 @@ fn render_saved_connections_section(
     let colors = cx.colors().clone();
     let mut section = div().w_full().flex().flex_col().gap(px(4.0)).child(
         div()
-            .text_size(px(11.0))
+            .text_size(px(TEXT_META_PX))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(colors.muted)
             .child(s.cmd_group_saved_connections),
@@ -864,7 +826,7 @@ fn render_saved_connections_section(
         return section
             .child(
                 div()
-                    .text_size(px(12.0))
+                    .text_size(px(TEXT_CONTROL_PX))
                     .text_color(colors.muted)
                     .child(s.no_saved_connections_library),
             )
@@ -907,7 +869,7 @@ fn render_saved_connections_section(
                                 .child(
                                     div()
                                         .truncate()
-                                        .text_size(px(12.0))
+                                        .text_size(px(TEXT_CONTROL_PX))
                                         .font_weight(FontWeight::MEDIUM)
                                         .child(name),
                                 ),
@@ -915,7 +877,7 @@ fn render_saved_connections_section(
                         .child(
                             div()
                                 .truncate()
-                                .text_size(px(11.0))
+                                .text_size(px(TEXT_META_PX))
                                 .text_color(colors.muted)
                                 .child(detail),
                         ),
@@ -1017,10 +979,17 @@ fn active_engine(controller: &AppController) -> Option<EngineKind> {
 
 fn pending_edit_count(controller: &AppController) -> usize {
     let edits = &controller.grid_model.edits;
-    edits.modified_cells.len() + edits.inserted_rows.len() + edits.deleted_rows.len()
+    total_pending(
+        edits.modified_cells.len(),
+        edits.inserted_rows.len(),
+        edits.deleted_rows.len(),
+    )
 }
 
-fn save_active_tab_query(ws: &mut TableMinusWorkspace, cx: &mut Context<TableMinusWorkspace>) {
+pub(crate) fn save_active_tab_query(
+    ws: &mut TableMinusWorkspace,
+    cx: &mut Context<TableMinusWorkspace>,
+) {
     let default_title = ws.controller.strings.new_query_tab;
     let saved_toast = ws.controller.strings.query_saved_toast;
     let title = ws
@@ -1040,6 +1009,13 @@ fn run_active_or_selected_sql(ws: &mut TableMinusWorkspace, cx: &mut Context<Tab
         ws.ensure_tab_result(tab_id).reset_for_run();
     }
     let selected = selected_sql_text(&ws.controller);
+    let logged_sql = selected
+        .clone()
+        .unwrap_or_else(|| ws.sql_editor_ui.current_text(cx));
+    if !logged_sql.trim().is_empty() {
+        ws.console_log
+            .push(logged_sql, super::console_log::ConsoleLogKind::Query);
+    }
     let outcome = match selected.as_deref() {
         Some(sql) => ws.controller.execute_sql_blocking(sql),
         None => ws.controller.execute_active_sql_blocking(),
@@ -1133,5 +1109,21 @@ fn selected_sql_text(controller: &AppController) -> Option<String> {
         None
     } else {
         Some(out)
+    }
+}
+
+/// Pending change count: edited cells + inserted rows + deleted rows.
+fn total_pending(modified: usize, inserted: usize, deleted: usize) -> usize {
+    modified + inserted + deleted
+}
+
+#[cfg(test)]
+mod pending_count_tests {
+    use super::total_pending;
+
+    #[test]
+    fn counts_pending() {
+        assert_eq!(total_pending(0, 0, 0), 0);
+        assert_eq!(total_pending(3, 2, 1), 6);
     }
 }

@@ -98,6 +98,92 @@ impl Default for WorkspaceSessionSnapshot {
     }
 }
 
+impl WorkspaceSessionSnapshot {
+    /// Returns `true` when this snapshot represents a valid, active workspace session
+    /// that should be restored directly on startup instead of showing the Welcome screen.
+    #[must_use]
+    pub fn has_active_session(&self) -> bool {
+        self.version >= 1
+            && self.version <= WORKSPACE_SESSION_SCHEMA_VERSION
+            && self
+                .active_connection_id
+                .as_deref()
+                .is_some_and(|id| !id.trim().is_empty())
+    }
+
+    /// Clears the active connection and open workspace tabs while preserving layout preferences.
+    ///
+    /// Saving a cleared snapshot ensures the next launch opens on the Welcome screen.
+    pub fn clear_active_session(&mut self) {
+        self.active_connection_id = None;
+        self.active_database = None;
+        self.selected_table = None;
+        self.tabs.clear();
+        self.active_tab_index = 0;
+    }
+
+    /// Sets `active_connection_id` when `conn_id` is non-empty after trimming.
+    #[must_use]
+    pub fn with_active_connection(mut self, conn_id: impl Into<String>) -> Self {
+        let raw = conn_id.into();
+        let trimmed = raw.trim();
+        self.active_connection_id = (!trimmed.is_empty()).then(|| trimmed.to_owned());
+        self
+    }
+}
+
+/// Startup routing decision derived from persisted session state.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StartupSessionDecision {
+    /// No previous active session exists (first launch, restore disabled, corrupt/missing file,
+    /// or user closed all connections) — show the Welcome / Connection Launcher screen.
+    ShowWelcome,
+    /// A valid previous active session exists — restore it directly without showing Welcome.
+    RestoreSession(WorkspaceSessionSnapshot),
+}
+
+/// Evaluates persisted session state on startup without ever panicking or failing launch.
+///
+/// Returns [`StartupSessionDecision::RestoreSession`] only when `restore_enabled` is `true`,
+/// the session file is intact and passes checksum verification, and
+/// [`WorkspaceSessionSnapshot::has_active_session`] is `true`.
+#[must_use]
+pub fn decide_startup_session(
+    path_opt: Option<&Path>,
+    restore_enabled: bool,
+) -> StartupSessionDecision {
+    if !restore_enabled {
+        return StartupSessionDecision::ShowWelcome;
+    }
+    match load_workspace_session(path_opt) {
+        Ok(Some(snapshot)) if snapshot.has_active_session() => {
+            StartupSessionDecision::RestoreSession(snapshot)
+        }
+        Ok(Some(_)) | Ok(None) => StartupSessionDecision::ShowWelcome,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "failed to read workspace session on startup; falling back to Welcome screen"
+            );
+            StartupSessionDecision::ShowWelcome
+        }
+    }
+}
+
+/// Clears the active connection from the persisted workspace session while preserving
+/// layout preferences (`sidebar_open`, `sidebar_width`, `inspector_open`).
+pub fn clear_active_workspace_session(path_opt: Option<&Path>) -> PlatformResult<()> {
+    let mut snapshot = load_workspace_session(path_opt)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    snapshot.clear_active_session();
+    snapshot.saved_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+    save_workspace_session(path_opt, &snapshot)
+}
+
 /// Execution history entry for a [`ScheduledTaskRecord`].
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -483,5 +569,131 @@ mod tests {
             scheduled_tasks_path(&paths),
             PathBuf::from(r"C:\tmp\TableMinus\state\scheduled_tasks.json")
         );
+    }
+
+    #[test]
+    fn startup_decision_shows_welcome_when_missing_or_disabled() -> TestResult {
+        let dir = TempDir::new()?;
+        let path = dir.path().join(WORKSPACE_SESSION_FILENAME);
+
+        // First launch: missing session file -> ShowWelcome.
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+
+        // Even with a valid active session, restore_enabled = false -> ShowWelcome.
+        let snapshot = sample_snapshot();
+        save_workspace_session(Some(&path), &snapshot)?;
+        assert_eq!(
+            decide_startup_session(Some(&path), false),
+            StartupSessionDecision::ShowWelcome
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn startup_decision_restores_when_active_connection_present() -> TestResult {
+        let dir = TempDir::new()?;
+        let path = dir.path().join(WORKSPACE_SESSION_FILENAME);
+
+        let snapshot = sample_snapshot();
+        assert!(snapshot.has_active_session());
+        save_workspace_session(Some(&path), &snapshot)?;
+
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::RestoreSession(snapshot)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn startup_decision_shows_welcome_when_no_active_connection_or_cleared() -> TestResult {
+        let dir = TempDir::new()?;
+        let path = dir.path().join(WORKSPACE_SESSION_FILENAME);
+
+        // No active connection -> ShowWelcome.
+        let mut inactive = sample_snapshot();
+        inactive.active_connection_id = None;
+        assert!(!inactive.has_active_session());
+        save_workspace_session(Some(&path), &inactive)?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+
+        // Whitespace-only connection ID -> ShowWelcome.
+        let blank_conn = sample_snapshot().with_active_connection("   ");
+        assert!(!blank_conn.has_active_session());
+        save_workspace_session(Some(&path), &blank_conn)?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+
+        // Unsupported snapshot schema version -> ShowWelcome.
+        let mut future_ver = sample_snapshot();
+        future_ver.version = WORKSPACE_SESSION_SCHEMA_VERSION + 10;
+        assert!(!future_ver.has_active_session());
+        save_workspace_session(Some(&path), &future_ver)?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+
+        // Valid active session cleared via clear_active_workspace_session -> ShowWelcome,
+        // while preserving layout preferences.
+        let active = sample_snapshot();
+        save_workspace_session(Some(&path), &active)?;
+        clear_active_workspace_session(Some(&path))?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+        let reloaded = load_workspace_session(Some(&path))?
+            .ok_or_else(|| std::io::Error::other("cleared session should still exist"))?;
+        assert_eq!(reloaded.active_connection_id, None);
+        assert!(reloaded.tabs.is_empty());
+        assert_eq!(reloaded.sidebar_width, Some(275.5));
+        assert!(reloaded.inspector_open);
+        Ok(())
+    }
+
+    #[test]
+    fn startup_decision_recovers_gracefully_from_corrupt_and_empty_files() -> TestResult {
+        let dir = TempDir::new()?;
+        let path = dir.path().join(WORKSPACE_SESSION_FILENAME);
+
+        // Empty 0-byte file -> ShowWelcome.
+        std::fs::write(&path, b"")?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+
+        // Truncated JSON -> ShowWelcome.
+        std::fs::write(&path, br#"{"envelope_version":1,"payload":{"#)?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+
+        // Binary garbage -> ShowWelcome.
+        std::fs::write(&path, [0xFF, 0x00, 0xFE, 0x01])?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+
+        // Checksum mismatch -> ShowWelcome.
+        save_workspace_session(Some(&path), &sample_snapshot())?;
+        let tampered = std::fs::read_to_string(&path)?.replacen("pg-prod", "pg-evil", 1);
+        std::fs::write(&path, tampered)?;
+        assert_eq!(
+            decide_startup_session(Some(&path), true),
+            StartupSessionDecision::ShowWelcome
+        );
+        Ok(())
     }
 }

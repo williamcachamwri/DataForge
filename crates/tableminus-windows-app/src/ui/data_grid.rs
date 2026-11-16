@@ -483,8 +483,17 @@ fn render_columns_popover(
                 cx.notify();
             });
         })
-        .child(list)
-        .child(footer_actions)
+        .child(theme::animate_popover_enter(
+            div()
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap(px(6.0))
+                .child(list)
+                .child(footer_actions),
+            "grid-columns-popover-anim",
+            cx,
+        ))
         .into_any_element()
 }
 

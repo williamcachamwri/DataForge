@@ -244,6 +244,34 @@ impl ConnectionWindowPhaseMachine {
         }
     }
 
+    /// Returns `true` when at least one workspace is connected or actively connecting/reconnecting.
+    #[must_use]
+    pub fn has_active_connection(&self) -> bool {
+        self.workspaces.values().any(|entry| {
+            matches!(
+                entry.phase,
+                ConnectionWindowPhase::Connected
+                    | ConnectionWindowPhase::Connecting { .. }
+                    | ConnectionWindowPhase::Reconnecting { .. }
+            )
+        })
+    }
+
+    /// Returns `true` when no workspace has an active or in-flight connection, meaning the
+    /// Welcome / Connection Launcher screen should be shown.
+    #[must_use]
+    pub fn should_show_welcome(&self) -> bool {
+        !self.has_active_connection()
+    }
+
+    /// Disconnects every registered workspace cleanly so the shell can return to the Welcome screen.
+    pub fn close_all_connections(&mut self) {
+        let ids: Vec<WorkspaceId> = self.workspaces.keys().copied().collect();
+        for id in ids {
+            self.disconnect(id);
+        }
+    }
+
     /// Single phase writer; always ends in `sync_panes`.
     fn transition_to(&mut self, next: ConnectionWindowPhase, id: WorkspaceId) {
         if let Some(entry) = self.workspaces.get_mut(&id) {
@@ -566,6 +594,31 @@ mod tests {
 
         let label = EditorTabLabelResolver::resolve(Some("   "), 0, true);
         assert_eq!(label, "Query 1 •");
+    }
+
+    #[test]
+    fn welcome_routing_reflects_active_and_closed_connections() {
+        let mut machine = ConnectionWindowPhaseMachine::new();
+        let ws = WorkspaceId(1);
+        machine.add_workspace(ws);
+        assert!(!machine.has_active_connection());
+        assert!(machine.should_show_welcome());
+
+        let tok = machine.begin_connect(ws).expect("token");
+        assert!(machine.has_active_connection());
+        assert!(!machine.should_show_welcome());
+
+        assert!(machine.complete_connect(ws, tok));
+        assert!(machine.has_active_connection());
+        assert!(!machine.should_show_welcome());
+
+        machine.close_all_connections();
+        assert!(!machine.has_active_connection());
+        assert!(machine.should_show_welcome());
+        assert_eq!(
+            machine.phase(ws),
+            Some(&ConnectionWindowPhase::Disconnected)
+        );
     }
 
     proptest! {

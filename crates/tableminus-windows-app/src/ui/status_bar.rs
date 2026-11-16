@@ -11,7 +11,7 @@ use herogpui::gpui::{
 use herogpui::theme::ActiveTheme;
 
 use crate::accessibility::KeyCommand;
-use crate::app::AppController;
+use crate::app::{AppController, ScreenMode};
 use tableminus_gfx::glyphs::EngineKind;
 use tableminus_state::connection_window::ConnectionWindowPhase;
 use tableminus_windows_platform::EnvironmentKind;
@@ -22,7 +22,8 @@ use super::TableMinusWorkspace;
 use super::engine_icons::engine_icon;
 use super::shell_state::{ToastSeverity, WorkspaceSubView};
 use super::theme::{
-    HAIRLINE_BORDER_PX, MICRO_GAP_PX, hairline_border_color, muted_surface_bg, value_gpui_font,
+    HAIRLINE_BORDER_PX, MICRO_GAP_PX, TEXT_BADGE_PX, TEXT_META_PX, hairline_border_color,
+    muted_surface_bg, value_gpui_font,
 };
 
 /// Renders the slim `26px` precision status footer driven by real controller and tab state.
@@ -52,8 +53,10 @@ pub fn render_status_bar(
 
     div()
         .id("workspace-status-bar")
-        .h(px(26.0))
+        .h(px(28.0))
         .w_full()
+        .min_w(px(0.0))
+        .overflow_hidden()
         .flex_shrink_0()
         .flex()
         .items_center()
@@ -63,7 +66,7 @@ pub fn render_status_bar(
         .bg(muted_surface_bg(cx))
         .border_t(px(top_border_px))
         .border_color(top_border_color)
-        .text_size(px(11.5))
+        .text_size(px(TEXT_META_PX))
         .text_color(colors.muted)
         .child(render_left_status(ws, &phase, cx))
         .child(render_right_metrics(
@@ -83,12 +86,42 @@ fn render_left_status(
 ) -> AnyElement {
     let controller = &ws.controller;
     let colors = cx.colors().clone();
+    let rail_on = ws.rail_visible;
     let mut left = div()
         .id("status-bar-left")
+        .flex_1()
         .flex()
         .items_center()
         .gap(px(8.0))
-        .min_w(px(0.0));
+        .min_w(px(0.0))
+        .overflow_hidden()
+        .child(
+            ToggleButton::new("status-toggle-sidebar")
+                .variant(ToggleVariant::Ghost)
+                .size(Size::Sm)
+                .is_icon_only(true)
+                .sx(|s| s.h(px(20.0)).w(px(22.0)).px(px(0.0)))
+                .is_selected(rail_on)
+                .aria_label("Toggle Left Rail")
+                .on_press(cx.listener(|ws, _, _, cx| {
+                    ws.toggle_rail(cx);
+                }))
+                .child(
+                    Icon::new(IconName::PanelLeft)
+                        .size(px(13.0))
+                        .color(if rail_on {
+                            colors.accent.color
+                        } else {
+                            colors.muted
+                        }),
+                ),
+        )
+        .child(
+            Separator::new()
+                .id("status-sep-sidebar")
+                .orientation(Orientation::Vertical)
+                .sx(|s| s.h(px(12.0))),
+        );
 
     let s = &controller.strings;
     let phase_node = match phase {
@@ -159,7 +192,10 @@ fn append_connected_left_details(
             )
             .child(
                 div()
-                    .truncate()
+                    .min_w(px(0.0))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
                     .text_color(colors.muted)
                     .child(s.status_schema_tpl.replace("{schema}", schema)),
             );
@@ -174,7 +210,10 @@ fn append_connected_left_details(
             )
             .child(
                 div()
-                    .truncate()
+                    .min_w(px(0.0))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
                     .text_color(colors.foreground)
                     .child(format_table_ref(table)),
             );
@@ -203,7 +242,7 @@ fn append_connected_left_details(
                 .variant(ChipVariant::Soft)
                 .color(Color::Warning)
                 .size(Size::Sm)
-                .text_size(px(10.0))
+                .text_size(px(TEXT_BADGE_PX))
                 .child(ChipLabel::new().child(s.safe_mode)),
         );
     }
@@ -237,7 +276,10 @@ fn render_connected_left_status(
     }
     conn = conn.child(
         div()
-            .truncate()
+            .min_w(px(0.0))
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .text_ellipsis()
             .font_weight(FontWeight::MEDIUM)
             .text_color(colors.foreground)
             .child(conn_label),
@@ -259,7 +301,7 @@ fn render_connected_left_status(
                 .variant(ChipVariant::Soft)
                 .color(Color::Warning)
                 .size(Size::Sm)
-                .text_size(px(10.5))
+                .text_size(px(TEXT_BADGE_PX))
                 .child(
                     Icon::new(IconName::ShieldCheck)
                         .size(px(11.0))
@@ -408,7 +450,7 @@ fn render_right_metrics(
                 .orientation(Orientation::Vertical)
                 .sx(|s| s.h(px(12.0))),
         )
-        .child(render_panel_quick_toggles(controller, cx))
+        .child(render_panel_quick_toggles(ws, cx))
         .into_any_element()
 }
 
@@ -451,7 +493,7 @@ fn render_pending_edits_chip(pending_edits: usize, controller: &AppController) -
         .variant(ChipVariant::Soft)
         .color(Color::Warning)
         .size(Size::Sm)
-        .text_size(px(10.5))
+        .text_size(px(TEXT_BADGE_PX))
         .child(ChipLabel::new().child(format!(
             "{pending_edits} {}",
             controller.strings.pending_suffix
@@ -509,7 +551,7 @@ fn render_pagination_controls(
         .child(
             div()
                 .font(numeric_font)
-                .text_size(px(11.0))
+                .text_size(px(TEXT_META_PX))
                 .text_color(colors.muted)
                 .child(
                     controller
@@ -587,7 +629,7 @@ fn render_cursor_and_vim(
                 .variant(ChipVariant::Soft)
                 .color(Color::Accent)
                 .size(Size::Sm)
-                .text_size(px(10.0))
+                .text_size(px(TEXT_BADGE_PX))
                 .child(ChipLabel::new().child(mode.label())),
         );
     }
@@ -603,18 +645,21 @@ fn format_table_ref(table: &TableRef) -> String {
 }
 
 fn render_panel_quick_toggles(
-    controller: &AppController,
+    ws: &TableMinusWorkspace,
     cx: &Context<TableMinusWorkspace>,
 ) -> AnyElement {
+    let controller = &ws.controller;
     let colors = cx.colors().clone();
     let inspector_on = controller.layout_config.inspector_visible;
     let ai_on = controller.layout_config.ai_drawer_visible;
+    let console_on = ws.console_log.visible;
 
     div()
         .id("status-bar-panel-toggles")
         .flex()
         .items_center()
         .gap(px(2.0))
+        .child(render_console_toggle_button(console_on, &colors, cx))
         .child(
             ToggleButton::new("status-toggle-inspector")
                 .variant(ToggleVariant::Ghost)
@@ -656,6 +701,53 @@ fn render_panel_quick_toggles(
                             colors.muted
                         }),
                 ),
+        )
+        .child(
+            Button::new("status-open-settings")
+                .variant(Variant::Ghost)
+                .size(Size::Sm)
+                .is_icon_only(true)
+                .width(px(22.0))
+                .height(px(20.0))
+                .aria_label(controller.strings.settings)
+                .on_press(cx.listener(|ws, _, _, cx| {
+                    ws.switch_screen(ScreenMode::Settings, cx);
+                }))
+                .child(
+                    Icon::new(IconName::Settings)
+                        .size(px(12.0))
+                        .color(colors.muted),
+                ),
+        )
+        .into_any_element()
+}
+
+fn render_console_toggle_button(
+    console_on: bool,
+    colors: &herogpui::theme::ThemeColors,
+    cx: &Context<TableMinusWorkspace>,
+) -> AnyElement {
+    let fg = if console_on {
+        colors.accent.color
+    } else {
+        colors.muted
+    };
+    ToggleButton::new("status-toggle-console")
+        .variant(ToggleVariant::Ghost)
+        .size(Size::Sm)
+        .sx(|s| s.h(px(20.0)).px(px(6.0)).gap(px(4.0)))
+        .is_selected(console_on)
+        .aria_label("Toggle SQL Console")
+        .on_press(cx.listener(|ws, _, _, cx| {
+            ws.console_log.toggle();
+            cx.notify();
+        }))
+        .child(Icon::new(IconName::Terminal).size(px(12.0)).color(fg))
+        .child(
+            div()
+                .text_size(px(TEXT_META_PX))
+                .text_color(fg)
+                .child("Console"),
         )
         .into_any_element()
 }

@@ -6,6 +6,7 @@ pub mod ai_drawer;
 pub mod charts_view;
 pub mod command_palette;
 pub mod compare_view;
+pub mod console_log;
 pub mod data_grid;
 pub mod data_transfer_view;
 pub mod engine_icons;
@@ -35,6 +36,7 @@ pub mod titlebar;
 pub mod toasts;
 pub mod toolbar;
 pub mod unavailable;
+pub mod welcome_view;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -100,6 +102,8 @@ pub struct TableMinusWorkspace {
     pub workspace_pane: WorkspacePaneState,
     pub ai_panel: AiPanelState,
     pub pending_quit_after_confirm: bool,
+    pub titlebar_menu_open: bool,
+    pub rail_visible: bool,
     pub tabs_ui: tabs::TabsStripState,
     pub command_palette_ui: command_palette::CommandPaletteState,
     pub sidebar_ui: sidebar::SidebarPanelState,
@@ -123,6 +127,8 @@ pub struct TableMinusWorkspace {
     pub admin_ui: admin_view::AdminViewState,
     pub mock_generator_ui: mock_generator_view::MockGeneratorViewState,
     pub data_transfer_ui: data_transfer_view::DataTransferViewState,
+    pub welcome_ui: welcome_view::WelcomeViewState,
+    pub console_log: console_log::ConsoleLogState,
     _tasks: Vec<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -168,6 +174,8 @@ impl TableMinusWorkspace {
             workspace_pane: WorkspacePaneState::default(),
             ai_panel: AiPanelState::default(),
             pending_quit_after_confirm: false,
+            titlebar_menu_open: false,
+            rail_visible: true,
             tabs_ui: tabs::TabsStripState::new(window, cx),
             command_palette_ui: command_palette::CommandPaletteState::new(window, cx),
             sidebar_ui: sidebar::SidebarPanelState::new(window, cx),
@@ -191,10 +199,13 @@ impl TableMinusWorkspace {
             admin_ui: admin_view::AdminViewState::new(window, cx),
             mock_generator_ui: mock_generator_view::MockGeneratorViewState::new(window, cx),
             data_transfer_ui: data_transfer_view::DataTransferViewState::new(window, cx),
+            welcome_ui: welcome_view::WelcomeViewState::new(window, cx),
+            console_log: console_log::ConsoleLogState::new(),
             _tasks: tasks,
             _subscriptions: subscriptions,
         };
         ws.sync_active_tab_sub_view();
+        welcome_view::initialize_startup_welcome_or_session(&mut ws, cx);
         ws
     }
 
@@ -243,9 +254,17 @@ impl TableMinusWorkspace {
         cx.notify();
     }
 
+    /// Toggles visibility of the left vertical navigation rail.
+    pub fn toggle_rail(&mut self, cx: &mut Context<Self>) {
+        self.rail_visible = !self.rail_visible;
+        cx.notify();
+    }
+
     /// Dismisses transient overlays (command palette, metadata search, modals, inline cell edit, autocomplete).
     pub fn dismiss_overlays(&mut self, cx: &mut Context<Self>) {
-        if self.command_palette_ui.is_open() {
+        if self.titlebar_menu_open {
+            self.titlebar_menu_open = false;
+        } else if self.command_palette_ui.is_open() {
             self.command_palette_ui.close();
         } else if self.metadata_search_ui.open {
             self.metadata_search_ui.close_modal_animated(cx);
@@ -447,6 +466,9 @@ impl TableMinusWorkspace {
             }))
             .on_action(
                 cx.listener(|ws, _: &actions::OpenCommandPalette, window, cx| {
+                    if ws.controller.screen_mode == ScreenMode::Workspace && ws.welcome_ui.active {
+                        return;
+                    }
                     ws.command_palette_ui.toggle(window, cx);
                     cx.notify();
                 }),
@@ -663,7 +685,11 @@ impl TableMinusWorkspace {
         if let Some(banner) = unavailable::render_unavailable_banner(self, window, cx) {
             col = col.child(banner);
         }
-        col.child(middle_row).into_any_element()
+        let mut col = col.child(middle_row);
+        if self.console_log.visible {
+            col = col.child(console_log::render_console_log_drawer(self, window, cx));
+        }
+        col.into_any_element()
     }
 }
 
@@ -676,15 +702,25 @@ impl Focusable for TableMinusWorkspace {
 impl Render for TableMinusWorkspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = cx.colors().clone();
-        let screen_key = match self.controller.screen_mode {
-            ScreenMode::Workspace => "screen-workspace",
-            ScreenMode::ConnectionsLibrary => "screen-library",
-            ScreenMode::Settings => "screen-settings",
+        let show_welcome =
+            self.controller.screen_mode == ScreenMode::Workspace && self.welcome_ui.active;
+        let screen_key = if show_welcome {
+            "screen-welcome"
+        } else {
+            match self.controller.screen_mode {
+                ScreenMode::Workspace => "screen-workspace",
+                ScreenMode::ConnectionsLibrary => "screen-library",
+                ScreenMode::Settings => "screen-settings",
+            }
         };
-        let main_area = match self.controller.screen_mode {
-            ScreenMode::Workspace => self.render_workspace_screen(window, cx),
-            ScreenMode::ConnectionsLibrary => library::render_library_screen(self, window, cx),
-            ScreenMode::Settings => settings::render_settings_screen(self, window, cx),
+        let main_area = if show_welcome {
+            welcome_view::render_welcome_screen(self, window, cx)
+        } else {
+            match self.controller.screen_mode {
+                ScreenMode::Workspace => self.render_workspace_screen(window, cx),
+                ScreenMode::ConnectionsLibrary => library::render_library_screen(self, window, cx),
+                ScreenMode::Settings => settings::render_settings_screen(self, window, cx),
+            }
         };
         let main_area = theme::animate_fade_in(
             div()
@@ -708,6 +744,18 @@ impl Render for TableMinusWorkspace {
             }
         };
 
+        let mut body_row = div()
+            .flex_1()
+            .min_w(px(0.0))
+            .min_h(px(0.0))
+            .overflow_hidden()
+            .flex()
+            .flex_row();
+        if !show_welcome && self.rail_visible {
+            body_row = body_row.child(rail::render_rail(self, window, cx));
+        }
+        body_row = body_row.child(main_area);
+
         let mut shell_col = div()
             .relative()
             .flex()
@@ -718,18 +766,10 @@ impl Render for TableMinusWorkspace {
             .bg(shell_bg)
             .text_color(colors.foreground)
             .child(titlebar::render_titlebar(self, window, cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w(px(0.0))
-                    .min_h(px(0.0))
-                    .overflow_hidden()
-                    .flex()
-                    .flex_row()
-                    .child(rail::render_rail(self, window, cx))
-                    .child(main_area),
-            )
-            .child(status_bar::render_status_bar(self, window, cx));
+            .child(body_row);
+        if !show_welcome {
+            shell_col = shell_col.child(status_bar::render_status_bar(self, window, cx));
+        }
 
         if let Some(palette) = command_palette::render_command_palette(self, window, cx) {
             shell_col = shell_col.child(palette);
