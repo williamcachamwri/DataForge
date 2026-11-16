@@ -77,168 +77,188 @@ struct DriverFormSpec {
     helper_note: &'static str,
 }
 
+const PG_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Relational · Default port 5432",
+    short_kind: "Relational · 5432",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "Production Postgres",
+    host_placeholder: "localhost",
+    user_label: "User",
+    user_placeholder: "postgres",
+    password_label: "Password",
+    password_placeholder: "••••••••",
+    database_label: "Database",
+    database_placeholder: "postgres",
+    default_database: "",
+    helper_note: "Standard PostgreSQL TCP connection with optional TLS & Safe Mode.",
+};
+
+const MYSQL_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Relational · Default port 3306",
+    short_kind: "Relational · 3306",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "App MySQL",
+    host_placeholder: "localhost",
+    user_label: "User",
+    user_placeholder: "root",
+    password_label: "Password",
+    password_placeholder: "••••••••",
+    database_label: "Database",
+    database_placeholder: "mysql",
+    default_database: "",
+    helper_note: "Supports MySQL 5.7 / 8.x+ with TLS encryption and Safe Mode.",
+};
+
+const MARIADB_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Relational · Default port 3306",
+    short_kind: "Relational · 3306",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "MariaDB Primary",
+    host_placeholder: "localhost",
+    user_label: "User",
+    user_placeholder: "root",
+    password_label: "Password",
+    password_placeholder: "••••••••",
+    database_label: "Database",
+    database_placeholder: "mariadb",
+    default_database: "",
+    helper_note: "MariaDB 10.x+ wire-compatible TCP connection with optional TLS.",
+};
+
+const SQLITE_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Embedded · Local database file",
+    short_kind: "Local File · Embedded",
+    is_file: true,
+    supports_tls: false,
+    name_placeholder: "Local SQLite DB",
+    host_placeholder: "",
+    user_label: "User",
+    user_placeholder: "",
+    password_label: "Encryption Key (optional)",
+    password_placeholder: "Leave blank for unencrypted file",
+    database_label: "Database File",
+    database_placeholder: "C:\\path\\to\\database.sqlite",
+    default_database: "",
+    helper_note: "Opens .sqlite, .sqlite3, or .db files directly with zero server setup.",
+};
+
+const DUCKDB_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Embedded Analytics · Local OLAP file",
+    short_kind: "Analytics · Embedded",
+    is_file: true,
+    supports_tls: false,
+    name_placeholder: "Analytics DuckDB",
+    host_placeholder: "",
+    user_label: "User",
+    user_placeholder: "",
+    password_label: "Encryption Key (optional)",
+    password_placeholder: "Leave blank for standard file",
+    database_label: "Database File",
+    database_placeholder: "C:\\path\\to\\analytics.duckdb (or :memory:)",
+    default_database: "",
+    helper_note: "In-process OLAP engine — select a .duckdb file or enter :memory:.",
+};
+
+const MSSQL_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Relational · Default port 1433",
+    short_kind: "Relational · 1433",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "SQL Server Instance",
+    host_placeholder: "localhost",
+    user_label: "Login / User",
+    user_placeholder: "sa",
+    password_label: "Password",
+    password_placeholder: "••••••••",
+    database_label: "Database",
+    database_placeholder: "master",
+    default_database: "",
+    helper_note: "Microsoft SQL Server TDS connection over port 1433.",
+};
+
+const MONGODB_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Document Store · Default port 27017",
+    short_kind: "Document · 27017",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "MongoDB Cluster",
+    host_placeholder: "localhost",
+    user_label: "Username (optional)",
+    user_placeholder: "admin",
+    password_label: "Password",
+    password_placeholder: "••••••••",
+    database_label: "Auth / Default Database",
+    database_placeholder: "admin",
+    default_database: "",
+    helper_note: "Connects to MongoDB collections; leave credentials blank for local unauth.",
+};
+
+const REDIS_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "In-Memory Store · Default port 6379",
+    short_kind: "In-Memory · 6379",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "Redis Cache",
+    host_placeholder: "localhost",
+    user_label: "ACL User (optional)",
+    user_placeholder: "default",
+    password_label: "Auth Password",
+    password_placeholder: "Optional AUTH secret",
+    database_label: "Database Index",
+    database_placeholder: "0",
+    default_database: "0",
+    helper_note: "Redis 6+ ACL user is optional; logical database index defaults to 0.",
+};
+
+const CLICKHOUSE_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Columnar OLAP · Default port 8123",
+    short_kind: "Columnar · 8123",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "ClickHouse Analytics",
+    host_placeholder: "localhost",
+    user_label: "User",
+    user_placeholder: "default",
+    password_label: "Password",
+    password_placeholder: "••••••••",
+    database_label: "Database",
+    database_placeholder: "default",
+    default_database: "",
+    helper_note: "Connects via ClickHouse HTTP interface (port 8123 or 8443 with TLS).",
+};
+
+const CLUSTER_SPEC: DriverFormSpec = DriverFormSpec {
+    category_tag: "Wide-Column Store",
+    short_kind: "Wide-Column",
+    is_file: false,
+    supports_tls: true,
+    name_placeholder: "Cluster Connection",
+    host_placeholder: "localhost",
+    user_label: "User",
+    user_placeholder: "cassandra",
+    password_label: "Password",
+    password_placeholder: "••••••••",
+    database_label: "Keyspace",
+    database_placeholder: "system",
+    default_database: "",
+    helper_note: "Cluster node connection with optional TLS.",
+};
+
 const fn driver_form_spec(engine: EngineKind) -> DriverFormSpec {
     match engine {
-        EngineKind::Postgresql => DriverFormSpec {
-            category_tag: "Relational · Default port 5432",
-            short_kind: "Relational · 5432",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "Production Postgres",
-            host_placeholder: "localhost",
-            user_label: "User",
-            user_placeholder: "postgres",
-            password_label: "Password",
-            password_placeholder: "••••••••",
-            database_label: "Database",
-            database_placeholder: "postgres",
-            default_database: "",
-            helper_note: "Standard PostgreSQL TCP connection with optional TLS & Safe Mode.",
-        },
-        EngineKind::Mysql => DriverFormSpec {
-            category_tag: "Relational · Default port 3306",
-            short_kind: "Relational · 3306",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "App MySQL",
-            host_placeholder: "localhost",
-            user_label: "User",
-            user_placeholder: "root",
-            password_label: "Password",
-            password_placeholder: "••••••••",
-            database_label: "Database",
-            database_placeholder: "mysql",
-            default_database: "",
-            helper_note: "Supports MySQL 5.7 / 8.x+ with TLS encryption and Safe Mode.",
-        },
-        EngineKind::Mariadb => DriverFormSpec {
-            category_tag: "Relational · Default port 3306",
-            short_kind: "Relational · 3306",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "MariaDB Primary",
-            host_placeholder: "localhost",
-            user_label: "User",
-            user_placeholder: "root",
-            password_label: "Password",
-            password_placeholder: "••••••••",
-            database_label: "Database",
-            database_placeholder: "mariadb",
-            default_database: "",
-            helper_note: "MariaDB 10.x+ wire-compatible TCP connection with optional TLS.",
-        },
-        EngineKind::Sqlite => DriverFormSpec {
-            category_tag: "Embedded · Local database file",
-            short_kind: "Local File · Embedded",
-            is_file: true,
-            supports_tls: false,
-            name_placeholder: "Local SQLite DB",
-            host_placeholder: "",
-            user_label: "User",
-            user_placeholder: "",
-            password_label: "Encryption Key (optional)",
-            password_placeholder: "Leave blank for unencrypted file",
-            database_label: "Database File",
-            database_placeholder: "C:\\path\\to\\database.sqlite",
-            default_database: "",
-            helper_note: "Opens .sqlite, .sqlite3, or .db files directly with zero server setup.",
-        },
-        EngineKind::Duckdb => DriverFormSpec {
-            category_tag: "Embedded Analytics · Local OLAP file",
-            short_kind: "Analytics · Embedded",
-            is_file: true,
-            supports_tls: false,
-            name_placeholder: "Analytics DuckDB",
-            host_placeholder: "",
-            user_label: "User",
-            user_placeholder: "",
-            password_label: "Encryption Key (optional)",
-            password_placeholder: "Leave blank for standard file",
-            database_label: "Database File",
-            database_placeholder: "C:\\path\\to\\analytics.duckdb (or :memory:)",
-            default_database: "",
-            helper_note: "In-process OLAP engine — select a .duckdb file or enter :memory:.",
-        },
-        EngineKind::Mssql => DriverFormSpec {
-            category_tag: "Relational · Default port 1433",
-            short_kind: "Relational · 1433",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "SQL Server Instance",
-            host_placeholder: "localhost",
-            user_label: "Login / User",
-            user_placeholder: "sa",
-            password_label: "Password",
-            password_placeholder: "••••••••",
-            database_label: "Database",
-            database_placeholder: "master",
-            default_database: "",
-            helper_note: "Microsoft SQL Server TDS connection over port 1433.",
-        },
-        EngineKind::Mongodb => DriverFormSpec {
-            category_tag: "Document Store · Default port 27017",
-            short_kind: "Document · 27017",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "MongoDB Cluster",
-            host_placeholder: "localhost",
-            user_label: "Username (optional)",
-            user_placeholder: "admin",
-            password_label: "Password",
-            password_placeholder: "••••••••",
-            database_label: "Auth / Default Database",
-            database_placeholder: "admin",
-            default_database: "",
-            helper_note: "Connects to MongoDB collections; leave credentials blank for local unauth.",
-        },
-        EngineKind::Redis => DriverFormSpec {
-            category_tag: "In-Memory Store · Default port 6379",
-            short_kind: "In-Memory · 6379",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "Redis Cache",
-            host_placeholder: "localhost",
-            user_label: "ACL User (optional)",
-            user_placeholder: "default",
-            password_label: "Auth Password",
-            password_placeholder: "Optional AUTH secret",
-            database_label: "Database Index",
-            database_placeholder: "0",
-            default_database: "0",
-            helper_note: "Redis 6+ ACL user is optional; logical database index defaults to 0.",
-        },
-        EngineKind::Clickhouse => DriverFormSpec {
-            category_tag: "Columnar OLAP · Default port 8123",
-            short_kind: "Columnar · 8123",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "ClickHouse Analytics",
-            host_placeholder: "localhost",
-            user_label: "User",
-            user_placeholder: "default",
-            password_label: "Password",
-            password_placeholder: "••••••••",
-            database_label: "Database",
-            database_placeholder: "default",
-            default_database: "",
-            helper_note: "Connects via ClickHouse HTTP interface (port 8123 or 8443 with TLS).",
-        },
-        EngineKind::Cassandra | EngineKind::Scylladb => DriverFormSpec {
-            category_tag: "Wide-Column Store",
-            short_kind: "Wide-Column",
-            is_file: false,
-            supports_tls: true,
-            name_placeholder: "Cluster Connection",
-            host_placeholder: "localhost",
-            user_label: "User",
-            user_placeholder: "cassandra",
-            password_label: "Password",
-            password_placeholder: "••••••••",
-            database_label: "Keyspace",
-            database_placeholder: "system",
-            default_database: "",
-            helper_note: "Cluster node connection with optional TLS.",
-        },
+        EngineKind::Postgresql => PG_SPEC,
+        EngineKind::Mysql => MYSQL_SPEC,
+        EngineKind::Mariadb => MARIADB_SPEC,
+        EngineKind::Sqlite => SQLITE_SPEC,
+        EngineKind::Duckdb => DUCKDB_SPEC,
+        EngineKind::Mssql => MSSQL_SPEC,
+        EngineKind::Mongodb => MONGODB_SPEC,
+        EngineKind::Redis => REDIS_SPEC,
+        EngineKind::Clickhouse => CLICKHOUSE_SPEC,
+        EngineKind::Cassandra | EngineKind::Scylladb => CLUSTER_SPEC,
     }
 }
 
@@ -462,16 +482,108 @@ fn render_welcome_left_pane(
     ws: &mut TableMinusWorkspace,
     cx: &mut Context<TableMinusWorkspace>,
 ) -> AnyElement {
-    let colors = cx.colors().clone();
-    let app_title = ws.controller.strings.app_title;
-    let version_label = concat!("v", env!("CARGO_PKG_VERSION"));
     let total_saved = ws.controller.library.storage().connections.len();
+    let pane = div()
+        .id("welcome-left-pane")
+        .w(px(288.0))
+        .h_full()
+        .flex_shrink_0()
+        .flex()
+        .flex_col()
+        .justify_between()
+        .px(px(24.0))
+        .py(px(28.0))
+        .bg(panel_surface_bg(cx))
+        .border_r(px(HAIRLINE_BORDER_PX))
+        .border_color(hairline_border_color(cx))
+        .child(render_welcome_brand_hero(
+            ws.controller.strings.app_title,
+            total_saved,
+            cx,
+        ))
+        .child(render_welcome_left_actions(cx));
+
+    animate_slide_fade_in(
+        pane,
+        ("welcome-left-enter", ws.welcome_ui.welcome_anim_nonce),
+        180,
+        8.0,
+        cx,
+    )
+}
+
+fn render_welcome_brand_hero(app_title: &'static str, total_saved: usize, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let version_label = concat!("v", env!("CARGO_PKG_VERSION"));
     let count_label = match total_saved {
         0 => "No saved connections".to_owned(),
         1 => "1 saved connection".to_owned(),
         n => format!("{n} saved connections"),
     };
 
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(px(10.0))
+        .pt(px(20.0))
+        .child(
+            div()
+                .w(px(80.0))
+                .h(px(80.0))
+                .rounded(px(20.0))
+                .bg(with_alpha(colors.surface_secondary, 0.72))
+                .border(px(HAIRLINE_BORDER_PX))
+                .border_color(hairline_border_color(cx))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    img(ImageSource::Image(tableminus_logo_image()))
+                        .w(px(64.0))
+                        .h(px(64.0))
+                        .flex_shrink_0(),
+                ),
+        )
+        .child(
+            div()
+                .pt(px(4.0))
+                .text_size(px(20.0))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(colors.foreground)
+                .child(app_title),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(6.0))
+                .child(
+                    div()
+                        .px(px(8.0))
+                        .py(px(2.0))
+                        .rounded(px(99.0))
+                        .bg(with_alpha(colors.surface_secondary, 0.85))
+                        .border(px(HAIRLINE_BORDER_PX))
+                        .border_color(hairline_border_color(cx))
+                        .text_size(px(TEXT_BADGE_PX))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(colors.muted)
+                        .child(version_label),
+                )
+                .child(
+                    div()
+                        .text_size(px(TEXT_META_PX))
+                        .text_color(colors.muted)
+                        .child(count_label),
+                ),
+        )
+        .into_any_element()
+}
+
+fn render_welcome_left_actions(cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+    let colors = cx.colors().clone();
     let create_btn = render_welcome_action_button(
         "welcome-create-connection",
         Variant::Primary,
@@ -494,106 +606,24 @@ fn render_welcome_left_pane(
         cx.listener(|ws, _, _window, cx| trigger_restore_import(ws, cx)),
     );
 
-    let pane = div()
-        .id("welcome-left-pane")
-        .w(px(288.0))
-        .h_full()
-        .flex_shrink_0()
+    div()
+        .w_full()
         .flex()
         .flex_col()
-        .justify_between()
-        .px(px(24.0))
-        .py(px(28.0))
-        .bg(panel_surface_bg(cx))
-        .border_r(px(HAIRLINE_BORDER_PX))
-        .border_color(hairline_border_color(cx))
+        .gap(px(8.0))
+        .child(create_btn)
+        .child(backup_btn)
+        .child(restore_btn)
         .child(
             div()
+                .pt(px(8.0))
                 .flex()
-                .flex_col()
-                .items_center()
-                .gap(px(10.0))
-                .pt(px(20.0))
-                .child(
-                    div()
-                        .w(px(80.0))
-                        .h(px(80.0))
-                        .rounded(px(20.0))
-                        .bg(with_alpha(colors.surface_secondary, 0.72))
-                        .border(px(HAIRLINE_BORDER_PX))
-                        .border_color(hairline_border_color(cx))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(
-                            img(ImageSource::Image(tableminus_logo_image()))
-                                .w(px(64.0))
-                                .h(px(64.0))
-                                .flex_shrink_0(),
-                        ),
-                )
-                .child(
-                    div()
-                        .pt(px(4.0))
-                        .text_size(px(20.0))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(colors.foreground)
-                        .child(app_title),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .gap(px(6.0))
-                        .child(
-                            div()
-                                .px(px(8.0))
-                                .py(px(2.0))
-                                .rounded(px(99.0))
-                                .bg(with_alpha(colors.surface_secondary, 0.85))
-                                .border(px(HAIRLINE_BORDER_PX))
-                                .border_color(hairline_border_color(cx))
-                                .text_size(px(TEXT_BADGE_PX))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(colors.muted)
-                                .child(version_label),
-                        )
-                        .child(
-                            div()
-                                .text_size(px(TEXT_META_PX))
-                                .text_color(colors.muted)
-                                .child(count_label),
-                        ),
-                ),
+                .justify_center()
+                .text_size(px(TEXT_BADGE_PX))
+                .text_color(colors.muted)
+                .child("Click a connection to open · Ctrl+K for commands"),
         )
-        .child(
-            div()
-                .w_full()
-                .flex()
-                .flex_col()
-                .gap(px(8.0))
-                .child(create_btn)
-                .child(backup_btn)
-                .child(restore_btn)
-                .child(
-                    div()
-                        .pt(px(8.0))
-                        .flex()
-                        .justify_center()
-                        .text_size(px(TEXT_BADGE_PX))
-                        .text_color(colors.muted)
-                        .child("Click a connection to open · Ctrl+K for commands"),
-                ),
-        );
-
-    animate_slide_fade_in(
-        pane,
-        ("welcome-left-enter", ws.welcome_ui.welcome_anim_nonce),
-        180,
-        8.0,
-        cx,
-    )
+        .into_any_element()
 }
 
 fn render_welcome_action_button(
@@ -808,7 +838,6 @@ fn render_welcome_connection_row(
         .connecting_connection_id
         .as_deref()
         .is_some_and(|id| id == conn_id);
-    let is_favorite = conn.is_favorite;
 
     let row_bg = if is_selected {
         with_alpha(colors.accent.color, 0.13)
@@ -822,8 +851,6 @@ fn render_welcome_connection_row(
     };
 
     let click_id = conn_id.clone();
-    let ctx_connect_id = conn_id.clone();
-    let ctx_fav_id = conn_id.clone();
     let row_el = div()
         .id(SharedString::from(format!("welcome-conn-row-{idx}")))
         .w_full()
@@ -847,96 +874,137 @@ fn render_welcome_connection_row(
             connect_welcome_connection(ws, &click_id, cx);
         }))
         .child(render_engine_badge(engine, badge_bg, false))
+        .child(render_connection_row_meta(
+            &conn.name,
+            &subtitle,
+            conn.is_favorite,
+            cx,
+        ))
+        .child(render_connection_row_trailing(engine, is_connecting, cx));
+
+    let with_ctx = wrap_connection_row_context_menu(row_el, &conn_id, conn.is_favorite, idx, cx);
+    animate_staggered_enter(
+        div().w_full().child(with_ctx),
+        (
+            "welcome-row-anim",
+            (ws.welcome_ui.welcome_anim_nonce << 8) | (idx as u64),
+        ),
+        idx,
+        cx,
+    )
+}
+
+fn render_connection_row_meta(
+    name: &str,
+    subtitle: &str,
+    is_favorite: bool,
+    cx: &App,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    div()
+        .flex_1()
+        .min_w(px(0.0))
+        .flex()
+        .flex_col()
+        .gap(px(2.0))
         .child(
             div()
-                .flex_1()
-                .min_w(px(0.0))
-                .flex()
-                .flex_col()
-                .gap(px(2.0))
-                .child(
-                    div()
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .gap(px(6.0))
-                        .child(
-                            div()
-                                .truncate()
-                                .text_size(px(TEXT_BODY_PX))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(colors.foreground)
-                                .child(conn.name.clone()),
-                        )
-                        .when(is_favorite, |d| {
-                            d.child(
-                                Icon::new(IconName::Star)
-                                    .size(IconSize::Xs)
-                                    .color(rgb(0xF59E0B)),
-                            )
-                        }),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_size(px(TEXT_META_PX))
-                        .text_color(colors.muted)
-                        .child(subtitle),
-                ),
-        )
-        .child(
-            div()
-                .flex_shrink_0()
                 .flex()
                 .flex_row()
                 .items_center()
-                .gap(px(8.0))
+                .gap(px(6.0))
                 .child(
                     div()
-                        .px(px(8.0))
-                        .py(px(3.0))
-                        .rounded(px(99.0))
-                        .bg(with_alpha(
-                            if is_connecting {
-                                colors.accent.color
-                            } else {
-                                colors.surface_secondary
-                            },
-                            if is_connecting { 0.16 } else { 0.85 },
-                        ))
-                        .border(px(HAIRLINE_BORDER_PX))
-                        .border_color(if is_connecting {
-                            with_alpha(colors.accent.color, 0.45)
-                        } else {
-                            hairline_border_color(cx)
-                        })
-                        .text_size(px(TEXT_BADGE_PX))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(if is_connecting {
-                            colors.accent.color
-                        } else {
-                            colors.muted
-                        })
-                        .child(if is_connecting {
-                            "Connecting…"
-                        } else {
-                            engine.display_name()
-                        }),
+                        .truncate()
+                        .text_size(px(TEXT_BODY_PX))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(colors.foreground)
+                        .child(name.to_owned()),
                 )
-                .child(
-                    Icon::new(IconName::ChevronRight)
-                        .size(IconSize::Xs)
-                        .color(colors.muted),
-                ),
-        );
+                .when(is_favorite, |d| {
+                    d.child(
+                        Icon::new(IconName::Star)
+                            .size(IconSize::Xs)
+                            .color(rgb(0xF59E0B)),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .truncate()
+                .text_size(px(TEXT_META_PX))
+                .text_color(colors.muted)
+                .child(subtitle.to_owned()),
+        )
+        .into_any_element()
+}
 
+fn render_connection_row_trailing(engine: EngineKind, is_connecting: bool, cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    let pill_bg = with_alpha(
+        if is_connecting {
+            colors.accent.color
+        } else {
+            colors.surface_secondary
+        },
+        if is_connecting { 0.16 } else { 0.85 },
+    );
+    let pill_border = if is_connecting {
+        with_alpha(colors.accent.color, 0.45)
+    } else {
+        hairline_border_color(cx)
+    };
+    div()
+        .flex_shrink_0()
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap(px(8.0))
+        .child(
+            div()
+                .px(px(8.0))
+                .py(px(3.0))
+                .rounded(px(99.0))
+                .bg(pill_bg)
+                .border(px(HAIRLINE_BORDER_PX))
+                .border_color(pill_border)
+                .text_size(px(TEXT_BADGE_PX))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if is_connecting {
+                    colors.accent.color
+                } else {
+                    colors.muted
+                })
+                .child(if is_connecting {
+                    "Connecting…"
+                } else {
+                    engine.display_name()
+                }),
+        )
+        .child(
+            Icon::new(IconName::ChevronRight)
+                .size(IconSize::Xs)
+                .color(colors.muted),
+        )
+        .into_any_element()
+}
+
+fn wrap_connection_row_context_menu(
+    row_el: impl IntoElement,
+    conn_id: &str,
+    is_favorite: bool,
+    idx: usize,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> ContextMenu {
+    let ctx_connect_id = conn_id.to_owned();
+    let ctx_fav_id = conn_id.to_owned();
     let fav_label = if is_favorite {
         "Remove from Favorites"
     } else {
         "Add to Favorites"
     };
     let entity_ctx = cx.entity().clone();
-    let with_ctx = ContextMenu::new(
+    ContextMenu::new(
         SharedString::from(format!("welcome-conn-ctx-{idx}")),
         row_el,
         vec![
@@ -961,16 +1029,6 @@ fn render_welcome_connection_row(
             }
             _ => {}
         },
-    );
-
-    animate_staggered_enter(
-        div().w_full().child(with_ctx),
-        (
-            "welcome-row-anim",
-            (ws.welcome_ui.welcome_anim_nonce << 8) | (idx as u64),
-        ),
-        idx,
-        cx,
     )
 }
 
@@ -1114,37 +1172,68 @@ fn render_engine_picker_step(
         .gap(px(10.0));
 
     if filtered.is_empty() {
-        grid = grid.child(
-            div()
-                .w_full()
-                .py(px(40.0))
-                .flex()
-                .flex_col()
-                .items_center()
-                .justify_center()
-                .gap(px(6.0))
-                .child(Icon::new(IconName::Search).size(IconSize::Md).color(colors.muted))
-                .child(
-                    div()
-                        .text_size(px(TEXT_BODY_PX))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(colors.foreground)
-                        .child("No matching database driver"),
-                )
-                .child(
-                    div()
-                        .text_size(px(TEXT_META_PX))
-                        .text_color(colors.muted)
-                        .child("Try searching PostgreSQL, MySQL, SQLite, MongoDB, Redis, or ClickHouse."),
-                ),
-        );
+        grid = grid.child(render_engine_picker_empty(cx));
     } else {
         for (idx, engine) in filtered.into_iter().enumerate() {
             grid = grid.child(render_engine_picker_card(ws, engine, idx, cx));
         }
     }
 
-    let footer = div()
+    let step_body = div()
+        .w_full()
+        .flex()
+        .flex_col()
+        .text_color(colors.foreground)
+        .child(header)
+        .child(div().px(px(22.0)).pt(px(14.0)).child(search))
+        .child(grid)
+        .child(render_engine_picker_footer(cx));
+
+    if ws.welcome_ui.step_transition_forward {
+        step_body.into_any_element()
+    } else {
+        animate_step_slide(
+            step_body,
+            ("welcome-step-picker", ws.welcome_ui.modal_anim_nonce),
+            false,
+            cx,
+        )
+    }
+}
+
+fn render_engine_picker_empty(cx: &App) -> AnyElement {
+    let colors = cx.colors().clone();
+    div()
+        .w_full()
+        .py(px(40.0))
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .gap(px(6.0))
+        .child(
+            Icon::new(IconName::Search)
+                .size(IconSize::Md)
+                .color(colors.muted),
+        )
+        .child(
+            div()
+                .text_size(px(TEXT_BODY_PX))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(colors.foreground)
+                .child("No matching database driver"),
+        )
+        .child(
+            div()
+                .text_size(px(TEXT_META_PX))
+                .text_color(colors.muted)
+                .child("Try searching PostgreSQL, MySQL, SQLite, MongoDB, Redis, or ClickHouse."),
+        )
+        .into_any_element()
+}
+
+fn render_engine_picker_footer(cx: &mut Context<TableMinusWorkspace>) -> AnyElement {
+    div()
         .w_full()
         .px(px(22.0))
         .py(px(14.0))
@@ -1206,28 +1295,8 @@ fn render_engine_picker_step(
                                 .child(Icon::new(IconName::ArrowRight).size(IconSize::Xs)),
                         ),
                 ),
-        );
-
-    let step_body = div()
-        .w_full()
-        .flex()
-        .flex_col()
-        .text_color(colors.foreground)
-        .child(header)
-        .child(div().px(px(22.0)).pt(px(14.0)).child(search))
-        .child(grid)
-        .child(footer);
-
-    if ws.welcome_ui.step_transition_forward {
-        step_body.into_any_element()
-    } else {
-        animate_step_slide(
-            step_body,
-            ("welcome-step-picker", ws.welcome_ui.modal_anim_nonce),
-            false,
-            cx,
         )
-    }
+        .into_any_element()
 }
 
 fn render_engine_picker_card(
@@ -1313,22 +1382,7 @@ fn render_engine_picker_card(
                 ),
         )
         .when(is_selected, |d| {
-            d.child(
-                div()
-                    .w(px(18.0))
-                    .h(px(18.0))
-                    .rounded(px(9.0))
-                    .bg(colors.accent.color)
-                    .flex_shrink_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(
-                        Icon::new(IconName::Check)
-                            .size(IconSize::Xs)
-                            .color(rgb(0xFFFFFF)),
-                    ),
-            )
+            d.child(render_selected_check_badge(colors.accent.color))
         });
 
     animate_staggered_enter(
@@ -1342,6 +1396,24 @@ fn render_engine_picker_card(
     )
 }
 
+fn render_selected_check_badge(accent: Hsla) -> AnyElement {
+    div()
+        .w(px(18.0))
+        .h(px(18.0))
+        .rounded(px(9.0))
+        .bg(accent)
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            Icon::new(IconName::Check)
+                .size(IconSize::Xs)
+                .color(rgb(0xFFFFFF)),
+        )
+        .into_any_element()
+}
+
 fn render_connection_form_step(
     ws: &mut TableMinusWorkspace,
     cx: &mut Context<TableMinusWorkspace>,
@@ -1350,60 +1422,6 @@ fn render_connection_form_step(
     let engine = ws.welcome_ui.selected_engine;
     let spec = driver_form_spec(engine);
     let title = format!("New {} Connection", engine.display_name());
-
-    let connection_section = if spec.is_file {
-        div()
-            .w_full()
-            .p(px(14.0))
-            .rounded(px(10.0))
-            .bg(with_alpha(muted_surface_bg(cx), 0.52))
-            .border(px(HAIRLINE_BORDER_PX))
-            .border_color(hairline_border_color(cx))
-            .flex()
-            .flex_col()
-            .gap(px(12.0))
-            .child(render_file_path_row(ws, spec, cx))
-            .child(render_form_field(
-                spec.password_label,
-                Input::new(&ws.welcome_ui.form_password_input)
-                    .input_type(InputType::Password)
-                    .placeholder(spec.password_placeholder)
-                    .full_width(),
-                cx,
-            ))
-            .child(
-                div()
-                    .text_size(px(TEXT_BADGE_PX))
-                    .text_color(colors.muted)
-                    .child(spec.helper_note),
-            )
-    } else {
-        div()
-            .w_full()
-            .p(px(14.0))
-            .rounded(px(10.0))
-            .bg(with_alpha(muted_surface_bg(cx), 0.52))
-            .border(px(HAIRLINE_BORDER_PX))
-            .border_color(hairline_border_color(cx))
-            .flex()
-            .flex_col()
-            .gap(px(12.0))
-            .child(render_host_port_row(ws, spec, engine, cx))
-            .child(render_user_password_row(ws, spec, cx))
-            .child(render_form_field(
-                spec.database_label,
-                Input::new(&ws.welcome_ui.form_database_input)
-                    .placeholder(spec.database_placeholder)
-                    .full_width(),
-                cx,
-            ))
-            .child(
-                div()
-                    .text_size(px(TEXT_BADGE_PX))
-                    .text_color(colors.muted)
-                    .child(spec.helper_note),
-            )
-    };
 
     let options_section = div()
         .w_full()
@@ -1435,7 +1453,7 @@ fn render_connection_form_step(
                 .full_width(),
             cx,
         ))
-        .child(connection_section)
+        .child(render_connection_credentials_section(ws, spec, engine, cx))
         .child(options_section);
 
     if let Some(ref test_res) = ws.welcome_ui.form_test_result {
@@ -1463,6 +1481,56 @@ fn render_connection_form_step(
         ws.welcome_ui.step_transition_forward,
         cx,
     )
+}
+
+fn render_connection_credentials_section(
+    ws: &TableMinusWorkspace,
+    spec: DriverFormSpec,
+    engine: EngineKind,
+    cx: &mut Context<TableMinusWorkspace>,
+) -> AnyElement {
+    let colors = cx.colors().clone();
+    let card = div()
+        .w_full()
+        .p(px(14.0))
+        .rounded(px(10.0))
+        .bg(with_alpha(muted_surface_bg(cx), 0.52))
+        .border(px(HAIRLINE_BORDER_PX))
+        .border_color(hairline_border_color(cx))
+        .flex()
+        .flex_col()
+        .gap(px(12.0));
+
+    let populated = if spec.is_file {
+        card.child(render_file_path_row(ws, spec, cx))
+            .child(render_form_field(
+                spec.password_label,
+                Input::new(&ws.welcome_ui.form_password_input)
+                    .input_type(InputType::Password)
+                    .placeholder(spec.password_placeholder)
+                    .full_width(),
+                cx,
+            ))
+    } else {
+        card.child(render_host_port_row(ws, spec, engine, cx))
+            .child(render_user_password_row(ws, spec, cx))
+            .child(render_form_field(
+                spec.database_label,
+                Input::new(&ws.welcome_ui.form_database_input)
+                    .placeholder(spec.database_placeholder)
+                    .full_width(),
+                cx,
+            ))
+    };
+
+    populated
+        .child(
+            div()
+                .text_size(px(TEXT_BADGE_PX))
+                .text_color(colors.muted)
+                .child(spec.helper_note),
+        )
+        .into_any_element()
 }
 
 fn render_modal_header(
